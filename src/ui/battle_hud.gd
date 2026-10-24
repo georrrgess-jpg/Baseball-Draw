@@ -249,7 +249,10 @@ func _build_bottom() -> void:
 func _build_minimap() -> void:
 	var p := _panel(Color(0.03, 0.05, 0.1, 0.85), Color(1, 1, 1, 0.1), 6)
 	p.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	p.position = Vector2(14, -232)
+	p.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	p.offset_left = 14.0
+	p.offset_top = -232.0
+	p.offset_bottom = -12.0
 	root.add_child(p)
 	var vb := VBoxContainer.new()
 	p.add_child(vb)
