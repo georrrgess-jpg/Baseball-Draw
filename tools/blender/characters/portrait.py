@@ -39,13 +39,13 @@ def render_portrait(cid, info, path, res=512, samples=96):
     render.setup_cycles(res=res, samples=samples, transparent=True)
     sc.render.film_transparent = True
     if enemy:
-        frame_h = 2.35 * h
-        target = eye + Vector((0, 0, -0.32 * h))
+        frame_h = 1.95 * h
+        target = eye + Vector((0, 0, -0.22 * h))
         yaw = 24.0
     else:
-        frame_h = 2.55 * h
-        target = eye + Vector((0, 0, -0.42 * h))
-        yaw = 32.0
+        frame_h = 2.05 * h
+        target = eye + Vector((0, 0, -0.30 * h))
+        yaw = 30.0
     lens = 85.0
     fov = 2 * math.atan(18.0 / lens)
     dist = (frame_h / 2) / math.tan(fov / 2)
@@ -81,9 +81,9 @@ def _portrait_lights(c, h, cam_yaw, enemy):
                            math.sin(e))) * dist
     d = 9.0 * h
     k = (h / 0.28) ** 2
-    _light("Key", at(-38, 32, d), c, 520 * k, 3.0 * h * 4, (1.0, 0.95, 0.88))
-    _light("Fill", at(55, 8, d), c, 150 * k, 4.0 * h * 4, (0.82, 0.88, 1.0))
-    rim_e = 900 if not enemy else 1300
+    _light("Key", at(-40, 30, d), c, 170 * k, 3.0 * h * 4, (1.0, 0.95, 0.88))
+    _light("Fill", at(55, 8, d), c, 45 * k, 4.0 * h * 4, (0.82, 0.88, 1.0))
+    rim_e = 330 if not enemy else 480
     _light("RimL", at(150, 22, d), c, rim_e * k, 1.4 * h * 4, (0.80, 0.90, 1.0))
     _light("RimR", at(-150, 18, d), c, rim_e * 0.75 * k, 1.4 * h * 4, (1.0, 0.86, 0.72))
-    _light("Top", at(0, 80, d), c, 120 * k, 3.0 * h * 4, (1.0, 1.0, 1.0))
+    _light("Top", at(0, 80, d), c, 40 * k, 3.0 * h * 4, (1.0, 1.0, 1.0))

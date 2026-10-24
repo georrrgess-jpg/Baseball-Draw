@@ -8,7 +8,7 @@ signal card_drawn(id: String)
 
 const MAX_HAND := 5
 const MAX_ENERGY := 10.0
-const BASE_REGEN := 1.0 / 1.9     # energy per second
+const BASE_REGEN := 1.0 / 2.2     # energy per second
 const BASE_DRAW_INTERVAL := 4.5
 
 var deck: Array = []

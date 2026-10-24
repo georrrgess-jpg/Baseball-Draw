@@ -141,7 +141,7 @@ func _ready() -> void:
 	for rec in result.get("records", []):
 		rv.add_child(UITheme.label("★ " + rec, 22, UITheme.GOLD, UITheme.font_body_bold()))
 	for aid in result.get("achievements", []):
-		rv.add_child(UITheme.label("🏆 Achievement: %s" % DB.achievements[aid].name, 20, UITheme.GOLD))
+		rv.add_child(UITheme.label("Achievement unlocked: %s" % DB.achievements[aid].name, 20, UITheme.GOLD, UITheme.font_body_bold()))
 
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER

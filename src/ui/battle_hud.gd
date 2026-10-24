@@ -17,6 +17,7 @@ var _threat_count: Label
 var _threat_bar: ProgressBar
 var _threat_icons: HBoxContainer
 var _threat_title: Label
+var _mods_label: Label
 var _hand_box: HBoxContainer
 var _card_views: Array[CardView] = []
 var _energy_bar: Control
@@ -78,12 +79,17 @@ func _ready() -> void:
 	battle.wave_started.connect(func(_w: Dictionary) -> void: refresh())
 	_rebuild_hand()
 	_on_state(battle.state)
+	if not battle.practice and not battle.auto_test and not bool(Profile.data.flags.get("battle_help", false)):
+		_show_help()
 
 
 # ---------------------------------------------------------------- builders
 
 func _panel(bg := Color(0.04, 0.07, 0.12, 0.86), border := Color(1, 1, 1, 0.1), pad := 10) -> PanelContainer:
 	var p := PanelContainer.new()
+	if bool(Settings.get_value("accessibility", "high_contrast", false)):
+		bg = Color(0.0, 0.0, 0.0, 0.97)
+		border = Color(1, 1, 1, 0.6)
 	p.add_theme_stylebox_override("panel", UITheme.panel_style(bg, border, 1, 10, pad))
 	return p
 
@@ -191,6 +197,10 @@ func _build_threats() -> void:
 	_threat_icons = HBoxContainer.new()
 	_threat_icons.add_theme_constant_override("separation", 6)
 	vb.add_child(_threat_icons)
+	_mods_label = UITheme.label("", 15, Color(1.0, 0.7, 0.45), UITheme.font_body_bold())
+	_mods_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_mods_label.custom_minimum_size = Vector2(290, 0)
+	vb.add_child(_mods_label)
 
 
 func _build_bottom() -> void:
@@ -596,6 +606,16 @@ func refresh() -> void:
 		_fill_threat_icons(info.preview)
 		_fill_preview(info.preview)
 
+	var mods: Array[String] = []
+	var am: Dictionary = battle.arena.get("modifier", {})
+	if am.size() > 2:
+		mods.append("%s: %s" % [am.name, am.text])
+	for mid in run.modifiers:
+		var md: Dictionary = DB.endless_modifiers.get(mid, {})
+		if not md.is_empty():
+			mods.append("%s: %s" % [md.name, md.text])
+	var dname: String = DB.difficulty(run.difficulty_id).name
+	_mods_label.text = "%s · %s" % [dname, "\n".join(mods)] if mods.size() > 0 else dname
 	# Energy & deck
 	var cs: CardSystem = battle.cards
 	_energy_label.text = str(int(cs.energy))
@@ -870,6 +890,40 @@ func _on_state(s: String) -> void:
 	if s == "setup":
 		_synergy_box.set_meta("key", "-")
 	refresh()
+
+
+func _show_help() -> void:
+	var p := _panel(Color(0.04, 0.07, 0.12, 0.97), Color(UITheme.GOLD, 0.7), 20)
+	p.set_anchors_preset(Control.PRESET_CENTER)
+	p.position = Vector2(-380, -250)
+	p.custom_minimum_size = Vector2(760, 0)
+	root.add_child(p)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 10)
+	p.add_child(vb)
+	vb.add_child(UITheme.title("HOW TO PLAY", 56, UITheme.GOLD))
+	var lines := [
+		"[b]Defend home plate.[/b] Rival runners pour out of the outfield gates and race along the glowing routes. Every runner your defenders put out is an [color=#3DDC84]OUT[/color]; every runner that reaches home scores a [color=#ff5a50]RUN[/color]. Allow too many runs and the game is over.",
+		"[b]Position your team.[/b] Drag defenders before the first pitch or between waves. A green ring means they're in their best zone (pitcher on the mound, catcher behind the plate, infielders in the dirt, outfielders on the grass). Try the formation buttons.",
+		"[b]Play cards.[/b] Press [color=#F5B82E]1-5[/color] or click a card, then click a target. Cards cost energy, which refills over time. Signature cards are cast by their defender.",
+		"[b]Keys:[/b] Space next wave · Shift fast-forward · WASD/wheel camera · R rotate · M map · Tab cycle defenders · F show ranges · Esc pause.",
+	]
+	for l in lines:
+		var r := RichTextLabel.new()
+		r.bbcode_enabled = true
+		r.fit_content = true
+		r.text = l
+		r.custom_minimum_size = Vector2(720, 0)
+		r.add_theme_font_size_override("normal_font_size", 20)
+		r.add_theme_font_override("bold_font", UITheme.font_body_bold())
+		r.add_theme_font_size_override("bold_font_size", 21)
+		vb.add_child(r)
+	var b := UITheme.menu_button("GOT IT — PLAY BALL!", UITheme.SCARLET, 32)
+	b.pressed.connect(func() -> void:
+		Profile.data.flags["battle_help"] = true
+		Profile.save_soon()
+		p.queue_free())
+	vb.add_child(b)
 
 
 func toggle_pause() -> void:

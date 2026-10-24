@@ -116,7 +116,10 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	add_child(_shadow)
 	# Red ground ring so runners read clearly against the field.
 	if enemy_id != "decoy":
-		_marker = FieldBuilder.make_ring(0.62 * height / 1.8 * 1.15, Color(1.0, 0.22, 0.15, 0.85) if not is_boss else Color(1.0, 0.5, 0.1, 0.95), 0.16, 0.18)
+		var mcol := Color(1.0, 0.22, 0.15, 0.85) if not is_boss else Color(1.0, 0.5, 0.1, 0.95)
+		if bool(Settings.get_value("accessibility", "colorblind", false)):
+			mcol = Color(1.0, 0.85, 0.1, 0.95) if not is_boss else Color(0.2, 0.65, 1.0, 1.0)
+		_marker = FieldBuilder.make_ring(0.62 * height / 1.8 * 1.15, mcol, 0.16, 0.18)
 		add_child(_marker)
 	_hp_bar = MeshInstance3D.new()
 	var q := QuadMesh.new()
@@ -576,10 +579,6 @@ func _tick_behavior(delta: float) -> void:
 				if victim:
 					ability_t = 9.0 * ability_cd
 					_start_telegraph("homerun", victim.global_position, 3.6, 1.5)
-	if untargetable_t > 0.0 and id == "phantom_captain":
-		model.set_ghost(0.3)
-	elif id == "phantom_captain" and _anim_state != "ghost_reset":
-		pass
 
 
 func _nearest_defender(radius: float) -> Node3D:

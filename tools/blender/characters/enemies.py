@@ -286,19 +286,20 @@ def lightning_stripes(bb, mat):
     parts = []
     torso = bb.torso_sdf(with_sleeves=False)
     zc = bb.lv("chest")
-    bolt = np.array([(0.0, 0.30), (0.05, 0.30), (0.01, 0.06), (0.06, 0.06), (-0.04, -0.30),
-                     (-0.01, -0.04), (-0.06, -0.04)]) * s
+    bolt = np.array([(0.0, 0.22), (0.05, 0.22), (0.01, 0.04), (0.06, 0.04), (-0.04, -0.24),
+                     (-0.01, -0.03), (-0.06, -0.03)]) * s
     for sx in (1, -1):
         b = bolt.copy()
         b[:, 0] *= sx
         if sx < 0:
             b = b[::-1]
         x = sx * (bb.p["chest_w"] * s * 0.95)
-        ctr = A([x, 0.0, zc + 0.02 * s])
+        ctr = A([x, 0.0, zc - 0.02 * s])
         parts.append(outfit.surface_decal("Bolt." + ("L" if sx > 0 else "R"), [b], torso, ctr,
                                           [0, -1, 0] if sx > 0 else [0, 1, 0], [0, 0, 1],
                                           [sx, 0, 0], mat, lo=-0.002 * s, hi=0.005 * s,
-                                          voxel=0.003 * s, tris=200, bones=["spine", "chest", "hips"]))
+                                          voxel=0.003 * s, tris=200, bones=["spine", "chest", "hips"],
+                                          side_offset=0.035 * s))
     pants = bb.pants_sdf()
     for side, sx in (("L", 1), ("R", -1)):
         H = bb.j("thigh." + side)

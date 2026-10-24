@@ -397,7 +397,7 @@ func set_state(s: String) -> void:
 
 func _enter_setup() -> void:
 	set_state("setup")
-	field_mat.set_shader_parameter("zones_alpha", 1.0)
+	field_mat.set_shader_parameter("zones_alpha", 0.45 if practice else 1.0)
 	for df in defenders:
 		df.reset_wave_state()
 	excitement = 0.25
@@ -498,9 +498,9 @@ func _on_wave_cleared() -> void:
 
 func _on_inning_complete() -> void:
 	var clean := run.runs_inning == 0
-	var bonus := 25 + run.inning * 5
+	var bonus := 20 + run.inning * 4
 	if clean:
-		bonus += 20
+		bonus += 15
 		run.stats.clean_innings = int(run.stats.get("clean_innings", 0)) + 1
 		run.score += 100
 	run.coins += bonus
@@ -635,9 +635,24 @@ func spawn_enemy(id: String, route: Route, start_d := 0.0, opts: Dictionary = {}
 		boss_alive = e
 		cam.shake(0.3)
 		Audio.play("boss_roar")
+		Audio.duck_music(8.0, 2.0)
 		if hud.has_method("show_boss"):
 			hud.show_boss(e)
+		_boss_intro(route)
 	return e
+
+
+## Brief camera move to the boss's gate, then back to where the player was looking.
+func _boss_intro(route: Route) -> void:
+	if auto_test or cam.cinematic:
+		return
+	var saved := [cam._t_focus, cam._t_yaw, cam._t_pitch, cam._t_distance]
+	var gate := route.points[0]
+	cam.cinematic = true
+	cam.set_view(gate.lerp(Field.HOME, 0.18), cam._t_yaw, -30.0, 24.0)
+	get_tree().create_timer(2.4).timeout.connect(func() -> void:
+		cam.set_view(saved[0], saved[1], saved[2], saved[3])
+		cam.cinematic = false)
 
 
 func _process_spawns(delta: float) -> void:
@@ -698,21 +713,21 @@ func _on_combo(n: int) -> void:
 	match n:
 		2:
 			text = "DOUBLE PLAY!"
-			coins_bonus = 5
+			coins_bonus = 2
 			run.stats.double_plays = int(run.stats.get("double_plays", 0)) + 1
 			Audio.play("combo_double")
 			if not practice:
 				Profile.bump_stat("double_plays")
 		3:
 			text = "TRIPLE PLAY!"
-			coins_bonus = 10
+			coins_bonus = 5
 			run.stats.triple_plays = int(run.stats.get("triple_plays", 0)) + 1
 			Audio.play("combo_triple")
 			if not practice:
 				Profile.bump_stat("triple_plays")
 		_:
 			text = "GRAND SLAM COMBO x%d!" % n
-			coins_bonus = 5
+			coins_bonus = 2
 			if n == 4:
 				run.stats.grand_combos = int(run.stats.get("grand_combos", 0)) + 1
 				if not practice:
@@ -721,7 +736,8 @@ func _on_combo(n: int) -> void:
 	run.coins += coins_bonus
 	run.coins_earned += coins_bonus
 	run.score += 25 * n
-	cards.add_energy(1.0)
+	if n == 3 or n == 5:
+		cards.add_energy(1.0)
 	notify(text, Color(1.0, 0.8, 0.25) if n < 4 else Color(1.0, 0.45, 0.2))
 	stadium.scoreboard_ui.flash(text.replace("!", ""), 1.8)
 	crowd_cheer(0.8)
@@ -740,12 +756,22 @@ func on_enemy_reached_home(e: Enemy) -> void:
 		vfx.puff(e.center(), Color(0.6, 0.35, 1.0))
 		e.queue_free()
 		return
-	if run.shields > 0:
-		run.shields -= 1
+	var runs_scored := e.runs
+	var absorbed := mini(run.shields, runs_scored)
+	if absorbed > 0 and absorbed < runs_scored:
+		# Partial block: shields soak what they can, the rest scores.
+		run.shields -= absorbed
+		run.stats.shield_saves = int(run.stats.get("shield_saves", 0)) + absorbed
+		vfx.shockwave(Field.HOME, 3.0, Color(0.4, 0.85, 1.0), 0.5)
+		Audio.play("shield_block")
+		_update_shield_dome()
+		runs_scored -= absorbed
+	elif absorbed > 0:
+		run.shields -= absorbed
 		run.add_out("")
-		run.stats.shield_saves = int(run.stats.get("shield_saves", 0)) + 1
+		run.stats.shield_saves = int(run.stats.get("shield_saves", 0)) + absorbed
 		if not practice:
-			Profile.bump_stat("shield_saves")
+			Profile.bump_stat("shield_saves", absorbed)
 		Audio.play("shield_block")
 		vfx.shockwave(Field.HOME, 3.0, Color(0.4, 0.85, 1.0), 0.5)
 		vfx.text_popup(Field.HOME + Vector3(0, 2.5, 0), "OUT AT THE PLATE!", Color(0.5, 0.9, 1.0), 1.2)
@@ -758,8 +784,8 @@ func on_enemy_reached_home(e: Enemy) -> void:
 		score_changed.emit()
 		return
 	if not (practice and practice_invulnerable):
-		run.runs += e.runs
-		run.runs_inning += e.runs
+		run.runs += runs_scored
+		run.runs_inning += runs_scored
 	Audio.play("run_scored")
 	Audio.play("crowd_groan", -4.0)
 	cam.shake(0.45)

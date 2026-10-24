@@ -85,13 +85,13 @@ class BodyBuilder:
                 [sx * 0.06 * s, 0.035 * s, zn - 0.07 * s],
                 S + A([-sx * 0.03 * s, 0.008 * s, -0.005 * s]),
                 0.048 * s * (0.9 + 0.1 * mus), 0.056 * s * mus + extra)))
-            parts.append((0.05 * s, sdf.sphere(S + A([sx * 0.004 * s, 0, -0.004 * s]),
-                                               0.064 * s * mus + extra)))
+            parts.append((0.05 * s, sdf.sphere(S + A([sx * 0.002 * s, 0, -0.006 * s]),
+                                               0.057 * s * mus + extra)))
             if with_sleeves:
                 E = self.j("forearm." + side)
                 d = (E - S) / np.linalg.norm(E - S)
                 L = cfg.get("sleeve_len", 0.15) * s
-                rs = cfg.get("sleeve_r", 0.068) * s * (0.85 + 0.15 * mus)
+                rs = cfg.get("sleeve_r", 0.063) * s * (0.85 + 0.15 * mus)
                 parts.append((0.04 * s, sdf.round_cone(
                     S + d * 0.01 * s, S + d * L, rs + extra, rs * 0.92 + extra)))
         shape = sdf.blend(base, *parts)
@@ -102,7 +102,7 @@ class BodyBuilder:
         E = self.j("forearm." + side)
         d = (E - S) / np.linalg.norm(E - S)
         L = self.cfg.get("sleeve_len", 0.15) * self.s
-        rs = self.cfg.get("sleeve_r", 0.068) * self.s * (0.85 + 0.15 * self.p["muscle"])
+        rs = self.cfg.get("sleeve_r", 0.063) * self.s * (0.85 + 0.15 * self.p["muscle"])
         return S + d * L, d, rs * 0.92
 
     def build_torso(self, mat, tris=2200, name="Torso"):
@@ -125,7 +125,8 @@ class BodyBuilder:
         self.shapes["torso"] = shape
         bones = ["hips", "spine", "chest", "neck", "shoulder.L", "shoulder.R",
                  "upper_arm.L", "upper_arm.R"]
-        return mu.sdf_part(name, shape, mat, 0.0075 * s, tris, bones=bones, sym=True)
+        return mu.sdf_part(name, shape, mat, 0.0075 * s, tris, bones=bones, sym=True,
+                           extra={"weight_overrides": {"upper_arm.L": 1.7, "upper_arm.R": 1.7}})
 
     def vneck_sdf(self):
         s = self.s
@@ -253,12 +254,14 @@ class BodyBuilder:
     def build_arm(self, side, mat, tris=700, upper=True, lower=True, name=None,
                   extra=0.0):
         sh = self.arm_sdf(side, upper, lower, extra)
-        bones = ["shoulder." + side, "upper_arm." + side, "forearm." + side,
+        # same bone set + overrides as the jersey sleeve so the arm stays inside it
+        bones = ["chest", "shoulder." + side, "upper_arm." + side, "forearm." + side,
                  "hand." + side]
         if not upper:
             bones = ["upper_arm." + side, "forearm." + side, "hand." + side]
         return mu.sdf_part(name or ("Arm." + side), sh, mat, 0.0055 * self.s, tris,
-                           bones=bones)
+                           bones=bones,
+                           extra={"weight_overrides": {"upper_arm." + side: 1.7}})
 
     def build_wrist_band(self, side, mat, width=0.05, tris=200, extra=0.006):
         s = self.s
@@ -521,7 +524,8 @@ class BodyBuilder:
         for side in ("L", "R"):
             sh = self.shoe_sdf(side, chunky)
             out.append(mu.sdf_part("Shoe." + side, sh, mat, 0.0038 * s, tris,
-                                   bones=["shin." + side, "foot." + side, "toe." + side]))
+                                   bones=["shin." + side, "foot." + side, "toe." + side],
+                                   extra={"weight_overrides": {"toe." + side: 1.5}}))
             if stripe_mat is not None:
                 Ak = self.j("foot." + side)
                 # swoosh: u = forward (-y), v = up

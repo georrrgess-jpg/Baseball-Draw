@@ -23,6 +23,10 @@ func _ready() -> void:
 		s.out_dir = shots
 		s.times = shot_times
 		get_tree().root.add_child.call_deferred(s)
+	if "--ui-test" in args:
+		var t: Node = load("res://tests/ui_flow_test.gd").new()
+		get_tree().root.add_child.call_deferred(t)
+		return
 	for a in args:
 		if a.begins_with("--test-battle="):
 			var cfg := Session.new_run_config(a.split("=")[1])

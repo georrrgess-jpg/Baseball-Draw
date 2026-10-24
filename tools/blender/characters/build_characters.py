@@ -128,8 +128,7 @@ def build_defender(cid):
                                visor_only=(hw == "visor"))
         parts += cb.build(tris_crown=600, tris_brim=240)
         if hw != "visor":
-            hair_clip = sdf.offset(outfit._yaw_warp(cb.crown(), hb.P(0, 0.05, 0.1), cb.yaw),
-                                   0.004 * h)
+            hair_clip = sdf.offset(cb.crown(), 0.010 * h)
     elif hw == "headband":
         parts += outfit.build_headband(hb, mats["Undershirt"])
     elif hw == "catcher":
@@ -175,7 +174,7 @@ def build_defender(cid):
         parts += build_catcher_gear(bb, mats)
     parts += outfit.build_numbers(bb, cfg["number"], FONT, mats["Number"], mats["NumberOutline"],
                                   front=not cfg.get("gear"))
-    return finish(cid, "defender", sk, arm, parts, style={})
+    return finish(cid, "defender", sk, arm, parts, style={"idle": cfg.get("idle", "relaxed")})
 
 
 def build_catcher_helmet(hb, mats):
@@ -239,11 +238,11 @@ def build_catcher_gear(bb, mats):
     zc = bb.lv("chest")
     zp = bb.lv("pelvis")
     # chest protector: thick shell over the front of the torso
-    prot = sdf.intersect(sdf.offset(torso, 0.022 * s),
-                         sdf.halfspace([0, -0.02 * s, 0], [0, 1, 0]))
+    prot = sdf.intersect(sdf.offset(torso, 0.024 * s),
+                         sdf.halfspace([0, -0.03 * s, 0], [0, 1, 0]))
     prot = sdf.intersect(prot, sdf.halfspace([0, 0, zp + 0.02 * s], [0, 0, -1]))
     prot = sdf.intersect(prot, sdf.halfspace([0, 0, bb.lv("neck") - 0.03 * s], [0, 0, 1]))
-    prot = sdf.subtract(prot, sdf.offset(torso, 0.002 * s))
+    prot = sdf.subtract(prot, sdf.offset(torso, 0.008 * s))
     # segment grooves
     grooves = [sdf.box([0, -0.3 * s, z], [0.3 * s, 0.2 * s, 0.006 * s])
                for z in np.linspace(zp + 0.12 * s, zc + 0.15 * s, 4)]
@@ -306,11 +305,13 @@ def enemy_materials(cfg):
         M.make("Glow", glow, glow, 7.0)
     M.make("Visor", P["visor"], rough=0.08, metal=0.6)
     M.make("Gear", cols["Gear"], rough=0.28, metal=0.25)
-    M.make("Metal", cols["Metal"], rough=0.32, metal=1.0)
+    M.make("Metal", cols["Metal"], rough=0.32, metal=0.6 if not cfg.get("gold") else 0.7)
     if cfg.get("ghost"):
         M.make("Cloth", cols["Cloth"], cols["Cloth"], 0.6, alpha=0.72)
+        M.make("JerseyTrim", acc, acc, 3.0)
+        M.make("Socks", "#B45CFF", "#B45CFF", 1.2)
     if cfg.get("golden_bat"):
-        M.make("Bat", cols["Bat"], rough=0.25, metal=1.0)
+        M.make("Bat", cols["Bat"], rough=0.25, metal=0.7)
     return mats
 
 
@@ -362,6 +363,9 @@ def build_enemy(cid):
     parts += bb.build_shoes(mats["Shoes"], tris=int(380 * k), stripe_mat=mats["JerseyTrim"],
                             chunky=1.1)
     parts.append(outfit.claw_emblem(bb, mats["JerseyTrim"]))
+    if cfg.get("number") is not None:
+        parts += outfit.build_numbers(bb, cfg["number"], FONT, mats["Number"], None,
+                                      front=False, back_h=0.19)
     parts += enemy_extras(cid, cfg, sk, bb, hb, mats)
     style = dict(heavy=cfg.get("heavy", 0.0), bat=cfg.get("bat", False),
                  small=cfg.get("small", False))

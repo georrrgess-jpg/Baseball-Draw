@@ -364,7 +364,7 @@ func _build_payload(t: Enemy, fastball: bool) -> Dictionary:
 				dmg *= 1.5
 			crit_mult = 2.5
 		"heavy_hitter":
-			p.splash = 2.0
+			p.splash = 1.6
 			p.stun = 0.4
 			p.big = true
 		"static_charge":

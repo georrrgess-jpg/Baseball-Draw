@@ -1,0 +1,59 @@
+name: Build Baseball Draw
+
+# Builds the Windows (and Linux) game from source, runs the automated tests,
+# and uploads the playable builds as workflow artifacts.
+# Runs on demand (Actions tab -> "Build Baseball Draw" -> Run workflow),
+# on version tags (v*), and on pushes to main.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot ${{ env.GODOT_VERSION }}
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          unzip -q -j templates.tpz "templates/windows_release_x86_64.exe" "templates/windows_release_x86_64_console.exe" \
+            "templates/linux_release.x86_64" "templates/version.txt" \
+            -d "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          rm templates.tpz godot.zip
+
+      - name: Import project
+        run: godot --headless --path . --import || true
+
+      - name: Run automated tests
+        run: |
+          godot --headless --path . res://tests/check_all.tscn
+          godot --headless --path . res://tests/test_suite.tscn -- --profile=ci --fresh-profile
+          godot --headless --path . --fixed-fps 30 -- --test-battle=quick --auto --profile=ci_sim --fresh-profile
+
+      - name: Export Windows and Linux builds
+        run: |
+          mkdir -p build/windows build/linux
+          godot --headless --path . --export-release "Windows Desktop" build/windows/BaseballDraw.exe
+          godot --headless --path . --export-release "Linux" build/linux/BaseballDraw.x86_64
+          cp README.md build/windows/ && cp README.md build/linux/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BaseballDraw-Windows
+          path: build/windows/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BaseballDraw-Linux
+          path: build/linux/

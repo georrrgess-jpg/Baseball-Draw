@@ -22,6 +22,8 @@ var _loading_label: Label
 var _loading_bar: ProgressBar
 var _toast_box: VBoxContainer
 var _loading_bg: TextureRect
+var _fps: Label
+var _fps_t := 0.0
 
 
 func _ready() -> void:
@@ -71,11 +73,31 @@ func _ready() -> void:
 	_toast_box.add_theme_constant_override("separation", 8)
 	_layer.add_child(_toast_box)
 
+	_fps = Label.new()
+	_fps.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_fps.position = Vector2(8, -30)
+	_fps.add_theme_font_size_override("font_size", 18)
+	_fps.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+	_fps.add_theme_color_override("font_outline_color", Color.BLACK)
+	_fps.add_theme_constant_override("outline_size", 4)
+	_fps.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_layer.add_child(_fps)
 	Profile.achievement_unlocked.connect(_on_achievement)
 	Profile.notice.connect(func(t: String) -> void: toast(t, "info"))
 	Profile.level_up.connect(func(l: int) -> void:
 		toast("Account level %d!  +100 coins" % l, "level")
 		Audio.play("level_up"))
+
+
+func _process(delta: float) -> void:
+	_fps_t -= delta
+	if _fps_t > 0.0:
+		return
+	_fps_t = 0.25
+	var show := bool(Settings.get_value("graphics", "show_fps", false))
+	_fps.visible = show
+	if show:
+		_fps.text = "%d FPS  %.1f ms" % [Engine.get_frames_per_second(), 1000.0 / maxf(Engine.get_frames_per_second(), 1.0)]
 
 
 func _set_loading_visible(v: bool) -> void:

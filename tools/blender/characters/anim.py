@@ -245,7 +245,14 @@ def base_stand(c, P, width=1.25, toe_out=8.0, hips_dz=-0.012, shift=0.0):
 
 def defender_hands_idle(c, P, t, L):
     br = wave(t, L, 1, 0.1)
-    c.hang(P, "R", swing=4 + 2 * br, out=10, bend=18)
+    if c.style.get("idle") == "hip":
+        s = c.s
+        pw = c.sk.p["pelvis_w"] * s
+        tgt = Vector((-(pw + 0.035 * s), 0.01 * s, c.L["pelvis"] + 0.075 * s + 0.004 * s * br))
+        c.arm(P, "R", tgt, pole=(-1.0, 0.7, 0.1), space="hips",
+              fingers=Vector((0.15, -0.35, -0.92)), palm=Vector((1.0, 0.0, 0.1)))
+    else:
+        c.hang(P, "R", swing=4 + 2 * br, out=10, bend=18)
     # glove hand: relaxed, a little forward and out (mitt hangs clear of leg)
     c.hang(P, "L", swing=8 + 2 * br, out=16, bend=28)
 
@@ -285,17 +292,20 @@ def clip_idle(c, t):
     return P
 
 
-def bat_rest_pose(c, P, t, L, bounce=0.0):
-    """Bat resting on the right shoulder, left hand low on the handle."""
+def bat_rest_pose(c, P, t, L, bounce=0.0, two_hands=False):
+    """Giant bat resting on the right shoulder, held one-handed; left fist hangs."""
     s = c.s
     br = wave(t, L) if L else 0.0
-    grip = c.S["R"] + c.v(0.06, -0.20, -0.20 + 0.01 * br + bounce)
-    bat_dir = Vector((-0.25, 0.55, 0.80)).normalized()
-    f, p = c.bat_grip("R", bat_dir, Vector((0.8, -0.2, 0.0)))
-    c.arm(P, "R", grip, pole=(-0.6, 0.6, -0.5), fingers=f, palm=p)
-    lg = grip - bat_dir * 0.10 * s * c.sk.p["hand_scale"]
-    f2, p2 = c.bat_grip("L", bat_dir, Vector((-0.8, -0.2, 0.0)))
-    c.arm(P, "L", lg, pole=(0.5, 0.3, -1.0), fingers=f2, palm=p2)
+    grip = c.S["R"] + c.v(0.03, -0.17, -0.20 + 0.008 * br + bounce)
+    bat_dir = Vector((-0.12, 0.55, 0.83)).normalized()
+    f, p = c.bat_grip("R", bat_dir, Vector((0.9, -0.1, -0.3)))
+    c.arm(P, "R", grip, pole=(-0.8, 0.5, -0.6), fingers=f, palm=p)
+    if two_hands:
+        lg = grip - bat_dir * 0.10 * s * c.sk.p["hand_scale"]
+        f2, p2 = c.bat_grip("L", bat_dir, Vector((-0.8, -0.2, 0.0)))
+        c.arm(P, "L", lg, pole=(0.5, 0.3, -1.0), fingers=f2, palm=p2)
+    else:
+        c.hang(P, "L", swing=10 + 3 * br, out=16, bend=30)
 
 
 # --- locomotion -------------------------------------------------------------
@@ -500,7 +510,7 @@ def clip_defeat(c, t):
     s = c.s
     P = c.new()
     L = c.L
-    lie_z = (c.sk.p["pelvis_d"] * 0.95) * s - (L["pelvis"] - L["hip"]) * 0.0
+    lie_z = (c.sk.p["pelvis_d"] * 0.95 + 0.035) * s
     # hips offset relative to rest pelvis height
     dz_end = lie_z - L["pelvis"]
     y_end = 0.55 * s

@@ -10,6 +10,7 @@ BUDGET = {"defender": 14000, "enemy": 9000, "boss": 22000}
 
 DEFENDERS = {
     "ace": dict(
+        idle="hip",
         name="Ace", number=21, accent="#FF4B2B", skin="#9A6342", hair="#1A120D",
         iris="#4A2A12", hair_style="spiky", headwear="cap", emblem="flame",
         props=dict(scale=1.0, muscle=1.05),
@@ -39,6 +40,7 @@ DEFENDERS = {
         wristbands=True,
     ),
     "jax": dict(
+        idle="hip",
         name="Jax", number=34, accent="#F39C12", skin="#5E3B24", hair="#120B08",
         iris="#2E1C10", hair_style="buzz", headwear="cap_back", emblem="diamond",
         props=dict(scale=1.06, muscle=1.25, chest_w=0.19, chest_d=0.135, waist_w=0.152,
@@ -70,6 +72,7 @@ DEFENDERS = {
         full_beard=True, undershirt="elbow",
     ),
     "nova": dict(
+        idle="hip",
         name="Nova", number=99, accent="#FFE135", skin="#D8A27A", hair="#DCD3C0",
         iris="#6FA3D8", hair_style="pixie", headwear="cap", emblem="bolt",
         props=dict(scale=0.96, muscle=0.88, chest_w=0.158, chest_d=0.114, waist_w=0.13,
@@ -81,6 +84,7 @@ DEFENDERS = {
                   width=0.95, eye_open=0.92),
     ),
     "dex": dict(
+        idle="hip",
         name="Dex", number=2, accent="#1ABC9C", skin="#B98058", hair="#2B1A12",
         iris="#3E8E5E", hair_style="curly", headwear="cap", emblem="diamond",
         props=dict(scale=0.98, muscle=0.9, chest_w=0.162, chest_d=0.116, waist_w=0.134,
@@ -106,11 +110,13 @@ DEFENDERS = {
 
 ENEMIES = {
     "runner": dict(
+        number=13,
         accent="#FF7A1A", height=1.80,
         props=dict(scale=1.0, muscle=1.0),
         helmet=dict(flap=True),
     ),
     "sprinter": dict(
+        number=7,
         accent="#FFD400", height=1.82,
         props=dict(scale=1.0, muscle=0.85, chest_w=0.155, chest_d=0.112, waist_w=0.125,
                    waist_d=0.095, pelvis_w=0.155, sh_half=0.19, arm_r=0.044, forearm_r=0.037,
@@ -118,6 +124,7 @@ ENEMIES = {
         helmet=dict(flap=False, aero=True, brim=False), lightning=True,
     ),
     "armored": dict(
+        number=66,
         accent="#8A939E", height=1.90,
         props=dict(scale=1.04, muscle=1.3, chest_w=0.215, chest_d=0.155, waist_w=0.185,
                    waist_d=0.145, pelvis_w=0.19, pelvis_d=0.135, sh_half=0.235, arm_r=0.062,
@@ -125,18 +132,21 @@ ENEMIES = {
         helmet=dict(flap=True, riot=True, brim=False), plates=True,
     ),
     "jumper": dict(
+        number=3,
         accent="#9BE22D", height=1.82,
         props=dict(scale=1.0, muscle=0.95, thigh=0.45, shin=0.45, calf_r=0.058),
         helmet=dict(flap=True), springs=True,
     ),
     "swarmer": dict(
+        number=0,
         accent="#FF7A1A", height=1.20,
-        props=dict(scale=0.72, muscle=1.0, head=0.36, hand_scale=1.25, foot_scale=1.15,
+        props=dict(scale=0.72, muscle=1.0, head=0.38, hand_scale=1.3, foot_scale=1.2,
                    thigh=0.38, shin=0.37, chest_w=0.185, chest_d=0.135, waist_w=0.16,
                    upper_arm=0.25, forearm=0.22),
-        helmet=dict(flap=True, size=1.12), small=True,
+        helmet=dict(flap=True, size=1.25), small=True,
     ),
     "trickster": dict(
+        number=9,
         accent="#9B5DE5", height=1.84,
         props=dict(scale=1.01, muscle=0.85, chest_w=0.158, chest_d=0.114, waist_w=0.128,
                    pelvis_w=0.158, sh_half=0.19, arm_r=0.044, forearm_r=0.038, thigh_r=0.084,
@@ -144,6 +154,7 @@ ENEMIES = {
         hood=True,
     ),
     "captain": dict(
+        number=1,
         accent="#C0392B", height=1.92,
         props=dict(scale=1.05, muscle=1.2, chest_w=0.205, chest_d=0.145, waist_w=0.165,
                    sh_half=0.232, arm_r=0.058, forearm_r=0.05, thigh_r=0.1, calf_r=0.066,
@@ -151,15 +162,17 @@ ENEMIES = {
         helmet=dict(flap=False, crest=True, brim=True), cape=True, armband=True,
     ),
     "slugger": dict(
+        number=99,
         accent="#8B4513", height=2.40,
-        props=dict(scale=1.30, muscle=1.4, chest_w=0.22, chest_d=0.16, waist_w=0.19,
-                   waist_d=0.15, pelvis_w=0.195, pelvis_d=0.14, sh_half=0.24, arm_r=0.066,
-                   forearm_r=0.062, wrist_r=0.038, thigh_r=0.112, calf_r=0.074, neck_r=0.076,
-                   head=0.26, hand_scale=1.25, belly=0.4),
+        props=dict(scale=1.30, muscle=1.45, chest_w=0.235, chest_d=0.165, waist_w=0.18,
+                   waist_d=0.14, pelvis_w=0.175, pelvis_d=0.13, sh_half=0.25, arm_r=0.068,
+                   forearm_r=0.064, wrist_r=0.04, thigh_r=0.104, calf_r=0.074, neck_r=0.078,
+                   head=0.25, hand_scale=1.3, belly=0.2),
         helmet=dict(flap=True, riot=True), plates=True, bat=True, heavy=1.0,
     ),
     # bosses
     "iron_slugger": dict(
+        number=50,
         accent="#FF6A00", height=3.60, boss=True,
         props=dict(scale=1.95, muscle=1.45, chest_w=0.23, chest_d=0.165, waist_w=0.20,
                    waist_d=0.155, pelvis_w=0.20, pelvis_d=0.145, sh_half=0.25, arm_r=0.07,
@@ -169,6 +182,7 @@ ENEMIES = {
         heavy=1.0,
     ),
     "phantom_captain": dict(
+        number=13,
         accent="#B45CFF", height=3.20, boss=True,
         props=dict(scale=1.70, muscle=1.15, chest_w=0.20, chest_d=0.14, waist_w=0.15,
                    sh_half=0.235, arm_r=0.054, forearm_r=0.047, thigh_r=0.095, calf_r=0.062,
@@ -177,6 +191,7 @@ ENEMIES = {
         heavy=0.7,
     ),
     "grand_slammer": dict(
+        number=1,
         accent="#FFC83D", height=4.20, boss=True,
         props=dict(scale=2.28, muscle=1.5, chest_w=0.235, chest_d=0.17, waist_w=0.20,
                    waist_d=0.155, pelvis_w=0.20, pelvis_d=0.145, sh_half=0.255, arm_r=0.072,

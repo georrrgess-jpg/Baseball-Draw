@@ -26,9 +26,9 @@ static func effective_inning(run: RunState) -> float:
 
 static func hp_multiplier(run: RunState) -> float:
 	var ei := effective_inning(run)
-	var mult := 1.0 + 0.13 * (ei - 1.0)
-	if ei > 9.0:
-		mult *= pow(1.09, ei - 9.0)
+	var mult := 1.0 + 0.2 * (ei - 1.0)
+	if ei > 6.0:
+		mult *= pow(1.08, ei - 6.0)
 	mult *= float(DB.difficulty(run.difficulty_id).enemy_hp)
 	mult *= 1.0 + run.modifier_total("enemy_hp")
 	return mult
@@ -50,9 +50,9 @@ static func generate(run: RunState, wave_index: int, route_count: int) -> Dictio
 	var is_last := wave_index == run.waves_per_inning - 1
 	var boss := run.boss_for_inning(run.inning) if is_last else ""
 
-	var budget := (6.0 + 3.1 * (ei - 1.0) + 1.7 * float(wave_index)) * float(diff.budget)
+	var budget := (8.0 + 4.0 * (ei - 1.0) + 2.2 * float(wave_index)) * float(diff.budget)
 	if ei > 9.0:
-		budget *= pow(1.06, ei - 9.0)
+		budget *= pow(1.08, ei - 9.0)
 	if boss != "":
 		budget *= 0.45
 

@@ -1,71 +1,382 @@
 {
-  "_comment": "Defender definitions. Stats are level-1 values; each character level adds level_growth (multiplicative) to damage and special_power. interval = seconds between throws. range/throw_speed in metres(/s). accuracy 0-100.",
-  "level_growth": 0.06,
-  "max_level": 10,
-  "xp_curve": [0, 120, 300, 560, 900, 1350, 1900, 2600, 3450, 4500],
-  "roles": {
-    "pitcher":   {"name": "Pitcher",    "zone": "mound",   "bonus_text": "On the Mound: +20% damage, +15% throw speed"},
-    "catcher":   {"name": "Catcher",    "zone": "home",    "bonus_text": "Behind the Plate: +15% damage, aura +50% radius"},
-    "infielder": {"name": "Infielder",  "zone": "infield", "bonus_text": "In the Dirt: +15% attack speed"},
-    "outfielder":{"name": "Outfielder", "zone": "outfield","bonus_text": "On the Grass: +20% range"}
+ "_comment": "Defender definitions. Stats are level-1 values; each character level adds level_growth (multiplicative) to damage and special_power. interval = seconds between throws. range/throw_speed in metres(/s). accuracy 0-100.",
+ "level_growth": 0.06,
+ "max_level": 10,
+ "xp_curve": [
+  0,
+  120,
+  300,
+  560,
+  900,
+  1350,
+  1900,
+  2600,
+  3450,
+  4500
+ ],
+ "roles": {
+  "pitcher": {
+   "name": "Pitcher",
+   "zone": "mound",
+   "bonus_text": "On the Mound: +20% damage, +15% throw speed"
   },
-  "defenders": [
-    {"id": "ace", "name": "Ace", "role": "pitcher", "number": 21, "accent": "#FF4B2B", "signature": "heat_wave",
-     "title": "The Flamethrower", "bio": "A fireballing ace who has never met a radar gun he couldn't melt.",
-     "stats": {"damage": 30, "interval": 1.1, "range": 11.0, "throw_speed": 30.0, "accuracy": 80, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "fastball", "name": "Fastball", "text": "Every 4th throw is a blazing fastball: double damage and sets the runner ablaze (12/s for 2s)."},
-     "targeting": "first", "unlock": {"type": "default"}},
-    {"id": "rico", "name": "Rico", "role": "catcher", "number": 8, "accent": "#3A7BD5", "signature": "lockdown",
-     "title": "The Wall", "bio": "Nothing gets past Rico. Not fastballs, not runners, not excuses.",
-     "stats": {"damage": 18, "interval": 1.0, "range": 7.5, "throw_speed": 24.0, "accuracy": 75, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "home_guard", "name": "Home Guard", "text": "Runners within 4.5m are slowed 25% and take +10% damage from everyone."},
-     "targeting": "first", "unlock": {"type": "default"}},
-    {"id": "maya", "name": "Maya", "role": "infielder", "number": 5, "accent": "#2ECC71", "signature": "twin_play",
-     "title": "Quicksilver", "bio": "The fastest glove in the league. Blink and the double play is already turned.",
-     "stats": {"damage": 16, "interval": 0.55, "range": 8.0, "throw_speed": 28.0, "accuracy": 85, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "quick_hands", "name": "Quick Hands", "text": "30% chance to fire a second throw at another runner. Dashes to tag runners that pass within 3.5m (double damage)."},
-     "targeting": "first", "unlock": {"type": "default"}},
-    {"id": "jax", "name": "Jax", "role": "infielder", "number": 34, "accent": "#F39C12", "signature": "grand_relay",
-     "title": "Cannon Arm", "bio": "Third base, fourth gear. Jax's throws dent steel plating.",
-     "stats": {"damage": 34, "interval": 1.25, "range": 9.0, "throw_speed": 32.0, "accuracy": 70, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "cannon_arm", "name": "Cannon Arm", "text": "Throws ignore 60% of armor and knock runners back 0.8m."},
-     "targeting": "strongest", "unlock": {"type": "default"}},
-    {"id": "kai", "name": "Kai", "role": "outfielder", "number": 11, "accent": "#29B6F6", "signature": "sky_hook",
-     "title": "Hawkeye", "bio": "Kai can thread a throw through a keyhole from the warning track.",
-     "stats": {"damage": 38, "interval": 1.5, "range": 18.0, "throw_speed": 40.0, "accuracy": 95, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "precision", "name": "Precision", "text": "+50% damage to runners over 10m away. Critical hits deal 2.5x."},
-     "targeting": "fastest", "unlock": {"type": "default"}},
-    {"id": "bruno", "name": "Bruno", "role": "outfielder", "number": 44, "accent": "#8E44AD", "signature": "power_catch",
-     "title": "The Mountain", "bio": "Bruno doesn't throw the ball so much as launch it.",
-     "stats": {"damage": 60, "interval": 2.2, "range": 12.0, "throw_speed": 22.0, "accuracy": 65, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "heavy_hitter", "name": "Heavy Hitter", "text": "Throws splash 2m around the target and stun for 0.4s."},
-     "targeting": "first", "unlock": {"type": "default"}},
-    {"id": "nova", "name": "Nova", "role": "pitcher", "number": 99, "accent": "#FFE135", "signature": "thunderbolt",
-     "title": "Live Wire", "bio": "A closer with a lightning arm. Her fastball arrives before the thunder.",
-     "stats": {"damage": 26, "interval": 0.9, "range": 11.0, "throw_speed": 36.0, "accuracy": 85, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "static_charge", "name": "Static Charge", "text": "Every throw arcs to one extra runner for 50% damage."},
-     "targeting": "first", "unlock": {"type": "level", "value": 4, "stars": 0}},
-    {"id": "dex", "name": "Dex", "role": "infielder", "number": 2, "accent": "#1ABC9C", "signature": "pickoff",
-     "title": "The Closer's Shadow", "bio": "A slick shortstop who lives for the pickoff.",
-     "stats": {"damage": 22, "interval": 0.7, "range": 9.0, "throw_speed": 30.0, "accuracy": 88, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "pickoff_artist", "name": "Pickoff Artist", "text": "Deals double damage to runners below 30% health."},
-     "targeting": "weakest", "unlock": {"type": "level", "value": 7, "stars": 0}},
-    {"id": "hana", "name": "Hana", "role": "outfielder", "number": 17, "accent": "#FF6FA8", "signature": "diving_catch",
-     "title": "Gap Hunter", "bio": "Hana covers more grass than the groundskeeper.",
-     "stats": {"damage": 30, "interval": 1.0, "range": 15.0, "throw_speed": 34.0, "accuracy": 90, "special_power": 1.0, "special_cooldown": 1.0},
-     "trait": {"id": "gap_shooter", "name": "Gap Shooter", "text": "+40% damage to Sprinters, Jumpers and airborne runners."},
-     "targeting": "fastest", "unlock": {"type": "level", "value": 10, "stars": 0}}
-  ],
-  "synergies": [
-    {"id": "battery", "name": "The Battery", "requires": {"roles": {"pitcher": 1, "catcher": 1}}, "within": 12.0,
-     "text": "Pitcher and Catcher within 12m: both throw 15% faster.", "effect": {"attack_speed": 0.15, "scope": "members"}},
-    {"id": "double_play_duo", "name": "Double-Play Duo", "requires": {"roles": {"infielder": 2}}, "within": 14.0,
-     "text": "Two infielders within 14m: their throws ricochet to a second runner for 35% damage.", "effect": {"ricochet": 0.35, "scope": "members"}},
-    {"id": "outfield_wall", "name": "Outfield Wall", "requires": {"roles": {"outfielder": 2}}, "within": 0,
-     "text": "Two outfielders on the grass: +15% range for the whole team.", "effect": {"range": 0.15, "scope": "team", "zone": "outfield"}},
-    {"id": "full_squad", "name": "Full Squad", "requires": {"roles": {"pitcher": 1, "catcher": 1, "infielder": 2, "outfielder": 2}}, "within": 0,
-     "text": "Every position covered: +15% energy regeneration.", "effect": {"energy_regen": 0.15, "scope": "team"}},
-    {"id": "fire_and_ice", "name": "Fire and Ice", "requires": {"ids": ["ace", "kai"]}, "within": 0,
-     "text": "Ace and Kai together: critical hits ignite runners.", "effect": {"crit_burn": 8, "scope": "team"}}
-  ]
+  "catcher": {
+   "name": "Catcher",
+   "zone": "home",
+   "bonus_text": "Behind the Plate: +15% damage, aura +50% radius"
+  },
+  "infielder": {
+   "name": "Infielder",
+   "zone": "infield",
+   "bonus_text": "In the Dirt: +15% attack speed"
+  },
+  "outfielder": {
+   "name": "Outfielder",
+   "zone": "outfield",
+   "bonus_text": "On the Grass: +20% range"
+  }
+ },
+ "defenders": [
+  {
+   "id": "ace",
+   "name": "Ace",
+   "role": "pitcher",
+   "number": 21,
+   "accent": "#FF4B2B",
+   "signature": "heat_wave",
+   "title": "The Flamethrower",
+   "bio": "A fireballing ace who has never met a radar gun he couldn't melt.",
+   "stats": {
+    "damage": 30,
+    "interval": 1.1,
+    "range": 11.0,
+    "throw_speed": 30.0,
+    "accuracy": 80,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "fastball",
+    "name": "Fastball",
+    "text": "Every 4th throw is a blazing fastball: double damage and sets the runner ablaze (12/s for 2s)."
+   },
+   "targeting": "first",
+   "unlock": {
+    "type": "default"
+   }
+  },
+  {
+   "id": "rico",
+   "name": "Rico",
+   "role": "catcher",
+   "number": 8,
+   "accent": "#3A7BD5",
+   "signature": "lockdown",
+   "title": "The Wall",
+   "bio": "Nothing gets past Rico. Not fastballs, not runners, not excuses.",
+   "stats": {
+    "damage": 18,
+    "interval": 1.0,
+    "range": 7.5,
+    "throw_speed": 24.0,
+    "accuracy": 75,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "home_guard",
+    "name": "Home Guard",
+    "text": "Runners within 4.5m are slowed 25% and take +10% damage from everyone."
+   },
+   "targeting": "first",
+   "unlock": {
+    "type": "default"
+   }
+  },
+  {
+   "id": "maya",
+   "name": "Maya",
+   "role": "infielder",
+   "number": 5,
+   "accent": "#2ECC71",
+   "signature": "twin_play",
+   "title": "Quicksilver",
+   "bio": "The fastest glove in the league. Blink and the double play is already turned.",
+   "stats": {
+    "damage": 16,
+    "interval": 0.55,
+    "range": 8.0,
+    "throw_speed": 28.0,
+    "accuracy": 85,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "quick_hands",
+    "name": "Quick Hands",
+    "text": "30% chance to fire a second throw at another runner. Dashes to tag runners that pass within 3.5m (double damage)."
+   },
+   "targeting": "first",
+   "unlock": {
+    "type": "default"
+   }
+  },
+  {
+   "id": "jax",
+   "name": "Jax",
+   "role": "infielder",
+   "number": 34,
+   "accent": "#F39C12",
+   "signature": "grand_relay",
+   "title": "Cannon Arm",
+   "bio": "Third base, fourth gear. Jax's throws dent steel plating.",
+   "stats": {
+    "damage": 34,
+    "interval": 1.25,
+    "range": 9.0,
+    "throw_speed": 32.0,
+    "accuracy": 70,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "cannon_arm",
+    "name": "Cannon Arm",
+    "text": "Throws ignore 60% of armor and knock runners back 0.8m."
+   },
+   "targeting": "strongest",
+   "unlock": {
+    "type": "default"
+   }
+  },
+  {
+   "id": "kai",
+   "name": "Kai",
+   "role": "outfielder",
+   "number": 11,
+   "accent": "#29B6F6",
+   "signature": "sky_hook",
+   "title": "Hawkeye",
+   "bio": "Kai can thread a throw through a keyhole from the warning track.",
+   "stats": {
+    "damage": 38,
+    "interval": 1.5,
+    "range": 15.0,
+    "throw_speed": 40.0,
+    "accuracy": 95,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "precision",
+    "name": "Precision",
+    "text": "+50% damage to runners over 10m away. Critical hits deal 2.5x."
+   },
+   "targeting": "fastest",
+   "unlock": {
+    "type": "default"
+   }
+  },
+  {
+   "id": "bruno",
+   "name": "Bruno",
+   "role": "outfielder",
+   "number": 44,
+   "accent": "#8E44AD",
+   "signature": "power_catch",
+   "title": "The Mountain",
+   "bio": "Bruno doesn't throw the ball so much as launch it.",
+   "stats": {
+    "damage": 60,
+    "interval": 2.2,
+    "range": 12.0,
+    "throw_speed": 22.0,
+    "accuracy": 65,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "heavy_hitter",
+    "name": "Heavy Hitter",
+    "text": "Throws splash 1.6m around the target (50% damage) and stun for 0.4s."
+   },
+   "targeting": "first",
+   "unlock": {
+    "type": "default"
+   }
+  },
+  {
+   "id": "nova",
+   "name": "Nova",
+   "role": "pitcher",
+   "number": 99,
+   "accent": "#FFE135",
+   "signature": "thunderbolt",
+   "title": "Live Wire",
+   "bio": "A closer with a lightning arm. Her fastball arrives before the thunder.",
+   "stats": {
+    "damage": 26,
+    "interval": 0.9,
+    "range": 11.0,
+    "throw_speed": 36.0,
+    "accuracy": 85,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "static_charge",
+    "name": "Static Charge",
+    "text": "Every throw arcs to one extra runner for 50% damage."
+   },
+   "targeting": "first",
+   "unlock": {
+    "type": "level",
+    "value": 4,
+    "stars": 0
+   }
+  },
+  {
+   "id": "dex",
+   "name": "Dex",
+   "role": "infielder",
+   "number": 2,
+   "accent": "#1ABC9C",
+   "signature": "pickoff",
+   "title": "The Closer's Shadow",
+   "bio": "A slick shortstop who lives for the pickoff.",
+   "stats": {
+    "damage": 22,
+    "interval": 0.7,
+    "range": 9.0,
+    "throw_speed": 30.0,
+    "accuracy": 88,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "pickoff_artist",
+    "name": "Pickoff Artist",
+    "text": "Deals double damage to runners below 30% health."
+   },
+   "targeting": "weakest",
+   "unlock": {
+    "type": "level",
+    "value": 7,
+    "stars": 0
+   }
+  },
+  {
+   "id": "hana",
+   "name": "Hana",
+   "role": "outfielder",
+   "number": 17,
+   "accent": "#FF6FA8",
+   "signature": "diving_catch",
+   "title": "Gap Hunter",
+   "bio": "Hana covers more grass than the groundskeeper.",
+   "stats": {
+    "damage": 30,
+    "interval": 1.0,
+    "range": 15.0,
+    "throw_speed": 34.0,
+    "accuracy": 90,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "gap_shooter",
+    "name": "Gap Shooter",
+    "text": "+40% damage to Sprinters, Jumpers and airborne runners."
+   },
+   "targeting": "fastest",
+   "unlock": {
+    "type": "level",
+    "value": 10,
+    "stars": 0
+   }
+  }
+ ],
+ "synergies": [
+  {
+   "id": "battery",
+   "name": "The Battery",
+   "requires": {
+    "roles": {
+     "pitcher": 1,
+     "catcher": 1
+    }
+   },
+   "within": 12.0,
+   "text": "Pitcher and Catcher within 12m: both throw 15% faster.",
+   "effect": {
+    "attack_speed": 0.15,
+    "scope": "members"
+   }
+  },
+  {
+   "id": "double_play_duo",
+   "name": "Double-Play Duo",
+   "requires": {
+    "roles": {
+     "infielder": 2
+    }
+   },
+   "within": 14.0,
+   "text": "Two infielders within 14m: their throws ricochet to a second runner for 35% damage.",
+   "effect": {
+    "ricochet": 0.35,
+    "scope": "members"
+   }
+  },
+  {
+   "id": "outfield_wall",
+   "name": "Outfield Wall",
+   "requires": {
+    "roles": {
+     "outfielder": 2
+    }
+   },
+   "within": 0,
+   "text": "Two outfielders on the grass: +15% range for the whole team.",
+   "effect": {
+    "range": 0.15,
+    "scope": "team",
+    "zone": "outfield"
+   }
+  },
+  {
+   "id": "full_squad",
+   "name": "Full Squad",
+   "requires": {
+    "roles": {
+     "pitcher": 1,
+     "catcher": 1,
+     "infielder": 2,
+     "outfielder": 2
+    }
+   },
+   "within": 0,
+   "text": "Every position covered: +15% energy regeneration.",
+   "effect": {
+    "energy_regen": 0.15,
+    "scope": "team"
+   }
+  },
+  {
+   "id": "fire_and_ice",
+   "name": "Fire and Ice",
+   "requires": {
+    "ids": [
+     "ace",
+     "kai"
+    ]
+   },
+   "within": 0,
+   "text": "Ace and Kai together: critical hits ignite runners.",
+   "effect": {
+    "crit_burn": 8,
+    "scope": "team"
+   }
+  }
+ ]
 }

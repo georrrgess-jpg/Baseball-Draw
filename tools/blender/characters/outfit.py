@@ -87,10 +87,11 @@ def glyph_loops(text, font_path, height):
 
 def surface_decal(name, loops, surface, center, u_axis, v_axis, out_dir, mat,
                   lo=0.0, hi=0.005, dilate=0.0, voxel=0.0025, tris=400,
-                  bones=None, rigid=None, sym=False):
+                  bones=None, rigid=None, sym=False, side_offset=0.06):
     prism = sdf.prism2d(loops, center, u_axis, v_axis, dilate=dilate)
     layer = band_between(surface, lo, hi)
-    side = sdf.halfspace(A(center) - A(out_dir) * 0.06, -A(out_dir))
+    od = A(out_dir) / np.linalg.norm(out_dir)
+    side = sdf.halfspace(A(center) - od * side_offset, -od)
     shape = sdf.intersect(sdf.intersect(prism, layer), side)
     ext = max(np.abs(np.concatenate(loops, 0)).max() + abs(dilate), 0.02) + 0.02
     c = A(center)
@@ -245,10 +246,15 @@ class CapBuilder:
 # hair
 # ---------------------------------------------------------------------------
 
+_CAPPED = [False]
+
+
 def hair_cap_region(hb, front_z=0.20, back_z=-0.42, side_z=-0.02, grow=0.025,
                     ear_clear=True):
     """Shell of hair hugging the cranium above a hairline."""
     h = hb.h
+    if _CAPPED[0]:
+        grow = min(grow, 0.020)
     w = hb.f["width"]
     base = cranium(hb, grow)
     nape = sdf.ellipsoid(hb.P(0, 0.27, -0.10), hb.R(0.31 * w + grow, 0.19 + grow, 0.26))
@@ -279,6 +285,7 @@ def build_hair(hb, style, mat, accent_mat=None, tris=900, clip=None):
     parts = []
     if style == "none":
         return parts
+    _CAPPED[0] = clip is not None
     if clip is not None:
         _mk = mu.sdf_part
 
@@ -337,27 +344,30 @@ def build_hair(hb, style, mat, accent_mat=None, tris=900, clip=None):
             parts.append(mu.sdf_part("HairTie", tie, accent_mat, 0.006 * h, 200,
                                      rigid="head", sym=True))
     elif style == "pixie":
-        base = hair_cap_region(hb, front_z=0.20, back_z=-0.34, grow=0.032)
-        locks = []
+        base = hair_cap_region(hb, front_z=0.20, back_z=-0.34, grow=0.02)
+        w = hb.f["width"]
+        back = sdf.ellipsoid(P(0, 0.28, -0.06), hb.R(0.34 * w, 0.22, 0.20))
+        back = sdf.intersect(back, sdf.halfspace(P(0, 0, -0.30), [0, 0.3, -1]))
+        locks = [back]
         for sx in (1, -1):
-            locks.append(sdf.polyline_tube([P(sx * 0.30, -0.20, 0.16), P(sx * 0.33, -0.24, 0.04),
-                                            P(sx * 0.31, -0.27, -0.07)],
+            locks.append(sdf.polyline_tube([P(sx * 0.31, -0.18, 0.13), P(sx * 0.345, -0.22, 0.03),
+                                            P(sx * 0.32, -0.25, -0.07)],
                                            [0.05 * h, 0.035 * h, 0.012 * h]))
-        # side-swept fringe under the brim
-        locks.append(sdf.polyline_tube([P(-0.26, -0.30, 0.17), P(-0.05, -0.38, 0.165),
-                                        P(0.16, -0.37, 0.13), P(0.27, -0.31, 0.06)],
-                                       [0.045 * h, 0.04 * h, 0.03 * h, 0.012 * h]))
-        # spiky nape points
+        # side-swept fringe under the brim, falling across the forehead
+        locks.append(sdf.polyline_tube([P(0.28, -0.29, 0.15), P(0.12, -0.38, 0.145),
+                                        P(-0.06, -0.40, 0.12), P(-0.22, -0.36, 0.07),
+                                        P(-0.31, -0.27, -0.01)],
+                                       [0.045 * h, 0.045 * h, 0.038 * h, 0.026 * h, 0.010 * h]))
         for sx in (-0.18, 0.0, 0.18):
-            locks.append(sdf.round_cone(P(sx, 0.34, -0.12), P(sx * 1.2, 0.38, -0.30),
-                                        0.05 * h, 0.012 * h))
-        shape = sdf.blend(base, *[(0.02 * h, l) for l in locks])
-        parts.append(mu_sdf_part("Hair", shape, mat, 0.008 * h, tris, rigid="head", sym=False))
+            locks.append(sdf.round_cone(P(sx, 0.36, -0.14), P(sx * 1.2, 0.40, -0.30),
+                                        0.05 * h, 0.014 * h))
+        shape = sdf.blend(base, *[(0.03 * h, l) for l in locks])
+        parts.append(mu_sdf_part("Hair", shape, mat, 0.007 * h, tris + 300, rigid="head", sym=False))
     elif style == "curly":
         base = hair_cap_region(hb, front_z=0.22, back_z=-0.40, grow=0.02)
         curls = []
         w = hb.f["width"]
-        for row, (dz, rr) in enumerate(((-0.035, 0.050), (-0.12, 0.048), (-0.21, 0.044))):
+        for row, (dz, rr) in enumerate(((-0.02, 0.060), (-0.10, 0.058), (-0.19, 0.052))):
             n_c = 13 - 2 * row
             span = 120 - 15 * row
             for i in range(n_c):
@@ -368,12 +378,12 @@ def build_hair(hb, style, mat, accent_mat=None, tris=900, clip=None):
                 if abs(math.degrees(az)) > 100 and row > 0:
                     continue
                 outv = A([math.sin(az), math.cos(az), 0.0])
-                c = A(P(x, y, z)) + outv * 0.02 * h
+                c = A(P(x, y, z)) + outv * 0.035 * h
                 curls.append(sdf.sphere(c, rr * h))
-        for sx in (-0.24, -0.08, 0.08, 0.24):
-            curls.append(sdf.sphere(P(sx, -0.36 + 0.10 * abs(sx), 0.165), 0.042 * h))
+        for sx in (-0.30, -0.18, 0.18, 0.30):
+            curls.append(sdf.sphere(P(sx, -0.33 + 0.12 * abs(sx), 0.15), 0.05 * h))
         shape = sdf.blend(base, 0.008 * h, sdf.union(*curls))
-        parts.append(mu_sdf_part("Hair", shape, mat, 0.006 * h, tris + 500, rigid="head"))
+        parts.append(mu_sdf_part("Hair", shape, mat, 0.007 * h, tris + 700, rigid="head"))
     elif style == "bob":
         outer = sdf.ellipsoid(P(0, 0.06, 0.06), hb.R(0.40, 0.47, 0.52))
         inner_face = sdf.ellipsoid(P(0, -0.40, -0.12), hb.R(0.30, 0.30, 0.36))
@@ -580,10 +590,11 @@ def build_numbers(bb, number, font_path, mat_num, mat_outline, back_h=0.20, fron
     parts.append(surface_decal("NumberBack", loops_b, torso, cb, u, v, out, mat_num,
                                lo=-0.002 * s, hi=0.0065 * s, voxel=0.0028 * s, tris=700,
                                bones=["chest", "spine"]))
-    parts.append(surface_decal("NumberBackOutline", loops_b, torso, cb, u, v, out,
-                               mat_outline, lo=-0.002 * s, hi=0.0042 * s,
-                               dilate=0.009 * s, voxel=0.0028 * s, tris=700,
-                               bones=["chest", "spine"]))
+    if mat_outline is not None:
+        parts.append(surface_decal("NumberBackOutline", loops_b, torso, cb, u, v, out,
+                                   mat_outline, lo=-0.002 * s, hi=0.0042 * s,
+                                   dilate=0.009 * s, voxel=0.0028 * s, tris=700,
+                                   bones=["chest", "spine"]))
     if front:
         loops_f = glyph_loops(str(number), font_path, front_h * s)
         xf = 0.085 * s

@@ -250,7 +250,7 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> void:
 		battle.vfx.shockwave(Vector3(at.x, 0.05, at.z), r, Color(0.75, 0.5, 1.0), 0.35)
 		for e: Enemy in battle.enemies_in_radius(at, r):
 			if e != t:
-				var sd := e.take_damage(float(p.damage) * 0.6, {"source": source, "kind": "splash"})
+				var sd := e.take_damage(float(p.damage) * 0.5, {"source": source, "kind": "splash"})
 				battle.on_damage_dealt(source, e, sd, false)
 				if p.has("stun") and e.alive:
 					e.apply_stun(float(p.stun))

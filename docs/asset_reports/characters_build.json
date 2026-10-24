@@ -36,7 +36,7 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.036m@0.67s",
+     "Lleg:0.045m@0.67s",
      "Rarm:0.119m@1.08s"
     ]
    },
@@ -57,7 +57,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.034m@0.88s"
+     "Rarm:0.040m@0.88s"
     ]
    },
    "stunned": {
@@ -71,7 +71,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.037m@0.47s"
+     "Rarm:0.044m@0.47s"
     ]
    },
    "victory": {
@@ -87,11 +87,759 @@
     "warn": []
    }
   },
-  "height": 1.804,
+  "height": 1.814,
   "id": "ace",
   "kind": "defender",
-  "seconds": 80.8,
-  "tris": 13771
+  "seconds": 159.5,
+  "tris": 13675
+ },
+ "bruno": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.048m@0.67s",
+     "Rarm:0.129m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.044m@0.88s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.047m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.951,
+  "id": "bruno",
+  "kind": "defender",
+  "seconds": 155.1,
+  "tris": 13572
+ },
+ "dex": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.044m@0.67s",
+     "Rarm:0.117m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.040m@0.88s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.043m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.778,
+  "id": "dex",
+  "kind": "defender",
+  "seconds": 140.5,
+  "tris": 13568
+ },
+ "hana": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.042m@0.67s",
+     "Rarm:0.112m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.038m@0.88s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.041m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.722,
+  "id": "hana",
+  "kind": "defender",
+  "seconds": 198.5,
+  "tris": 13559
+ },
+ "jax": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.047m@0.67s",
+     "Rarm:0.126m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.043m@0.88s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.046m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.923,
+  "id": "jax",
+  "kind": "defender",
+  "seconds": 142.3,
+  "tris": 13556
+ },
+ "kai": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.038m@0.67s",
+     "Rarm:0.098m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": []
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.929,
+  "id": "kai",
+  "kind": "defender",
+  "seconds": 100.9,
+  "tris": 13575
+ },
+ "maya": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.042m@0.67s",
+     "Rarm:0.113m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.038m@0.88s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.042m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.733,
+  "id": "maya",
+  "kind": "defender",
+  "seconds": 142.7,
+  "tris": 13762
+ },
+ "nova": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.043m@0.67s",
+     "Rarm:0.114m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.039m@0.88s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.042m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.751,
+  "id": "nova",
+  "kind": "defender",
+  "seconds": 196.5,
+  "tris": 13559
+ },
+ "rico": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.057m@0.67s",
+     "Rarm:0.134m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.055m@0.88s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.059m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.768,
+  "id": "rico",
+  "kind": "defender",
+  "seconds": 159.1,
+  "tris": 13553
  },
  "runner": {
   "anims": {
