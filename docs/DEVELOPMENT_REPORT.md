@@ -90,8 +90,9 @@ catch, bat impact, slam impact) land on exact frames; looping clips have identic
 | System tests | `tests/test_suite.tscn` | 887 checks, 0 failures |
 | Interactive flows through simulated mouse/keyboard | `tests/ui_flow_test.gd` | 51 checks, 0 failures |
 | Full runs, all modes | autopilot (`--auto`), `tools/simulate.sh` | Standard, Quick, Endless, Practice completed; wins and losses both reached |
-| Packaged build | Linux export of the same pack as Windows, autopilot game | Completed a Quick Defense win from the exported binary |
-| Windows export | `--export-release "Windows Desktop"` | `BaseballDraw.exe` + `BaseballDraw.pck` produced |
+| Packaged build | Linux export of the same pack as Windows, autopilot game | Quick Defense won from the exported binary (3 innings, 0 runs, Iron Slugger beaten) |
+| Windows export | `--export-release "Windows Desktop"` | `BaseballDraw.exe` (109 MB) + `BaseballDraw.pck` (43 MB) produced |
+| Clean-machine build | GitHub Actions *Build Baseball Draw*: fresh import, script check, system suite, autopilot game, Windows + Linux export | Passing; builds downloadable as run artifacts |
 | Final art in engine | `tools/capture_screenshots.sh` (15 scenes rendered by the game itself) | See section 7 |
 
 The system suite covers data integrity (art for every card, signatures, layouts ending at home plate...),

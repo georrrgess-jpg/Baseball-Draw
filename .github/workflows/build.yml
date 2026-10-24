@@ -20,6 +20,9 @@ jobs:
       contains(github.event.head_commit.message, '[build]')
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash   # explicit shell = "bash -eo pipefail", so piped test output keeps failures
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +41,7 @@ jobs:
       - name: Import project
         run: godot --headless --path . --import || true
 
-      # Each test exits non-zero on failure (the default shell runs with pipefail);
+      # Each test exits non-zero on failure (pipefail carries it through tee);
       # the autopilot game must reach the results screen. A summary goes on the run page.
       - name: Run automated tests
         run: |
