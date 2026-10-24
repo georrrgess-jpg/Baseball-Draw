@@ -90,7 +90,7 @@
   "height": 1.814,
   "id": "ace",
   "kind": "defender",
-  "seconds": 159.5,
+  "seconds": 149.5,
   "tris": 13675
  },
  "armored": {
@@ -136,8 +136,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.465m@0.97s",
-     "Rarm:0.548m@0.97s"
+     "Larm:0.167m@0.97s",
+     "Rarm:0.233m@0.97s"
     ]
    },
    "sprint": {
@@ -181,7 +181,7 @@
   "height": 1.863,
   "id": "armored",
   "kind": "enemy",
-  "seconds": 125.2,
+  "seconds": 135.5,
   "tris": 8707
  },
  "bruno": {
@@ -275,8 +275,8 @@
   "height": 1.951,
   "id": "bruno",
   "kind": "defender",
-  "seconds": 155.1,
-  "tris": 13572
+  "seconds": 174.9,
+  "tris": 13570
  },
  "captain": {
   "anims": {
@@ -321,8 +321,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.470m@0.97s",
-     "Rarm:0.553m@0.97s"
+     "Larm:0.167m@0.97s",
+     "Rarm:0.235m@0.97s"
     ]
    },
    "sprint": {
@@ -366,7 +366,7 @@
   "height": 1.923,
   "id": "captain",
   "kind": "enemy",
-  "seconds": 87.4,
+  "seconds": 139.9,
   "tris": 8709
  },
  "dex": {
@@ -460,8 +460,8 @@
   "height": 1.778,
   "id": "dex",
   "kind": "defender",
-  "seconds": 140.5,
-  "tris": 13568
+  "seconds": 135.7,
+  "tris": 13560
  },
  "grand_slammer": {
   "anims": {
@@ -509,8 +509,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:1.028m@0.97s",
-     "Rarm:1.240m@0.97s"
+     "Larm:0.367m@0.97s",
+     "Rarm:0.537m@0.97s"
     ]
    },
    "sprint": {
@@ -552,7 +552,7 @@
   "height": 4.207,
   "id": "grand_slammer",
   "kind": "boss",
-  "seconds": 142.2,
+  "seconds": 150.8,
   "tris": 21312
  },
  "hana": {
@@ -646,7 +646,7 @@
   "height": 1.722,
   "id": "hana",
   "kind": "defender",
-  "seconds": 198.5,
+  "seconds": 110.4,
   "tris": 13559
  },
  "iron_slugger": {
@@ -695,8 +695,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.878m@0.97s",
-     "Rarm:1.061m@0.97s"
+     "Larm:0.311m@0.97s",
+     "Rarm:0.457m@0.97s"
     ]
    },
    "sprint": {
@@ -738,8 +738,8 @@
   "height": 3.537,
   "id": "iron_slugger",
   "kind": "boss",
-  "seconds": 178.7,
-  "tris": 21321
+  "seconds": 189.0,
+  "tris": 21315
  },
  "jax": {
   "anims": {
@@ -832,8 +832,8 @@
   "height": 1.923,
   "id": "jax",
   "kind": "defender",
-  "seconds": 142.3,
-  "tris": 13556
+  "seconds": 229.6,
+  "tris": 13558
  },
  "jumper": {
   "anims": {
@@ -878,8 +878,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.473m@0.97s",
-     "Rarm:0.549m@0.97s"
+     "Larm:0.192m@0.97s",
+     "Rarm:0.255m@0.97s"
     ]
    },
    "sprint": {
@@ -923,7 +923,7 @@
   "height": 1.786,
   "id": "jumper",
   "kind": "enemy",
-  "seconds": 104.8,
+  "seconds": 173.9,
   "tris": 8712
  },
  "kai": {
@@ -1013,8 +1013,8 @@
   "height": 1.929,
   "id": "kai",
   "kind": "defender",
-  "seconds": 100.9,
-  "tris": 13575
+  "seconds": 165.3,
+  "tris": 13577
  },
  "maya": {
   "anims": {
@@ -1107,8 +1107,8 @@
   "height": 1.733,
   "id": "maya",
   "kind": "defender",
-  "seconds": 142.7,
-  "tris": 13762
+  "seconds": 168.0,
+  "tris": 13754
  },
  "nova": {
   "anims": {
@@ -1201,8 +1201,8 @@
   "height": 1.751,
   "id": "nova",
   "kind": "defender",
-  "seconds": 196.5,
-  "tris": 13559
+  "seconds": 200.9,
+  "tris": 13557
  },
  "phantom_captain": {
   "anims": {
@@ -1250,8 +1250,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.732m@0.97s",
-     "Rarm:0.871m@0.97s"
+     "Larm:0.229m@0.97s",
+     "Rarm:0.343m@0.75s"
     ]
    },
    "sprint": {
@@ -1295,8 +1295,8 @@
   "height": 3.206,
   "id": "phantom_captain",
   "kind": "boss",
-  "seconds": 170.2,
-  "tris": 16969
+  "seconds": 118.8,
+  "tris": 16961
  },
  "rico": {
   "anims": {
@@ -1389,8 +1389,8 @@
   "height": 1.768,
   "id": "rico",
   "kind": "defender",
-  "seconds": 159.1,
-  "tris": 13553
+  "seconds": 167.3,
+  "tris": 13555
  },
  "runner": {
   "anims": {
@@ -1435,8 +1435,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.434m@0.97s",
-     "Rarm:0.513m@0.97s"
+     "Larm:0.149m@0.97s",
+     "Rarm:0.213m@0.97s"
     ]
    },
    "sprint": {
@@ -1480,7 +1480,7 @@
   "height": 1.765,
   "id": "runner",
   "kind": "enemy",
-  "seconds": 125.0,
+  "seconds": 119.0,
   "tris": 8714
  },
  "slugger": {
@@ -1529,8 +1529,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.586m@0.97s",
-     "Rarm:0.707m@0.97s"
+     "Larm:0.207m@0.97s",
+     "Rarm:0.305m@0.97s"
     ]
    },
    "sprint": {
@@ -1572,8 +1572,8 @@
   "height": 2.358,
   "id": "slugger",
   "kind": "enemy",
-  "seconds": 170.1,
-  "tris": 8713
+  "seconds": 134.8,
+  "tris": 8709
  },
  "sprinter": {
   "anims": {
@@ -1618,8 +1618,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.470m@0.97s",
-     "Rarm:0.547m@0.97s"
+     "Larm:0.189m@0.97s",
+     "Rarm:0.251m@0.97s"
     ]
    },
    "sprint": {
@@ -1663,8 +1663,8 @@
   "height": 1.785,
   "id": "sprinter",
   "kind": "enemy",
-  "seconds": 231.9,
-  "tris": 8714
+  "seconds": 189.6,
+  "tris": 8713
  },
  "swarmer": {
   "anims": {
@@ -1714,8 +1714,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.258m@0.97s",
-     "Rarm:0.320m@0.97s"
+     "Larm:0.144m@0.55s",
+     "Rarm:0.195m@0.75s"
     ]
    },
    "sprint": {
@@ -1759,7 +1759,7 @@
   "height": 1.19,
   "id": "swarmer",
   "kind": "enemy",
-  "seconds": 90.4,
+  "seconds": 144.9,
   "tris": 8838
  },
  "trickster": {
@@ -1805,8 +1805,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.414m@0.97s",
-     "Rarm:0.494m@0.97s"
+     "Larm:0.119m@0.97s",
+     "Rarm:0.185m@0.97s"
     ]
    },
    "sprint": {
@@ -1850,7 +1850,7 @@
   "height": 1.82,
   "id": "trickster",
   "kind": "enemy",
-  "seconds": 120.8,
-  "tris": 8705
+  "seconds": 113.1,
+  "tris": 8707
  }
 }

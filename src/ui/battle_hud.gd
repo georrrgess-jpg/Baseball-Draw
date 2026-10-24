@@ -41,6 +41,8 @@ var _card_tip: PanelContainer
 var _card_tip_label: RichTextLabel
 var _drag_tip: PanelContainer
 var _drag_tip_label: Label
+var _enemy_tip: PanelContainer
+var _enemy_tip_label: Label
 var _pause: Control
 var _dugout: Control
 var _results: Control
@@ -511,6 +513,12 @@ func _build_tooltips() -> void:
 	root.add_child(_drag_tip)
 	_drag_tip_label = UITheme.label("", 19)
 	_drag_tip.add_child(_drag_tip_label)
+	_enemy_tip = _panel(Color(0.08, 0.03, 0.03, 0.92), Color(1.0, 0.35, 0.3, 0.6), 8)
+	_enemy_tip.visible = false
+	_enemy_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_enemy_tip)
+	_enemy_tip_label = UITheme.label("", 18)
+	_enemy_tip.add_child(_enemy_tip_label)
 
 
 # ---------------------------------------------------------------- hand
@@ -846,6 +854,38 @@ func _unit_stats_text(df: Defender) -> String:
 	return t
 
 
+func _process(_delta: float) -> void:
+	var e: Enemy = battle.hover_enemy
+	if e == null or not is_instance_valid(e) or not e.alive or battle.targeting_index >= 0 or battle.dragging != null:
+		_enemy_tip.visible = false
+		return
+	var parts: Array[String] = ["%s  %d / %d HP" % [e.data.name, int(ceil(e.hp)), int(e.max_hp)]]
+	var traits: Array[String] = []
+	if e.armor > 0.0:
+		traits.append("armor %d%%" % int(e.armor * 100))
+	if e.runs > 1:
+		traits.append("scores %d runs" % e.runs)
+	if e.affix != "":
+		traits.append("ELITE: " + e.affix.capitalize())
+	var st: Array[String] = []
+	if e.mark_t > 0.0: st.append("curved")
+	if e.burn_t > 0.0: st.append("burning")
+	if e.chill_t > 0.0: st.append("chilled")
+	if e.stun_t > 0.0: st.append("stunned")
+	if e.root_t > 0.0: st.append("rooted")
+	if e.freeze_t > 0.0: st.append("frozen")
+	if e.confuse_t > 0.0: st.append("confused")
+	if e.vulnerable_t > 0.0: st.append("VULNERABLE")
+	if not traits.is_empty():
+		parts.append(" · ".join(traits))
+	if not st.is_empty():
+		parts.append("Status: " + ", ".join(st))
+	_enemy_tip_label.text = "\n".join(parts)
+	_enemy_tip.visible = true
+	_enemy_tip.reset_size()
+	_enemy_tip.global_position = get_viewport().get_mouse_position() + Vector2(22, 14)
+
+
 # ---------------------------------------------------------------- notifications
 
 func banner(text: String, color: Color) -> void:
@@ -905,8 +945,26 @@ func drag_info(df: Defender, p: Vector3, err: String) -> void:
 	_drag_tip.global_position = get_viewport().get_mouse_position() + Vector2(24, 18)
 
 
-func on_card_played(_id: String) -> void:
+func on_card_played(id: String) -> void:
 	_card_tip.visible = false
+	# Brief flourish: the played card pops up above the hand and fades away.
+	var cv := CardView.new(id, battle.run.card_level(id))
+	cv.set_card(id, battle.run.card_level(id))
+	cv.custom_minimum_size = Vector2(170, 238)
+	cv.size = Vector2(170, 238)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.position = Vector2(root.size.x * 0.5 - 85, root.size.y - 330)
+	cv.pivot_offset = Vector2(85, 119)
+	cv.scale = Vector2(0.8, 0.8)
+	root.add_child(cv)
+	var tw := cv.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(cv, "position:y", cv.position.y - 160, 0.6).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(cv, "scale", Vector2(1.15, 1.15), 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(cv, "modulate:a", 0.0, 0.35).set_delay(0.45)
+	tw.chain().tween_callback(cv.queue_free)
+	var c := DB.card(id)
+	banner(str(c.name).to_upper(), DB.category_color(c.category).lightened(0.3))
 
 
 # ---------------------------------------------------------------- state & overlays
@@ -989,6 +1047,10 @@ func show_results(result: Dictionary) -> void:
 	_start_btn.visible = false
 	_hand_box.visible = false
 	hide_boss()
+	# Clear the battle HUD so the results own the screen.
+	for c in root.get_children():
+		if c != _flash:
+			(c as CanvasItem).visible = false
 	var script: Script = load("res://src/ui/results_screen.gd")
 	_results = script.new()
 	_results.battle = battle

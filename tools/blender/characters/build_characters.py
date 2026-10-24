@@ -242,7 +242,6 @@ def build_catcher_gear(bb, mats):
                          sdf.halfspace([0, -0.03 * s, 0], [0, 1, 0]))
     prot = sdf.intersect(prot, sdf.halfspace([0, 0, zp + 0.02 * s], [0, 0, -1]))
     prot = sdf.intersect(prot, sdf.halfspace([0, 0, bb.lv("neck") - 0.03 * s], [0, 0, 1]))
-    prot = sdf.subtract(prot, sdf.offset(torso, 0.008 * s))
     # segment grooves
     grooves = [sdf.box([0, -0.3 * s, z], [0.3 * s, 0.2 * s, 0.006 * s])
                for z in np.linspace(zp + 0.12 * s, zc + 0.15 * s, 4)]
@@ -263,7 +262,6 @@ def build_catcher_gear(bb, mats):
         knee = sdf.ellipsoid(K + np.array([0, -0.06 * s, 0.02 * s]), [0.07 * s, 0.05 * s, 0.075 * s])
         guard = sdf.blend(guard, 0.03 * s, knee)
         guard = sdf.intersect(guard, sdf.halfspace(Ak + np.array([0, 0, 0.035 * s]), [0, 0, -1]))
-        guard = sdf.subtract(guard, sdf.offset(sh, 0.003 * s))
         ribs = [sdf.box(K + np.array([x, -0.1 * s, -0.17 * s]), [0.005 * s, 0.1 * s, 0.17 * s])
                 for x in (-0.025 * s, 0.025 * s)]
         guard = sdf.subtract(guard, *ribs, k=0.003 * s)

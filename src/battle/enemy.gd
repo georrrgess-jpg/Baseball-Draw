@@ -84,6 +84,9 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	affix = str(opts.get("affix", ""))
 	is_boss = bool(data.get("boss", false))
 	var hp_mult: float = opts.get("hp_mult", 1.0)
+	if is_boss:
+		# Bosses have hand-tuned health; they only take part of the inning scaling.
+		hp_mult = 1.0 + (hp_mult - 1.0) * 0.45
 	var speed_mult: float = opts.get("speed_mult", 1.0)
 	max_hp = float(data.hp) * hp_mult
 	armor = clampf(float(data.armor) + float(opts.get("armor_add", 0.0)), 0.0, 0.9)
@@ -325,6 +328,8 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 	_hp_bar.set_instance_shader_parameter("fill", clampf(hp / max_hp, 0.0, 1.0))
 	if dmg >= 1.0:
 		model.flash(0.8 if info.get("crit", false) else 0.5)
+		if (dmg > max_hp * 0.18 or info.get("crit", false)) and model.action == "" and hp > 0.0 and not is_boss and not is_airborne():
+			model.play_action("hit", 1.3)
 	if hp <= 0.0:
 		die(info)
 	elif is_boss:

@@ -17,7 +17,7 @@ def A(v):
 # generic armour helpers
 # ---------------------------------------------------------------------------
 
-def torso_plate(bb, mat, lo=0.010, hi=0.032, front=True, back=False, z0=None, z1=None,
+def torso_plate(bb, mat, lo=-0.02, hi=0.032, front=True, back=False, z0=None, z1=None,
                 grooves=0, name="ChestPlate", tris=700, glow_mat=None):
     s = bb.s
     torso = bb.torso_sdf(with_sleeves=False)
@@ -45,7 +45,7 @@ def torso_plate(bb, mat, lo=0.010, hi=0.032, front=True, back=False, z0=None, z1
     parts = [mu.sdf_part(name, plate, mat, 0.006 * s, tris, bones=["hips", "spine", "chest"],
                          sym=True, sharp=40)]
     if glow_mat is not None and grooves:
-        glow = outfit.band_between(torso, (lo + 0.004) * s, (lo + 0.010) * s)
+        glow = outfit.band_between(torso, 0.008 * s, 0.018 * s)
         glow = sdf.intersect(glow, sdf.union(*cuts))
         glow = sdf.intersect(glow, region)
         if front and not back:
@@ -92,7 +92,7 @@ def gauntlets(bb, mat, tris=300, extra=0.016):
         E = bb.j("forearm." + side)
         W = bb.j("hand." + side)
         d = (W - E) / np.linalg.norm(W - E)
-        g = outfit.band_between(arm, 0.004 * s, extra * s)
+        g = outfit.band_between(arm, -0.015 * s, extra * s)
         g = sdf.intersect(g, sdf.halfspace(E + d * 0.35 * np.linalg.norm(W - E), -d))
         g = sdf.intersect(g, sdf.halfspace(W + d * 0.01 * s, d))
         g.bbox = (np.minimum(E, W) - 0.12 * s, np.maximum(E, W) + 0.12 * s)
@@ -108,7 +108,7 @@ def greaves(bb, mat, tris=300, knee=True, glow_mat=None):
         sock = bb.sock_sdf(side)
         K = bb.j("shin." + side)
         Ak = bb.j("foot." + side)
-        g = outfit.band_between(sock, 0.006 * s, 0.022 * s)
+        g = outfit.band_between(sock, -0.02 * s, 0.022 * s)
         g = sdf.intersect(g, sdf.halfspace(K + A([0, 0.01 * s, 0]), [0, 1, 0]))
         g = sdf.intersect(g, sdf.halfspace(Ak + A([0, 0, 0.05 * s]), [0, 0, -1]))
         g = sdf.intersect(g, sdf.halfspace(K - A([0, 0, 0.05 * s]), [0, 0, 1]))
@@ -130,7 +130,7 @@ def thigh_plates(bb, mat, tris=300):
     for side, sx in (("L", 1), ("R", -1)):
         H = bb.j("thigh." + side)
         K = bb.j("shin." + side)
-        g = outfit.band_between(pants, 0.006 * s, 0.022 * s)
+        g = outfit.band_between(pants, -0.02 * s, 0.022 * s)
         g = sdf.intersect(g, sdf.halfspace(H + A([0, 0.0, 0]), [0, 1, 0]))
         g = sdf.intersect(g, sdf.halfspace(A([0, 0, zb - 0.03 * s]), [0, 0, 1]))
         g = sdf.intersect(g, sdf.halfspace(A([0, 0, (H[2] + K[2]) / 2]), [0, 0, -1]))
@@ -155,8 +155,8 @@ def cape(bb, mat, length=0.55, flare=1.0, tattered=False, spread=0.80, rows=14, 
     z_bot = zs - (zs - zk) * length / 0.55 * 0.92
     ax0 = p["sh_half"] * s + 0.045 * s
     ay0 = p["chest_d"] * s + 0.035 * s
-    ax1 = ax0 + 0.10 * s * flare
-    ay1 = ay0 + 0.20 * s * flare
+    ax1 = ax0 + 0.08 * s * flare
+    ay1 = ay0 + 0.10 * s * flare
     rng = np.random.RandomState(seed)
     jag = rng.uniform(0, 1, cols + 1)
     verts = []
@@ -421,7 +421,7 @@ def extras(cid, cfg, sk, bb, hb, mats):
         parts.append(mu.sdf_part("Horns", hs, M["Metal"], 0.008 * h, 500, rigid="head", sym=True,
                                  sharp=50))
         parts += torso_plate(bb, M["Gear"], grooves=2, tris=1200, front=True, back=True)
-        parts += torso_plate(bb, M["Metal"], lo=0.030, hi=0.040, grooves=0, tris=500,
+        parts += torso_plate(bb, M["Metal"], lo=0.020, hi=0.042, grooves=0, tris=500,
                              z0=bb.lv("chest") + 0.02 * bb.s, z1=bb.lv("chest") + 0.20 * bb.s,
                              name="ChestCrest")
         parts += pauldrons(bb, M["Metal"], size=1.3, layers=3, tris=800, spikes=3)

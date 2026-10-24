@@ -129,9 +129,9 @@ func _build_stage() -> void:
 	stage.add_child(floor_mi)
 	camera = Camera3D.new()
 	camera.fov = 30
-	camera.position = Vector3(-0.15, 1.25, 5.6)
+	camera.position = Vector3(-0.15, 1.3, 6.8)
 	stage.add_child(camera)
-	camera.look_at(Vector3(-0.15, 1.0, 0), Vector3.UP)
+	camera.look_at(Vector3(-0.15, 1.12, 0), Vector3.UP)
 	# Shift the stage so the model sits between the two side panels.
 	stage.position = Vector3(0.35, 0, 0)
 

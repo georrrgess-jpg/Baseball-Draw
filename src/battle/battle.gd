@@ -71,6 +71,10 @@ var _target_line: MeshInstance3D
 var _mouse_pos := Vector2.ZERO
 var _uniform_colors: Dictionary = {}
 var auto_test := false
+var _danger_ring: MeshInstance3D
+var _preview_marked: Array = []
+var _danger := 0.0
+var _danger_warned := 0.0
 
 
 func _ready() -> void:
@@ -137,6 +141,10 @@ func _ready() -> void:
 	_target_line.visible = false
 	add_child(_target_line)
 
+	_danger_ring = FieldBuilder.make_ring(4.2, Color(1.0, 0.15, 0.1, 0.0), 0.06, 0.12)
+	_danger_ring.position = Vector3(Field.HOME.x, 0.06, Field.HOME.z)
+	(_danger_ring.material_override as ShaderMaterial).set_shader_parameter("pulse", 1.0)
+	add_child(_danger_ring)
 	shield_dome = vfx.make_shield_dome()
 	shield_dome.global_position = Field.HOME
 	_update_shield_dome()
@@ -177,7 +185,15 @@ func _intro() -> void:
 		if not "--keep-cam" in OS.get_cmdline_user_args():
 			cam.cinematic = false
 		var resume: Variant = Session.run_config.get("resume")
-		if typeof(resume) == TYPE_DICTIONARY and bool(resume.get("in_dugout", false)):
+		var args := OS.get_cmdline_user_args()
+		if "--open-dugout" in args:
+			run.coins = 260
+			_open_dugout()
+		elif "--show-results" in args:
+			run.outs_total = 140
+			run.coins_earned = 400
+			finish_run(true)
+		elif typeof(resume) == TYPE_DICTIONARY and bool(resume.get("in_dugout", false)):
 			_open_dugout()
 		else:
 			_enter_setup())
@@ -687,7 +703,7 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 	run.score += 10 + e.coins * 2
 	vfx.burst("out", e.center())
 	vfx.text_popup(e.center() + Vector3(0, 0.9, 0), "OUT!", Color(1.0, 1.0, 1.0), 1.15)
-	if coin > 0:
+	if coin >= 4:
 		vfx.text_popup(e.center() + Vector3(0.7, 0.4, 0), "+%d" % coin, UITheme.GOLD, 0.75, 0.9)
 	Audio.play("enemy_out", -6.0, 0.06, 60)
 	Audio.play("coin", -14.0, 0.05, 90)
@@ -1047,6 +1063,7 @@ func _process(delta: float) -> void:
 	if combo_timer > 0.0:
 		combo_timer -= delta
 	excitement = move_toward(excitement, 0.2, delta * 0.08)
+	_update_danger(delta)
 	stadium.set_excitement(excitement)
 
 	match state:
@@ -1068,6 +1085,22 @@ func _process(delta: float) -> void:
 		if hud.has_method("refresh"):
 			hud.refresh()
 	_prof_mark("hud")
+
+
+## Pulses a red ring around home plate as runners close in, with an occasional warning.
+func _update_danger(delta: float) -> void:
+	var closest := INF
+	for e in enemies:
+		if e.alive and e.runs > 0:
+			closest = minf(closest, e.remaining())
+	var target := clampf(1.0 - (closest - 3.0) / 9.0, 0.0, 1.0) if closest < INF else 0.0
+	_danger = move_toward(_danger, target, delta * 3.0)
+	(_danger_ring.material_override as ShaderMaterial).set_shader_parameter("color", Color(1.0, 0.15, 0.1, _danger * 0.9))
+	_danger_warned -= delta
+	if target > 0.75 and _danger_warned <= 0.0 and state == "wave":
+		_danger_warned = 6.0
+		notify("RUNNER CLOSING ON HOME!", Color(1.0, 0.35, 0.3))
+		Audio.play("crowd_ooh", -6.0, 0.05, 2000)
 
 
 func _no_live_enemies() -> bool:
@@ -1145,6 +1178,7 @@ func _cancel_targeting() -> void:
 	targeting_index = -1
 	_target_ring.visible = false
 	_target_line.visible = false
+	_mark_preview([], Color.WHITE)
 	targeting_changed.emit(-1)
 
 
@@ -1163,6 +1197,7 @@ func _update_target_preview() -> void:
 	_target_ring.visible = false
 	_target_line.visible = false
 	var col := DB.category_color(c.category)
+	_mark_preview(_preview_units(id, gp), col)
 	match c.target:
 		"area":
 			if gp == null:
@@ -1214,6 +1249,75 @@ func _update_target_preview() -> void:
 				(_target_ring.material_override as ShaderMaterial).set_shader_parameter("color", Color(col, 0.9))
 		"none":
 			target_preview = {"valid": true, "point": Field.HOME}
+
+
+## Units the targeted card would affect at the cursor, highlighted before casting.
+func _preview_units(id: String, gp: Variant) -> Array:
+	var c := DB.card(id)
+	match c.target:
+		"area":
+			if gp == null:
+				return []
+			if id == "heat_wave":
+				var info := effects.caster_info(id)
+				var origin: Vector3 = info.caster.global_position if info.caster else Field.HOME
+				var dir: Vector3 = (gp as Vector3) - origin
+				dir.y = 0
+				if dir.length() < 0.1:
+					return []
+				dir = dir.normalized()
+				var length := DB.card_param(id, "length", run.card_level(id))
+				var width := DB.card_param(id, "width", run.card_level(id))
+				var out: Array = []
+				for e in enemies:
+					if not e.targetable():
+						continue
+					var rel := e.global_position - origin
+					var s := rel.dot(dir)
+					if s >= -0.5 and s <= length and absf(rel.dot(Vector3(-dir.z, 0, dir.x))) <= width * 0.5 + 0.4:
+						out.append(e)
+				return out
+			return enemies_in_radius(gp, float(c.get("radius", 3.0)))
+		"enemy":
+			return [hover_enemy] if hover_enemy else []
+		"defender":
+			if hover_defender == null:
+				return []
+			var r := DB.card_param(id, "radius", run.card_level(id))
+			var out2: Array = []
+			for df in defenders:
+				if Field.v2(df.global_position).distance_to(Field.v2(hover_defender.global_position)) <= r:
+					out2.append(df)
+			return out2
+		"none":
+			match id:
+				"time_out", "changeup":
+					var all: Array = []
+					for e in enemies:
+						if e.targetable():
+							all.append(e)
+					return all
+				"sky_hook":
+					return lead_runners(1)
+				"grand_relay":
+					return lead_runners(int(DB.card_param(id, "targets", run.card_level(id))))
+				"twin_play", "field_vision", "rally_cry":
+					return defenders.duplicate()
+	return []
+
+
+func _mark_preview(units: Array, col: Color) -> void:
+	for u in _preview_marked:
+		if not is_instance_valid(u) or u in units:
+			continue
+		if u is Enemy:
+			(u as Enemy)._rim_dirty = true
+		else:
+			(u as Defender).model.set_rim(Color(0, 0, 0, 0))
+	_preview_marked = units
+	for u in units:
+		if is_instance_valid(u):
+			u.model.set_rim(Color(col.lightened(0.2), 0.95))
 
 
 func try_cast_at_cursor() -> bool:

@@ -247,7 +247,63 @@ func _run() -> void:
 					break
 			_check(battle.run.inning == 2 and battle.state == "setup", "NEXT INNING starts inning 2 setup (inning=%d state=%s)" % [battle.run.inning, battle.state])
 	_check(Profile.has_saved_run(), "run autosaved at the inning boundary")
+	var saved_post: Vector3 = Vector3.ZERO
+	for df in battle.defenders:
+		if df.id == "maya":
+			saved_post = df.post
+
+	# 11. Quit to the main menu, then CONTINUE RUN.
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(1.0)
+	var cont := _find_button(get_tree().current_scene, "CONTINUE RUN")
+	_check(cont != null and not cont.disabled, "main menu offers CONTINUE RUN")
+	if cont:
+		await _click(_button_center(cont))
+		battle = null
+		for i in 300:
+			await _wait(0.1)
+			var sc := get_tree().current_scene
+			if sc is Battle and (sc as Battle).state == "setup":
+				battle = sc
+				break
+		_check(battle != null and battle.run.inning == 2, "continued run resumes at inning 2")
+		if battle:
+			var maya2: Defender = null
+			for df in battle.defenders:
+				if df.id == "maya":
+					maya2 = df
+			_check(maya2 != null and maya2.post.distance_to(saved_post) < 0.1, "defender positions restored on continue")
+			_check(battle.run.formation == "wide", "formation restored on continue")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+	# 12. Every main-menu destination opens and BACK returns.
+	for pair in [["PLAY", "play_menu"], ["DECK BUILDER", "deck_builder"], ["ROSTER", "roster"], ["COLLECTION", "deck_builder"],
+			["PROGRESSION", "progression"], ["SETTINGS", "settings"]]:
+		await _wait(0.6)
+		var b := _find_button(get_tree().current_scene, pair[0])
+		_check(b != null, "main menu has %s" % pair[0])
+		if b == null:
+			continue
+		await _click(_button_center(b))
+		var ok := await _wait_scene(pair[1])
+		_check(ok, "%s opens %s" % [pair[0], pair[1]])
+		await _wait(0.8)
+		var back := _find_button(get_tree().current_scene, "◀  BACK")
+		_check(back != null, "%s has a BACK button" % pair[1])
+		if back:
+			await _click(_button_center(back))
+			_check(await _wait_scene("main_menu"), "BACK returns to the main menu from %s" % pair[1])
 	_finish()
+
+
+func _wait_scene(name: String) -> bool:
+	for i in 200:
+		await _wait(0.1)
+		if Router.current == name and not Router.busy:
+			return true
+	return false
 
 
 func _all_buttons(n: Node) -> Array[Button]:

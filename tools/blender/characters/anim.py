@@ -165,7 +165,9 @@ class Ctx:
             y = self.ball[side].y
         ball_r = self.ball[side]
         ank_r = self.ank[side]
-        bj = Vector((x, y, ball_r.z + z))
+        # small lift while the heel is raised: the shoe sole in front of the
+        # ball joint is partly skinned to foot.* and would otherwise dip
+        bj = Vector((x, y, ball_r.z + z + 0.014 * s * math.sin(math.radians(max(0.0, heel)))))
         Ry = rz(yaw)
         if toe > 0:
             heel_r = Vector((ank_r.x, ank_r.y + 0.065 * s * self.sk.p["foot_scale"], 0.012 * s))
@@ -193,7 +195,7 @@ class Ctx:
     def ankle_of(self, side, x, y, yaw=0.0, heel=0.0, z=0.0):
         ball_r = self.ball[side]
         ank_r = self.ank[side]
-        bj = Vector((x, y, ball_r.z + z))
+        bj = Vector((x, y, ball_r.z + z + 0.014 * self.s * math.sin(math.radians(max(0.0, heel)))))
         return bj + rz(yaw) @ rx(heel) @ (ank_r - ball_r)
 
     # arms ------------------------------------------------------------------
@@ -355,9 +357,13 @@ def _loco(c, t, L, stance, d_st, lift, lean, bob, arm_amp, arm_bend, kick,
                     (0.85, Vector((x, -d_st / 2 - 0.06 * s, hz + lift * 0.35))),
                     (1.0, a1)]
             ank = KV(k, keys)
-            pitch = K(k, [(0, -40 if not heavy else -30), (0.3, -55), (0.62, -10),
-                          (0.85, 8), (1.0, 12 if not sprint else 0.0)])
-            c.free_foot(P, side, ank, pitch=pitch, yaw=sx * 4)
+            h0 = 55 * (0.7 if heavy else 1.0)
+            # + = toes down (continues the heel raise of toe-off), - = toes up
+            pitch = K(k, [(0, h0), (0.3, 42), (0.62, 12), (0.85, -6),
+                          (1.0, -12 if not sprint else 0.0)])
+            # toes stay flat on the ground just after toe-off, then follow the foot
+            c.free_foot(P, side, ank, pitch=pitch, yaw=sx * 4,
+                        toe_bend=-pitch * (1 - sstep(0.08, 0.45, k)))
     # arms: opposite to legs.  Right arm forward when left foot forward (ph=0)
     for side, off in (("L", 0.5), ("R", 0.0)):
         sx = 1 if side == "L" else -1
@@ -440,13 +446,12 @@ def clip_walk(c, t):
                     (0.65, Vector((x, -d_st * 0.25, hz + lift))),
                     (1.0, a1)]
             ank = KV(k, keys)
-            pitch = K(k, [(0, -35), (0.35, -20), (0.65, 5 + 8 * h), (1.0, 18 * (1 - 0.6 * h))])
-            c.free_foot(P, side, ank, pitch=pitch, yaw=sx * 6)
+            pitch = K(k, [(0, 35), (0.35, 18), (0.65, -5 - 8 * h), (1.0, -18 * (1 - 0.6 * h))])
+            c.free_foot(P, side, ank, pitch=pitch, yaw=sx * 6,
+                        toe_bend=-pitch * (1 - sstep(0.08, 0.45, k)))
     for side, off in (("L", 0.5), ("R", 0.0)):
         sx = 1 if side == "L" else -1
         sw = math.cos(2 * math.pi * (ph + off))
-        if c.style["bat"] and side in ("L", "R") and h > 0:
-            pass
         c.hang(P, side, swing=16 * sw * (1 + 0.3 * h) + 4, out=10 + 10 * h,
                bend=18 + 10 * max(sw, 0) + 20 * h)
     if c.style["bat"]:
@@ -492,7 +497,6 @@ def clip_stunned(c, t):
     c.plant(P, "L", c.fx * 1.45, c.fy - 0.03 * s, yaw=14)
     c.plant(P, "R", -c.fx * 1.45, c.fy + 0.04 * s, yaw=-18)
     # hand to head (head space: side of forehead)
-    tgt = Vector(c.ho) + c.v(-0.05, -0.06, 0.10)
     hz = c.hh
     tgt = Vector(c.ho) + Vector((-0.10 * hz / 0.28, -0.12 * hz / 0.28, 0.06 * hz / 0.28))
     tgt = tgt + Vector((-0.05, 0.0, -0.03)) * s
@@ -510,7 +514,7 @@ def clip_defeat(c, t):
     s = c.s
     P = c.new()
     L = c.L
-    lie_z = (c.sk.p["pelvis_d"] * 0.95 + 0.035) * s
+    lie_z = (c.sk.p["pelvis_d"] * 0.95 + 0.065) * s
     # hips offset relative to rest pelvis height
     dz_end = lie_z - L["pelvis"]
     y_end = 0.55 * s
@@ -564,8 +568,6 @@ def clip_defeat(c, t):
             sw = lerp(70, 160, k2)
             c.hang(P, side, swing=sw, out=lerp(60, 70, k2), bend=lerp(70, 25, k2),
                    pole=(sx * 0.2, 1.0, 0.6))
-    if c.style["bat"]:
-        pass
     return P
 
 
@@ -586,8 +588,8 @@ def clip_celebrate(c, t):
         sx = 1 if side == "L" else -1
         if air > 0:
             a = c.ankle_of(side, c.fx * 1.25 * sx, c.fy, yaw=sx * 8)
-            a = a + Vector((0, 0.02 * s, air * s * 0.75))
-            c.free_foot(P, side, a, pitch=-10 * min(1, air / 0.05), yaw=sx * 8)
+            a = a + Vector((0, 0.02 * s, air * s * 0.9))
+            c.free_foot(P, side, a, pitch=12 * min(1, air / 0.12), yaw=sx * 8)
         else:
             c.plant(P, side, c.fx * 1.25 * sx, c.fy, yaw=sx * 8)
     # right fist pump overhead, left arm out
@@ -815,8 +817,8 @@ def clip_pitch(c, t):
         a1 = c.ankle_of("R", -c.fx * 2.0, c.fy - 0.42 * s, yaw=-14)
         mid = a0.lerp(a1, 0.5) + Vector((0.05 * s, 0.0, 0.30 * s))
         ank = KV(k, [(0, a0), (0.45, mid), (1.0, a1)])
-        c.free_foot(P, "R", ank, pitch=K(k, [(0, 30), (0.45, -30), (1, 0)]), yaw=lerp(-60, -14, k),
-                    knee_out=0.3)
+        c.free_foot(P, "R", ank, pitch=K(k, [(0, 40), (0.45, 15), (1, 0)]), yaw=lerp(-60, -14, k),
+                    knee_out=0.3, toe_bend=-40 * (1 - sstep(0.0, 0.3, k)))
     else:
         k = sstep(T["field"], T["end"], t)
         if k < 0.999:
@@ -969,7 +971,8 @@ def clip_leap(c, t):
             a1 = c.ankle_of(side, c.fx * 1.4 * sx, c.fy, yaw=sx * 10, heel=10)
             up = Vector((c.fx * 1.6 * sx, -0.02 * s, c.L["hip"] - 0.30 * s))
             ank = a0.lerp(up, sstep(0.22, 0.42, t)).lerp(a1, sstep(0.55, 0.78, t))
-            c.free_foot(P, side, ank, pitch=-25 * tuck + 10, yaw=sx * 10,
+            c.free_foot(P, side, ank, pitch=30 * tuck + 35 * (1 - sstep(0.22, 0.32, t)) * (t < 0.4),
+                        yaw=sx * 10,
                         pole=Vector((sx * 0.25, -1, 0.3 * tuck)))
     arm_up = K(t, [(0, 0), (0.15, -0.6), (0.3, 1.0), (0.5, 0.7), (0.8, -0.2)])
     for side in ("L", "R"):

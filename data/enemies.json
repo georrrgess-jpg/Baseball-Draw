@@ -159,8 +159,8 @@
   {
    "id": "phantom_captain",
    "name": "Phantom Captain",
-   "hp": 3400,
-   "speed": 2.3,
+   "hp": 3000,
+   "speed": 1.8,
    "armor": 0.2,
    "evasion": 0.0,
    "runs": 3,

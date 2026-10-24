@@ -81,6 +81,7 @@ func _build() -> void:
 
 	var run: RunState = battle.run
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 36)
 	var title := UITheme.title("THE DUGOUT", 80)
 	head.add_child(title)
 	var sub := VBoxContainer.new()

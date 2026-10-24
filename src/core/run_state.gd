@@ -69,6 +69,9 @@ static func create(cfg: Dictionary) -> RunState:
 	if r.mode_id == "practice":
 		r.run_limit = 999
 		r.waves_per_inning = 0
+	# Test/debug entry points (used by the screenshot and simulation tools).
+	r.inning = maxi(1, int(cfg.get("start_inning", 1)))
+	r.wave = clampi(int(cfg.get("start_wave", 0)), 0, maxi(r.waves_per_inning - 1, 0))
 	return r
 
 
