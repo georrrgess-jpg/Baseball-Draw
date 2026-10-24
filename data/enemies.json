@@ -1,0 +1,29 @@
+{
+  "_comment": "Enemy runners. speed in m/s, armor = fraction of damage blocked, evasion = dodge factor vs inaccurate throws, runs = runs scored on reaching home, cost = wave budget points, from_inning = earliest inning in Standard Siege.",
+  "enemies": [
+    {"id": "runner", "name": "Runner", "hp": 70, "speed": 3.0, "armor": 0.0, "evasion": 0.2, "runs": 1, "coins": 3, "cost": 1.0, "from_inning": 1,
+     "behavior": "basic", "threat": "low", "text": "A standard rival runner. Weak alone, dangerous in numbers."},
+    {"id": "sprinter", "name": "Sprinter", "hp": 45, "speed": 5.0, "armor": 0.0, "evasion": 0.55, "runs": 1, "coins": 4, "cost": 1.3, "from_inning": 2,
+     "behavior": "sprinter", "threat": "medium", "text": "Blazing fast and hard to hit. Bursts forward every few seconds."},
+    {"id": "armored", "name": "Armored Runner", "hp": 150, "speed": 2.3, "armor": 0.5, "evasion": 0.0, "runs": 1, "coins": 6, "cost": 2.2, "from_inning": 2,
+     "behavior": "armored", "slow_resist": 0.5, "threat": "medium", "text": "Steel plating blocks half of all damage and shrugs off slows. Jax's Cannon Arm cuts through."},
+    {"id": "swarmer", "name": "Swarmer", "hp": 22, "speed": 4.0, "armor": 0.0, "evasion": 0.1, "runs": 1, "coins": 1, "cost": 0.35, "from_inning": 3,
+     "behavior": "basic", "group": 6, "threat": "medium", "text": "Tiny pests that come in packs. Splash damage is your friend."},
+    {"id": "jumper", "name": "Jumper", "hp": 80, "speed": 3.2, "armor": 0.0, "evasion": 0.25, "runs": 1, "coins": 5, "cost": 1.8, "from_inning": 4,
+     "behavior": "jumper", "threat": "medium", "text": "Leaps over walls, traps and frozen turf. Immune to ground effects while airborne."},
+    {"id": "trickster", "name": "Trickster", "hp": 75, "speed": 3.4, "armor": 0.0, "evasion": 0.9, "runs": 1, "coins": 7, "cost": 2.2, "from_inning": 5,
+     "behavior": "trickster", "threat": "high", "text": "Dodges sloppy throws, blinks forward and leaves decoys. Field Vision reveals it."},
+    {"id": "captain", "name": "Captain Runner", "hp": 260, "speed": 2.8, "armor": 0.2, "evasion": 0.0, "runs": 2, "coins": 12, "cost": 4.5, "from_inning": 5,
+     "behavior": "captain", "aura_radius": 4.5, "threat": "high", "text": "Rallies nearby runners: +20% speed and 20% damage reduction. Scores 2 runs."},
+    {"id": "slugger", "name": "Siege Slugger", "hp": 520, "speed": 1.7, "armor": 0.3, "evasion": 0.0, "runs": 2, "coins": 18, "cost": 7.0, "from_inning": 6,
+     "behavior": "slugger", "threat": "high", "text": "A walking wrecking ball. Smashes walls and stuns defenders it passes. Scores 2 runs."},
+    {"id": "decoy", "name": "Decoy", "hp": 1, "speed": 3.4, "armor": 0.0, "evasion": 0.0, "runs": 0, "coins": 0, "cost": 0, "from_inning": 99,
+     "behavior": "decoy", "model": "trickster", "threat": "low", "text": "An illusion. Worth nothing, but it draws throws."},
+    {"id": "iron_slugger", "name": "Iron Slugger", "hp": 3000, "speed": 1.3, "armor": 0.75, "evasion": 0.0, "runs": 3, "coins": 80, "cost": 0, "from_inning": 3,
+     "behavior": "boss_iron", "boss": true, "threat": "boss", "text": "BOSS. Nearly impervious iron plating. After each ground slam its armor cracks open for a few seconds."},
+    {"id": "phantom_captain", "name": "Phantom Captain", "hp": 3400, "speed": 2.3, "armor": 0.2, "evasion": 0.0, "runs": 3, "coins": 100, "cost": 0, "from_inning": 6,
+     "behavior": "boss_phantom", "boss": true, "aura_radius": 5.0, "threat": "boss", "text": "BOSS. Phases out of reality and conjures decoys. Rallies runners like a captain."},
+    {"id": "grand_slammer", "name": "Grand Slammer", "hp": 7200, "speed": 1.15, "armor": 0.4, "evasion": 0.0, "runs": 3, "coins": 200, "cost": 0, "from_inning": 9,
+     "behavior": "boss_slammer", "boss": true, "threat": "boss", "text": "FINAL BOSS. Home-run swings stun and scatter defenders. Calls in reinforcements as it weakens."}
+  ]
+}

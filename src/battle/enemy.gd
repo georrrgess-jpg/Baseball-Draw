@@ -1,0 +1,685 @@
+class_name Enemy
+extends Node3D
+## A hostile runner following a route to home plate. Handles movement, status
+## effects (slow, root, stun, freeze, confuse, knockback, burn, marks, magnet),
+## class behaviours (sprint bursts, leaps, blinks, auras, bat swings) and bosses.
+
+var battle: Battle
+var id := ""
+var data: Dictionary = {}
+var route: Route
+var d := 0.0
+var lateral := 0.0
+var max_hp := 100.0
+var hp := 100.0
+var armor := 0.0
+var base_speed := 3.0
+var evasion := 0.0
+var runs := 1
+var coins := 0
+var is_boss := false
+var affix := ""
+var alive := true
+var model: CharacterModel
+var height := 1.8
+var spawn_order := 0
+
+# Status
+var slows: Dictionary = {}          # source -> [amount, time]
+var zone_slow := 0.0                # recomputed every frame by zones / auras
+var aura_speed := 1.0               # from captains
+var aura_dr := 0.0
+var home_guard := false             # inside Rico's aura
+var root_t := 0.0
+var stun_t := 0.0
+var freeze_t := 0.0
+var confuse_t := 0.0
+var mark_t := 0.0
+var mark_amt := 0.0
+var burn_dps := 0.0
+var burn_t := 0.0
+var burn_source: Node = null
+var chill_t := 0.0
+var chill_crit := 0.0
+var armor_break_t := 0.0
+var untargetable_t := 0.0
+var magnet_t := 0.0
+var magnet_center := Vector3.ZERO
+var knock_from := 0.0
+var knock_t := 0.0
+var airborne_t := 0.0
+var airborne_len := 0.0
+var blocked := false
+var vulnerable_t := 0.0
+
+# Behaviour timers
+var ability_t := 0.0
+var ability_cd := 1.0
+var dash_t := 0.0
+var leap_from := 0.0
+var leap_to := 0.0
+var decoy_spawned := false
+var telegraph_node: Node3D = null
+var telegraph_t := 0.0
+var telegraph_kind := ""
+var telegraph_pos := Vector3.ZERO
+var summon_thresholds := [0.66, 0.33]
+var _hp_bar: MeshInstance3D
+var _shadow: MeshInstance3D
+var _marker: MeshInstance3D
+var _anim_state := ""
+var _death_t := 0.0
+var _last_hit_info: Dictionary = {}
+var _burn_tick := 0.0
+var _rim_dirty := true
+
+
+func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, opts: Dictionary) -> void:
+	battle = p_battle
+	id = enemy_id
+	data = DB.enemy(enemy_id)
+	route = p_route
+	d = start_d
+	lateral = float(opts.get("lateral", 0.0))
+	affix = str(opts.get("affix", ""))
+	is_boss = bool(data.get("boss", false))
+	var hp_mult: float = opts.get("hp_mult", 1.0)
+	var speed_mult: float = opts.get("speed_mult", 1.0)
+	max_hp = float(data.hp) * hp_mult
+	armor = clampf(float(data.armor) + float(opts.get("armor_add", 0.0)), 0.0, 0.9)
+	base_speed = float(data.speed) * speed_mult
+	evasion = float(data.evasion)
+	runs = int(data.runs)
+	coins = int(data.coins)
+	for a in DB.elite_affixes:
+		if a.id == affix:
+			max_hp *= 1.0 + float(a.get("hp", 0.0))
+			base_speed *= 1.0 + float(a.get("speed", 0.0))
+			armor = clampf(armor + float(a.get("armor", 0.0)), 0.0, 0.9)
+			evasion = clampf(evasion + float(a.get("evasion", 0.0)), 0.0, 1.0)
+			coins = int(coins * 1.5) + 2
+	hp = max_hp
+	ability_cd = float(DB.difficulty(battle.run.difficulty_id).get("ability_cd", 1.0))
+	ability_t = randf_range(1.5, 3.0) * ability_cd
+
+	model = CharacterModel.new()
+	add_child(model)
+	var model_id: String = data.get("model", enemy_id)
+	model.setup(model_id, {"accent": Color("#FF7A1A"), "body": Color("#2B2F36"), "scale": Battle.UNIT_SCALE * (_fallback_scale() if not CharacterModel.has_model(model_id) else 1.0)})
+	height = model.height
+	if enemy_id == "decoy":
+		model.set_ghost(0.55)
+	if affix != "":
+		model.set_rim(Color(1.0, 0.2, 0.1, 0.6))
+
+	_shadow = _make_blob_shadow(0.45 * height / 1.8 * 1.1)
+	add_child(_shadow)
+	# Red ground ring so runners read clearly against the field.
+	if enemy_id != "decoy":
+		_marker = FieldBuilder.make_ring(0.62 * height / 1.8 * 1.15, Color(1.0, 0.22, 0.15, 0.85) if not is_boss else Color(1.0, 0.5, 0.1, 0.95), 0.16, 0.18)
+		add_child(_marker)
+	_hp_bar = MeshInstance3D.new()
+	var q := QuadMesh.new()
+	var bar_w := 1.2 if not is_boss else 2.8
+	q.size = Vector2(bar_w, bar_w / 7.0)
+	_hp_bar.mesh = q
+	var bm := ShaderMaterial.new()
+	bm.shader = load("res://assets/shaders/billboard_bar.gdshader")
+	_hp_bar.material_override = bm
+	_hp_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_hp_bar.position = Vector3(0, height + 0.35, 0)
+	_hp_bar.set_instance_shader_parameter("bar_color", Color(1.0, 0.25, 0.2) if not is_boss else Color(1.0, 0.55, 0.1))
+	_hp_bar.visible = is_boss or id in ["captain", "slugger"]
+	add_child(_hp_bar)
+	_update_transform(0.0)
+	_set_anim(_move_anim())
+
+
+func _fallback_scale() -> float:
+	return {"swarmer": 0.65, "slugger": 1.35, "iron_slugger": 2.0, "phantom_captain": 1.8, "grand_slammer": 2.3, "captain": 1.1, "armored": 1.1}.get(id, 1.0)
+
+
+static func _make_blob_shadow(radius: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(2, 2)
+	mi.mesh = pm
+	var m := StandardMaterial3D.new()
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_texture = _blob_texture()
+	m.albedo_color = Color(0, 0, 0, 0.55)
+	m.disable_receive_shadows = true
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.scale = Vector3(radius, 1, radius)
+	mi.position.y = 0.03
+	return mi
+
+
+static var _blob_tex: Texture2D
+static func _blob_texture() -> Texture2D:
+	if _blob_tex == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(0, 0, 0, 1))
+		g.set_color(1, Color(0, 0, 0, 0))
+		var gt := GradientTexture2D.new()
+		gt.gradient = g
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(1.0, 0.5)
+		gt.width = 64
+		gt.height = 64
+		_blob_tex = gt
+	return _blob_tex
+
+
+# ---------------------------------------------------------------- queries
+
+func targetable() -> bool:
+	return alive and untargetable_t <= 0.0
+
+
+func is_airborne() -> bool:
+	return airborne_t > 0.0
+
+
+func remaining() -> float:
+	return route.length - d
+
+
+func current_speed() -> float:
+	if freeze_t > 0.0 or stun_t > 0.0 or (root_t > 0.0 and not is_airborne()) or magnet_t > 0.0 or blocked or telegraph_t > 0.0:
+		return 0.0
+	var slow := zone_slow
+	for k in slows.keys():
+		slow = maxf(slow, float(slows[k][0]))
+	slow *= 1.0 - float(data.get("slow_resist", 0.0))
+	if is_boss:
+		slow *= 0.6
+	var s := base_speed * (1.0 - clampf(slow, 0.0, 0.85)) * aura_speed
+	if dash_t > 0.0:
+		s *= 1.7
+	return s
+
+
+func center() -> Vector3:
+	return global_position + Vector3(0, height * 0.55, 0)
+
+
+func threat_value() -> float:
+	return d / maxf(route.length, 1.0)
+
+
+# ---------------------------------------------------------------- statuses
+
+func apply_slow(source: String, amount: float, time: float) -> void:
+	if is_airborne():
+		return
+	var cur: Array = slows.get(source, [0.0, 0.0])
+	slows[source] = [maxf(cur[0], amount), maxf(cur[1], time)]
+
+
+func apply_stun(time: float) -> void:
+	if is_boss:
+		time *= 0.35
+	stun_t = maxf(stun_t, time)
+
+
+func apply_root(time: float) -> void:
+	if is_airborne():
+		return
+	if is_boss:
+		time *= 0.4
+	root_t = maxf(root_t, time)
+
+
+func apply_freeze(time: float) -> void:
+	freeze_t = maxf(freeze_t, time)
+	_rim_dirty = true
+
+
+func apply_confuse(time: float) -> void:
+	if is_boss:
+		return
+	confuse_t = maxf(confuse_t, time)
+
+
+func apply_mark(time: float, amount: float) -> void:
+	mark_t = maxf(mark_t, time)
+	mark_amt = maxf(mark_amt, amount)
+	_rim_dirty = true
+
+
+func apply_burn(dps: float, time: float, source: Node) -> void:
+	burn_dps = maxf(burn_dps, dps)
+	burn_t = maxf(burn_t, time)
+	burn_source = source
+	_rim_dirty = true
+
+
+func apply_chill(time: float, crit_bonus: float) -> void:
+	chill_t = maxf(chill_t, time)
+	chill_crit = maxf(chill_crit, crit_bonus)
+	_rim_dirty = true
+
+
+func apply_armor_break(time: float) -> void:
+	armor_break_t = maxf(armor_break_t, time)
+
+
+func apply_magnet(center_pos: Vector3, time: float) -> void:
+	if is_boss:
+		time *= 0.3
+	magnet_center = center_pos
+	magnet_t = maxf(magnet_t, time)
+
+
+func knockback(amount: float) -> void:
+	if is_boss:
+		amount *= 0.25
+	if amount <= 0.0:
+		return
+	knock_from = d
+	d = maxf(0.0, d - amount)
+	knock_t = 0.25
+
+
+## Crit chance bonus granted to throws against this runner (Frost Field).
+func crit_bonus() -> float:
+	return chill_crit if chill_t > 0.0 else 0.0
+
+
+# ---------------------------------------------------------------- damage
+
+## Applies damage after marks, armor and auras. Returns the damage dealt.
+func take_damage(amount: float, info: Dictionary = {}) -> float:
+	if not alive:
+		return 0.0
+	if untargetable_t > 0.0 and not info.get("true", false):
+		return 0.0
+	var mult := 1.0
+	var kind: String = info.get("kind", "throw")
+	if mark_t > 0.0:
+		mult += mark_amt
+		if kind == "fire":
+			mult += mark_amt
+			if battle.run:
+				battle.on_curve_heat()
+	if home_guard:
+		mult += 0.10
+	if vulnerable_t > 0.0:
+		mult += 0.25
+	var arm := armor
+	if armor_break_t > 0.0 or vulnerable_t > 0.0:
+		arm = 0.0
+	arm *= 1.0 - float(info.get("pierce", 0.0))
+	var dmg := amount * mult * (1.0 - arm) * (1.0 - aura_dr)
+	hp -= dmg
+	_last_hit_info = info
+	_hp_bar.visible = true
+	_hp_bar.set_instance_shader_parameter("fill", clampf(hp / max_hp, 0.0, 1.0))
+	if dmg >= 1.0:
+		model.flash(0.8 if info.get("crit", false) else 0.5)
+	if hp <= 0.0:
+		die(info)
+	elif is_boss:
+		_check_summons()
+	return dmg
+
+
+func die(info: Dictionary = {}) -> void:
+	if not alive:
+		return
+	alive = false
+	hp = 0.0
+	_clear_telegraph()
+	_hp_bar.visible = false
+	if _marker:
+		_marker.visible = false
+	model.set_rim(Color(0, 0, 0, 0))
+	model.freeze_animation(false)
+	model.play_action("defeat", 1.0)
+	_death_t = 0.0
+	battle.on_enemy_out(self, info)
+
+
+# ---------------------------------------------------------------- per-frame
+
+func tick(delta: float) -> void:
+	if not alive:
+		_death_t += delta
+		if _death_t > 1.3:
+			position.y -= delta * 1.2
+			_shadow.visible = false
+		if _death_t > 2.3:
+			queue_free()
+		return
+	_tick_status(delta)
+	if not alive:
+		return
+	_tick_behavior(delta)
+	_move(delta)
+	_update_visuals()
+
+
+func _tick_status(delta: float) -> void:
+	for k in slows.keys():
+		slows[k][1] -= delta
+		if slows[k][1] <= 0.0:
+			slows.erase(k)
+	stun_t = maxf(0.0, stun_t - delta)
+	root_t = maxf(0.0, root_t - delta)
+	var was_frozen := freeze_t > 0.0
+	freeze_t = maxf(0.0, freeze_t - delta)
+	if was_frozen and freeze_t <= 0.0:
+		_rim_dirty = true
+	confuse_t = maxf(0.0, confuse_t - delta)
+	if mark_t > 0.0:
+		mark_t -= delta
+		if mark_t <= 0.0:
+			mark_amt = 0.0
+			_rim_dirty = true
+	if chill_t > 0.0:
+		chill_t -= delta
+		if chill_t <= 0.0:
+			_rim_dirty = true
+	armor_break_t = maxf(0.0, armor_break_t - delta)
+	untargetable_t = maxf(0.0, untargetable_t - delta)
+	magnet_t = maxf(0.0, magnet_t - delta)
+	dash_t = maxf(0.0, dash_t - delta)
+	if vulnerable_t > 0.0:
+		vulnerable_t -= delta
+		if vulnerable_t <= 0.0:
+			_rim_dirty = true
+	if burn_t > 0.0:
+		burn_t -= delta
+		_burn_tick += delta
+		if _burn_tick >= 0.5:
+			_burn_tick = 0.0
+			var dealt := take_damage(burn_dps * 0.5, {"kind": "fire", "source": burn_source, "dot": true})
+			if dealt > 0.0:
+				battle.vfx.damage_number(center(), dealt, false, Color(1.0, 0.55, 0.15))
+				if burn_source and is_instance_valid(burn_source) and battle.run:
+					battle.run.add_damage(burn_source.id, dealt)
+		if burn_t <= 0.0:
+			burn_dps = 0.0
+			_rim_dirty = true
+
+
+func _move(delta: float) -> void:
+	var speed := current_speed()
+	if magnet_t > 0.0:
+		# Dragged toward the magnet centre along the route.
+		var proj: Dictionary = route.project(magnet_center)
+		d = move_toward(d, float(proj.d), 6.0 * delta)
+		lateral = move_toward(lateral, 0.0, 2.0 * delta)
+	elif airborne_t > 0.0:
+		airborne_t -= delta
+		var k := 1.0 - airborne_t / maxf(airborne_len, 0.01)
+		d = lerpf(leap_from, leap_to, k)
+		if airborne_t <= 0.0:
+			battle.vfx.dust(global_position, 1.0)
+	elif knock_t > 0.0:
+		knock_t -= delta
+	elif confuse_t > 0.0:
+		d = maxf(0.0, d - speed * 0.8 * delta)
+	else:
+		d += speed * delta
+	# Walls block runners that are on the ground.
+	blocked = false
+	if not is_airborne() and freeze_t <= 0.0:
+		var ahead := route.position_at(d + 0.7)
+		for w in battle.walls:
+			if w.active and Field.v2(ahead).distance_to(Field.v2(w.position)) < w.radius:
+				blocked = true
+				if id in ["slugger", "iron_slugger", "grand_slammer"]:
+					w.smash()
+					blocked = false
+				else:
+					w.damage(30.0 * delta * (2.0 if id == "armored" else 1.0))
+				break
+	if d >= route.length:
+		battle.on_enemy_reached_home(self)
+		return
+	_update_transform(delta)
+
+
+func _update_transform(delta: float) -> void:
+	var pos := route.position_at(d)
+	var dir := route.direction_at(d)
+	var side := Vector3(-dir.z, 0, dir.x)
+	# Runners converge onto the base path as they approach home.
+	var lat := lateral * clampf(remaining() / 6.0, 0.0, 1.0)
+	pos += side * lat
+	if airborne_t > 0.0:
+		var k := 1.0 - airborne_t / maxf(airborne_len, 0.01)
+		pos.y = sin(k * PI) * 2.0
+	global_position = pos
+	var face := -dir if confuse_t > 0.0 else dir
+	var target_yaw := atan2(face.x, face.z)
+	if delta <= 0.0:
+		rotation.y = target_yaw
+	else:
+		rotation.y = lerp_angle(rotation.y, target_yaw, clampf(delta * 10.0, 0.0, 1.0))
+	if _shadow:
+		_shadow.global_position = Vector3(pos.x, 0.03, pos.z)
+	if _marker:
+		_marker.global_position = Vector3(pos.x, 0.05, pos.z)
+
+
+func _move_anim() -> String:
+	if stun_t > 0.0:
+		return "stunned"
+	var spd := current_speed()
+	if spd <= 0.05:
+		return "idle"
+	if base_speed < 1.9 and model.has_anim("walk"):
+		return "walk"
+	if id == "sprinter" and model.has_anim("sprint"):
+		return "sprint"
+	return "run"
+
+
+func _update_visuals() -> void:
+	var frozen := freeze_t > 0.0
+	model.freeze_animation(frozen)
+	if not frozen and model.action == "":
+		var a := _move_anim()
+		if a != _anim_state:
+			_anim_state = a
+			model.play_base(a, 0.15)
+		var spd := current_speed()
+		var stride := 3.4 * height / 1.8
+		if a == "walk":
+			stride = 1.6 * height / 1.8
+		model.set_base_speed(clampf(spd / maxf(stride, 0.1) * (0.7 if a != "walk" else 1.0), 0.35, 2.4) if a in ["run", "sprint", "walk"] else 1.0)
+	if _rim_dirty:
+		_rim_dirty = false
+		var rim := Color(0, 0, 0, 0)
+		if affix != "":
+			rim = Color(1.0, 0.2, 0.1, 0.5)
+		if mark_t > 0.0:
+			rim = Color(0.65, 0.4, 1.0, 0.9)
+		if chill_t > 0.0:
+			rim = Color(0.45, 0.85, 1.0, 0.9)
+		if burn_t > 0.0:
+			rim = Color(1.0, 0.45, 0.1, 0.95)
+		if vulnerable_t > 0.0:
+			rim = Color(1.0, 0.8, 0.2, 1.0)
+		if frozen:
+			rim = Color(0.6, 0.9, 1.0, 1.0)
+		if id != "decoy" and untargetable_t <= 0.0:
+			model.set_rim(rim)
+	if burn_t > 0.0 and randf() < 0.25:
+		battle.vfx.ember(center())
+
+
+# ---------------------------------------------------------------- behaviours
+
+func _tick_behavior(delta: float) -> void:
+	if freeze_t > 0.0 or stun_t > 0.0:
+		return
+	ability_t -= delta
+	if telegraph_t > 0.0:
+		telegraph_t -= delta
+		if telegraph_t <= 0.0:
+			_resolve_telegraph()
+		return
+	match data.get("behavior", "basic"):
+		"sprinter":
+			if ability_t <= 0.0:
+				ability_t = randf_range(3.5, 4.5) * ability_cd
+				dash_t = 0.9
+				battle.vfx.speed_lines(self)
+		"jumper":
+			if ability_t <= 0.0 and remaining() > 3.0 and magnet_t <= 0.0 and root_t <= 0.0 and confuse_t <= 0.0:
+				ability_t = randf_range(3.0, 4.0) * ability_cd
+				airborne_len = 0.8
+				airborne_t = airborne_len
+				leap_from = d
+				leap_to = minf(d + 5.5, route.length - 0.5)
+				model.play_action("leap", 1.0)
+				slows.clear()
+				blocked = false
+		"trickster":
+			if ability_t <= 0.0 and remaining() > 5.0 and confuse_t <= 0.0:
+				ability_t = randf_range(4.5, 5.5) * ability_cd
+				battle.vfx.puff(center(), Color(0.6, 0.35, 1.0))
+				d = minf(d + 4.0, route.length - 1.0)
+				untargetable_t = 0.3
+				_update_transform(0.0)
+				battle.vfx.puff(center(), Color(0.6, 0.35, 1.0))
+				Audio.play("shadow_cast", -8.0)
+			if not decoy_spawned and hp < max_hp * 0.5:
+				decoy_spawned = true
+				battle.spawn_enemy("decoy", route, d, {"lateral": lateral + 0.8})
+		"slugger":
+			if ability_t <= 0.0:
+				ability_t = 0.5
+				var victim = _nearest_defender(3.6)
+				if victim:
+					ability_t = 3.0 * ability_cd
+					_start_telegraph("swing", global_position, 3.6, 0.55)
+		"boss_iron":
+			if ability_t <= 0.0:
+				ability_t = 8.0 * ability_cd
+				_start_telegraph("slam", global_position, 5.0, 1.3)
+		"boss_phantom":
+			if ability_t <= 0.0:
+				ability_t = 7.0 * ability_cd
+				_start_telegraph("phase", global_position, 3.0, 0.6)
+		"boss_slammer":
+			if ability_t <= 0.0:
+				ability_t = 1.0
+				var victim = _nearest_defender(10.0)
+				if victim:
+					ability_t = 9.0 * ability_cd
+					_start_telegraph("homerun", victim.global_position, 3.6, 1.5)
+	if untargetable_t > 0.0 and id == "phantom_captain":
+		model.set_ghost(0.3)
+	elif id == "phantom_captain" and _anim_state != "ghost_reset":
+		pass
+
+
+func _nearest_defender(radius: float) -> Node3D:
+	var best: Node3D = null
+	var best_d := radius
+	for df in battle.defenders:
+		var dist := Field.v2(df.global_position).distance_to(Field.v2(global_position))
+		if dist < best_d:
+			best_d = dist
+			best = df
+	return best
+
+
+func _start_telegraph(kind: String, pos: Vector3, radius: float, time: float) -> void:
+	telegraph_kind = kind
+	telegraph_pos = pos
+	telegraph_t = time
+	var col := Color(1.0, 0.15, 0.1, 0.9) if kind != "phase" else Color(0.7, 0.4, 1.0, 0.9)
+	telegraph_node = battle.vfx.telegraph(pos, radius, col, time)
+	match kind:
+		"swing", "homerun":
+			model.play_action("swing", model.anim_length("swing") / maxf(time + 0.4, 0.1))
+			if kind == "homerun":
+				Audio.play("boss_warning", -4.0)
+				battle.notify("HOME RUN SWING!", Color(1.0, 0.3, 0.2))
+				var to := pos - global_position
+				rotation.y = atan2(to.x, to.z)
+		"slam":
+			model.play_action("slam", model.anim_length("slam") / maxf(time + 0.5, 0.1))
+			Audio.play("boss_warning", -4.0)
+			battle.notify("GROUND SLAM!", Color(1.0, 0.45, 0.1))
+		"phase":
+			Audio.play("shadow_cast", -2.0)
+
+
+func _clear_telegraph() -> void:
+	telegraph_t = 0.0
+	if telegraph_node and is_instance_valid(telegraph_node):
+		telegraph_node.queue_free()
+	telegraph_node = null
+
+
+func _resolve_telegraph() -> void:
+	var kind := telegraph_kind
+	telegraph_kind = ""
+	if telegraph_node and is_instance_valid(telegraph_node):
+		telegraph_node.queue_free()
+	telegraph_node = null
+	match kind:
+		"swing":
+			Audio.play("swing_whoosh")
+			_stun_defenders(telegraph_pos, 3.6, 2.0)
+			battle.vfx.shockwave(telegraph_pos, 3.6, Color(1.0, 0.4, 0.2))
+		"slam":
+			Audio.play("boss_slam")
+			battle.shake(0.6)
+			_stun_defenders(telegraph_pos, 5.0, 2.5)
+			battle.vfx.shockwave(telegraph_pos, 5.0, Color(1.0, 0.5, 0.1))
+			battle.vfx.dust(telegraph_pos, 3.0)
+			vulnerable_t = 4.0
+			_rim_dirty = true
+			battle.notify("ARMOR CRACKED — ATTACK NOW!", Color(1.0, 0.8, 0.2))
+		"phase":
+			untargetable_t = 1.6
+			model.set_ghost(0.3)
+			for i in 3:
+				battle.spawn_enemy("decoy", route, minf(d + randf_range(-2.0, 2.0), route.length - 2.0),
+					{"lateral": randf_range(-1.6, 1.6), "hp_mult": 1.0})
+			get_tree().create_timer(1.6, false).timeout.connect(func() -> void:
+				if is_instance_valid(self) and alive:
+					model.set_ghost(1.0)
+					_rim_dirty = true)
+		"homerun":
+			Audio.play("bat_crack")
+			Audio.play("boss_slam", -3.0)
+			battle.shake(0.8)
+			_stun_defenders(telegraph_pos, 3.6, 3.0)
+			battle.vfx.shockwave(telegraph_pos, 3.6, Color(1.0, 0.75, 0.2))
+			battle.vfx.burst("explosion", telegraph_pos + Vector3(0, 0.5, 0), Color(1.0, 0.7, 0.2))
+
+
+func _stun_defenders(pos: Vector3, radius: float, time: float) -> void:
+	for df in battle.defenders:
+		if Field.v2(df.global_position).distance_to(Field.v2(pos)) <= radius:
+			df.stun(time)
+
+
+func _check_summons() -> void:
+	if id != "grand_slammer" or summon_thresholds.is_empty():
+		return
+	if hp / max_hp <= float(summon_thresholds[0]):
+		summon_thresholds.pop_front()
+		battle.notify("THE GRAND SLAMMER CALLS FOR BACKUP!", Color(1.0, 0.6, 0.2))
+		Audio.play("boss_roar")
+		for i in 6:
+			battle.spawn_enemy("swarmer", route, maxf(0.0, d - 1.5 - i * 0.6), {"lateral": randf_range(-1.5, 1.5)})
+		for i in 2:
+			battle.spawn_enemy("runner", route, maxf(0.0, d - 2.0 - i), {"lateral": randf_range(-1.2, 1.2)})
+
+
+func _set_anim(a: String) -> void:
+	_anim_state = a
+	model.play_base(a, 0.0)

@@ -1,0 +1,396 @@
+class_name CardEffects
+extends RefCounted
+## Executes ability cards. Linked cards are cast by their defender (special animation,
+## power/cooldown from that defender's stats); without the defender on the field they
+## fire from home plate at 75% power.
+
+var battle: Battle
+
+
+func _init(p_battle: Battle) -> void:
+	battle = p_battle
+
+
+func p(card_id: String, key: String, level: int) -> float:
+	return DB.card_param(card_id, key, level)
+
+
+func control_mult() -> float:
+	return 1.0 + battle.run.modifier_total("control_duration")
+
+
+## Returns the casting defender for a linked card (or null) and the power multiplier.
+func caster_info(card_id: String) -> Dictionary:
+	var linked: String = DB.card(card_id).get("linked", "")
+	if linked != "":
+		for df: Defender in battle.defenders:
+			if df.id == linked and not df.is_stunned():
+				return {"caster": df, "power": df.s_special_power, "cd": df.s_special_cd, "linked": true}
+		return {"caster": null, "power": 0.75, "cd": 1.0, "linked": true}
+	return {"caster": null, "power": 1.0, "cd": 1.0, "linked": false}
+
+
+func nearest_thrower(pos: Vector3) -> Defender:
+	var best: Defender = null
+	var best_d := INF
+	for df: Defender in battle.defenders:
+		if df.is_stunned():
+			continue
+		var dd := Field.v2(df.global_position).distance_to(Field.v2(pos))
+		if dd < best_d:
+			best_d = dd
+			best = df
+	return best
+
+
+func _origin(df: Defender) -> Vector3:
+	if df:
+		return df.model.hand_position()
+	return Field.HOME + Vector3(0, 1.5, 0)
+
+
+## Runs the card. target: {point: Vector3, enemy: Enemy, defender: Defender}.
+func execute(card_id: String, level: int, target: Dictionary) -> void:
+	var info := caster_info(card_id)
+	var caster: Defender = info.caster
+	var power: float = info.power
+	var point: Vector3 = target.get("point", Field.HOME)
+	Audio.play("card_play", -4.0)
+	match card_id:
+		"heat_wave":
+			var origin := caster.global_position if caster else Field.HOME
+			var run_fire := func() -> void:
+				var dir := (point - origin)
+				dir.y = 0
+				dir = dir.normalized() if dir.length() > 0.1 else Vector3(0, 0, -1)
+				var length := p(card_id, "length", level)
+				var width := p(card_id, "width", level)
+				var end := origin + dir * length
+				battle.vfx.fire_line(origin, end, width, 1.4)
+				Audio.play("fire_cast")
+				battle.shake(0.2)
+				for e: Enemy in battle.enemies.duplicate():
+					if not e.targetable():
+						continue
+					var rel := e.global_position - origin
+					var s := rel.dot(dir)
+					var lat := absf(rel.dot(Vector3(-dir.z, 0, dir.x)))
+					if s >= -0.5 and s <= length and lat <= width * 0.5 + 0.4:
+						battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "fire", "card": card_id})
+						if e.alive:
+							e.apply_burn(p(card_id, "burn_dps", level) * power, p(card_id, "burn_time", level), caster)
+			_cast(caster, run_fire, point)
+
+		"power_throw":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return
+			var df := nearest_thrower(e.global_position)
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					return
+				battle.projectiles.launch(_origin(df), e, 42.0, {"source": df, "damage": p(card_id, "damage", level),
+					"knockback": p(card_id, "knockback", level), "accuracy": 200.0, "big": true, "color": Color(1.0, 0.85, 0.4), "crit": true})
+				Audio.play("bat_crack", -6.0)
+			_cast(df, go, e.global_position, "throw")
+
+		"splitter":
+			var df := nearest_thrower(point)
+			var go := func() -> void:
+				battle.projectiles.launch_at(_origin(df), point + Vector3(0, 3.5, 0), 26.0, {"color": Color(0.9, 0.95, 1.0), "big": true},
+					func(at: Vector3) -> void:
+						battle.vfx.burst("crit", at, Color.WHITE)
+						var victims := battle.enemies_in_radius(point, float(DB.card(card_id).get("radius", 5.0)))
+						var n := int(p(card_id, "balls", level)) + (1 if battle.buff_active("twin_play") else 0)
+						for i in n:
+							if victims.is_empty():
+								battle.projectiles.launch_at(at, point + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), 18.0, {"arc_mult": 0.3}, func(_x: Vector3) -> void: pass)
+								continue
+							var v: Enemy = victims[i % victims.size()]
+							battle.projectiles.launch(at, v, 20.0, {"source": df, "damage": p(card_id, "damage", level), "accuracy": 200.0, "color": Color(0.7, 0.9, 1.0), "arc_mult": 0.3}))
+			_cast(df, go, point, "throw")
+
+		"grand_slam_barrage":
+			Audio.play("rally_horn", -6.0)
+			battle.notify("GRAND SLAM BARRAGE!", Color(1.0, 0.6, 0.2))
+			var r := float(DB.card(card_id).get("radius", 6.0))
+			var balls := int(p(card_id, "balls", level))
+			battle.vfx.zone_ring(point, r, Color(1.0, 0.45, 0.1, 0.9), 3.2, 0.2)
+			for i in balls:
+				var delay := 0.25 + i * (2.4 / balls)
+				battle.get_tree().create_timer(delay, false).timeout.connect(func() -> void:
+					if not is_instance_valid(battle):
+						return
+					var off := Vector2.from_angle(randf() * TAU) * sqrt(randf()) * r
+					var land := point + Vector3(off.x, 0, off.y)
+					var from := land + Vector3(randf_range(-6, 6), 26.0, randf_range(4, 10))
+					battle.projectiles.launch_at(from, land, 34.0, {"fire": true, "big": true, "arc_mult": 0.0}, func(at: Vector3) -> void:
+						battle.vfx.burst("explosion", at + Vector3(0, 0.3, 0))
+						Audio.play("barrage_impact", -6.0, 0.1, 60)
+						battle.shake(0.12)
+						for e: Enemy in battle.enemies_in_radius(at, 2.0):
+							battle.deal_damage(e, p(card_id, "damage", level), {"kind": "fire", "card": card_id})
+							if e.alive:
+								e.apply_stun(p(card_id, "stun", level))))
+
+		"grand_relay":
+			var go := func() -> void:
+				var chain: Array = battle.defenders.duplicate()
+				if caster:
+					chain.erase(caster)
+					chain.push_front(caster)
+				var prev: Vector3 = _origin(caster)
+				for i in chain.size():
+					var df: Defender = chain[i]
+					var pos: Vector3 = df.model.chest_position()
+					var dl := i * 0.08
+					battle.get_tree().create_timer(dl, false).timeout.connect(func() -> void:
+						battle.vfx.lightning(prev, pos, Color(1.0, 0.8, 0.25), 0.06)
+						battle.vfx.burst("gold", pos))
+					prev = pos
+				var dmg := p(card_id, "damage", level) * power * (1.0 + float(DB.card(card_id).params.per_defender) * chain.size())
+				var count := int(p(card_id, "targets", level)) + (1 if battle.buff_active("twin_play") else 0)
+				var targets := battle.lead_runners(count)
+				var last := prev
+				battle.get_tree().create_timer(chain.size() * 0.08 + 0.1, false).timeout.connect(func() -> void:
+					Audio.play("lightning_zap", -4.0)
+					for e: Enemy in targets:
+						if is_instance_valid(e) and e.targetable():
+							battle.vfx.lightning(last, e.center(), Color(1.0, 0.85, 0.3), 0.08)
+							battle.deal_damage(e, dmg, {"source": caster, "kind": "relay", "card": card_id}))
+			_cast(caster, go, point)
+
+		"power_catch":
+			var r := float(DB.card(card_id).get("radius", 3.0))
+			var go := func() -> void:
+				battle.projectiles.launch_at(_origin(caster), point, 20.0, {"big": true, "arc_mult": 2.2, "color": Color(0.7, 0.4, 1.0)}, func(at: Vector3) -> void:
+					Audio.play("boss_slam", -6.0)
+					battle.shake(0.35)
+					battle.vfx.shockwave(point, r * 1.3, Color(0.7, 0.4, 1.0), 0.5)
+					battle.vfx.dust(point, 2.0)
+					battle.vfx.burst("shadow", point + Vector3(0, 0.4, 0))
+					for e: Enemy in battle.enemies_in_radius(point, r):
+						battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "slam", "card": card_id})
+						if e.alive:
+							e.apply_stun(p(card_id, "stun", level) * control_mult())
+							e.apply_armor_break(p(card_id, "armor_break", level)))
+			_cast(caster, go, point)
+
+		"thunderbolt":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					return
+				Audio.play("lightning_zap")
+				var from := _origin(caster)
+				battle.vfx.lightning(from, e.center(), Color(1.0, 0.95, 0.4), 0.12)
+				battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "lightning", "card": card_id})
+				var payload := {"source": caster, "damage": p(card_id, "damage", level) * power, "chain": int(p(card_id, "chains", level)) + (1 if battle.buff_active("twin_play") else 0),
+					"chain_mult": p(card_id, "falloff", level), "chained": [e]}
+				battle.projectiles.hit_chain_continue(e, payload, e.center())
+			_cast(caster, go, e.global_position)
+
+		"curveball":
+			var r := float(DB.card(card_id).get("radius", 3.5))
+			var df := nearest_thrower(point)
+			var go := func() -> void:
+				battle.projectiles.launch_at(_origin(df), point + Vector3(0, 0.5, 0), 24.0, {"color": Color(0.5, 0.6, 1.0), "arc_mult": 1.6}, func(_at: Vector3) -> void:
+					battle.vfx.shockwave(point, r, Color(0.55, 0.45, 1.0), 0.45)
+					battle.vfx.zone_ring(point, r, Color(0.55, 0.45, 1.0, 0.8), 0.8, 0.15, 3.0)
+					Audio.play("shadow_cast", -8.0)
+					for e: Enemy in battle.enemies_in_radius(point, r):
+						var dur := p(card_id, "duration", level) * control_mult()
+						e.apply_slow("curveball", p(card_id, "slow", level), dur)
+						e.apply_mark(dur, p(card_id, "vulnerability", level))
+						battle.vfx.burst("magic", e.center(), Color(0.65, 0.5, 1.0)))
+			_cast(df, go, point, "throw")
+
+		"knuckleball":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return
+			var df := nearest_thrower(e.global_position)
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					return
+				battle.projectiles.launch_at(_origin(df), e.center(), 18.0, {"color": Color(0.8, 0.6, 1.0), "arc_mult": 1.2}, func(_at: Vector3) -> void:
+					if is_instance_valid(e) and e.alive:
+						battle.deal_damage(e, p(card_id, "damage", level), {"source": df, "kind": "throw", "card": card_id})
+						if e.alive and not e.is_boss:
+							e.apply_confuse(p(card_id, "confuse", level) * control_mult())
+							battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "???", Color(0.8, 0.6, 1.0), 1.0)
+						elif e.is_boss:
+							battle.vfx.text_popup(e.center() + Vector3(0, 1.2, 0), "IMMUNE", Color(0.8, 0.8, 0.8), 0.9))
+			_cast(df, go, e.global_position, "throw")
+
+		"shadow_change":
+			var r := float(DB.card(card_id).get("radius", 5.0))
+			Audio.play("shadow_cast")
+			battle.vfx.zone_ring(point, r, Color(0.55, 0.2, 0.9, 0.9), 1.0, 0.35, -2.0)
+			for e: Enemy in battle.enemies_in_radius(point, r):
+				battle.vfx.burst("shadow", e.center())
+				battle.deal_damage(e, p(card_id, "damage", level), {"kind": "shadow", "card": card_id})
+				if e.alive:
+					e.knockback(p(card_id, "pushback", level))
+					e.apply_slow("shadow", p(card_id, "slow", level), p(card_id, "duration", level) * control_mult())
+
+		"time_out":
+			Audio.play("time_out_whistle")
+			battle.notify("TIME OUT!", Color(0.6, 0.9, 1.0))
+			battle.hud_flash(Color(0.5, 0.85, 1.0, 0.25))
+			for e: Enemy in battle.enemies:
+				if e.alive:
+					e.apply_freeze((p(card_id, "boss_freeze", level) if e.is_boss else p(card_id, "freeze", level)) * control_mult())
+					battle.vfx.burst("frost", e.center())
+
+		"changeup":
+			Audio.play("frost_cast", -6.0)
+			battle.notify("CHANGEUP!", Color(0.6, 0.6, 1.0))
+			for e: Enemy in battle.enemies:
+				if e.alive:
+					e.apply_slow("changeup", p(card_id, "slow", level), p(card_id, "duration", level) * control_mult())
+					battle.vfx.burst("magic", e.center(), Color(0.6, 0.6, 1.0))
+
+		"pickoff":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					return
+				battle.vfx.lightning(_origin(caster), e.center(), Color(0.2, 1.0, 0.8), 0.05)
+				if not e.is_boss and e.hp <= e.max_hp * p(card_id, "threshold", level) * power:
+					battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "PICKED OFF!", Color(0.2, 1.0, 0.8), 1.2)
+					e.die({"source": caster, "kind": "pickoff"})
+				else:
+					battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "throw", "card": card_id})
+				Audio.play("glove_catch")
+			_cast(caster, go, e.global_position)
+
+		"lockdown":
+			var r := float(DB.card(card_id).get("radius", 3.5))
+			var go := func() -> void:
+				var root := p(card_id, "root", level) * power * control_mult()
+				if Field.v2(point).distance_to(Field.v2(Field.HOME)) < 7.0:
+					root += p(card_id, "home_bonus", level)
+				Audio.play("magnet_pull", -4.0)
+				battle.vfx.zone_ring(point, r, Color(0.3, 0.6, 1.0, 0.95), root + 0.4, 0.3, 1.5)
+				battle.vfx.shockwave(point, r, Color(0.4, 0.7, 1.0), 0.35)
+				for e: Enemy in battle.enemies_in_radius(point, r):
+					e.apply_root(root)
+					e.apply_slow("lockdown", p(card_id, "slow", level), root + p(card_id, "slow_time", level))
+					battle.vfx.burst("magic", e.center(), Color(0.4, 0.7, 1.0))
+			_cast(caster, go, point)
+
+		"frost_field":
+			var r := float(DB.card(card_id).get("radius", 4.0))
+			var dur := p(card_id, "duration", level) * control_mult()
+			Audio.play("frost_cast")
+			battle.add_zone(EffectZone.frost(battle, point, r, dur, p(card_id, "slow", level), p(card_id, "crit_bonus", level)))
+
+		"wall_of_dirt":
+			Audio.play("earth_rumble")
+			battle.add_wall(target.get("point", point), p(card_id, "hp", level), p(card_id, "duration", level) * control_mult())
+
+		"base_shield":
+			battle.add_shield(int(p(card_id, "shields", level)))
+
+		"bunt_trap":
+			battle.add_trap(target.get("point", point), int(p(card_id, "charges", level)), p(card_id, "root", level) * control_mult(), p(card_id, "damage", level))
+
+		"diving_catch":
+			var r := float(DB.card(card_id).get("radius", 2.5))
+			var go := func() -> void:
+				var from := caster.global_position if caster else Field.HOME
+				battle.vfx.lightning(from + Vector3(0, 1, 0), point + Vector3(0, 0.6, 0), Color(1.0, 0.45, 0.7), 0.2)
+				battle.vfx.dust(point, 1.6)
+				battle.vfx.shockwave(point, r, Color(1.0, 0.45, 0.7), 0.35)
+				Audio.play("glove_catch")
+				for e: Enemy in battle.enemies_in_radius(point, r):
+					battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "throw", "card": card_id})
+					if e.alive:
+						e.knockback(p(card_id, "knockback", level))
+						e.apply_stun(p(card_id, "stun", level) * control_mult())
+			_cast(caster, go, point)
+
+		"twin_play":
+			var go := func() -> void:
+				Audio.play("aura_hum", -4.0)
+				battle.add_buff("twin_play", p(card_id, "chain_damage", level), p(card_id, "duration", level) * power)
+				battle.notify("TWIN PLAY!", Color(0.35, 1.0, 0.55))
+			_cast(caster, go, point)
+
+		"field_vision":
+			Audio.play("aura_hum", -6.0)
+			battle.add_buff("field_vision", p(card_id, "range_bonus", level), p(card_id, "duration", level))
+			for df: Defender in battle.defenders:
+				battle.vfx.burst("magic", df.model.head_position(), Color(1.0, 0.9, 0.4))
+
+		"diamond_aura":
+			var df: Defender = target.get("defender")
+			if df == null:
+				return
+			Audio.play("aura_hum")
+			battle.add_buff("diamond_aura", p(card_id, "damage_bonus", level), p(card_id, "duration", level),
+				{"defender": df, "radius": p(card_id, "radius", level), "speed": p(card_id, "speed_bonus", level)})
+			battle.vfx.zone_ring(df.global_position, p(card_id, "radius", level), Color(0.6, 0.85, 1.0, 0.7), p(card_id, "duration", level), 0.08, 0.5)
+			battle.vfx.burst("gold", df.model.head_position())
+
+		"rally_cry":
+			Audio.play("rally_horn")
+			battle.notify("RALLY CRY!", Color(1.0, 0.85, 0.3))
+			battle.add_buff("rally", p(card_id, "speed_bonus", level), p(card_id, "duration", level))
+			for df: Defender in battle.defenders:
+				df.cleanse()
+				df.celebrate()
+				battle.get_tree().create_timer(0.8, false).timeout.connect(func() -> void:
+					if is_instance_valid(df):
+						df.model.play_base("ready", 0.2))
+			battle.crowd_cheer(1.0)
+
+		"magnet_glove":
+			var r := float(DB.card(card_id).get("radius", 6.0))
+			Audio.play("magnet_pull")
+			battle.vfx.zone_ring(point, r, Color(0.9, 0.3, 0.3, 0.9), p(card_id, "pull_time", level) + 0.6, 0.2, 4.0)
+			for e: Enemy in battle.enemies_in_radius(point, r):
+				e.apply_magnet(point, p(card_id, "pull_time", level) * control_mult() + 0.4)
+
+		"sky_hook":
+			var lead := battle.lead_runners(1)
+			if lead.is_empty():
+				return
+			var e: Enemy = lead[0]
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					var again := battle.lead_runners(1)
+					if again.is_empty():
+						return
+					e = again[0]
+				battle.projectiles.launch(_origin(caster), e, 30.0, {"source": caster, "damage": p(card_id, "damage", level) * power,
+					"knockback": p(card_id, "pull", level), "accuracy": 200.0, "arc_mult": 3.5, "color": Color(0.3, 0.85, 1.0), "big": true})
+			_cast(caster, go, e.global_position)
+
+		"seventh_inning_stretch":
+			Audio.play("heal_chime")
+			battle.cards.add_energy(p(card_id, "energy", level))
+			battle.cards.draw(int(p(card_id, "draw", level)))
+			battle.crowd_cheer(0.7)
+			battle.notify("SEVENTH-INNING STRETCH!", Color(1.0, 0.9, 0.5))
+
+
+## Has the caster perform its animation, then runs the effect at the impact frame.
+func _cast(caster: Defender, effect: Callable, face_point: Vector3, anim := "special") -> void:
+	if caster and is_instance_valid(caster) and not caster.is_stunned():
+		if anim == "special":
+			battle.vfx.burst("magic", caster.model.chest_position(), Color(caster.data.accent))
+			caster.cast_special(effect, face_point)
+		else:
+			var to := face_point - caster.global_position
+			caster.rotation.y = atan2(to.x, to.z)
+			var dur := caster.model.play_action("throw", 1.3)
+			caster.attack_cd = maxf(caster.attack_cd, dur)
+			battle.get_tree().create_timer(0.3 / 1.3, false).timeout.connect(effect)
+	else:
+		effect.call()

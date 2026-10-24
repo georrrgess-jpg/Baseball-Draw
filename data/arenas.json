@@ -1,0 +1,697 @@
+{
+ "_comment": "Arenas: visual theme + route layout + gameplay modifier. Field coordinates: home (0,10), 1B (9.5,0.5), 2B (0,-9), 3B (-9.5,0.5), mound (0,1). Wall radius 36 around home.",
+ "layouts": {
+  "classic": {
+   "gates": {
+    "L": [
+     -18.0,
+     -21.2
+    ],
+    "C": [
+     0.0,
+     -26.0
+    ],
+    "R": [
+     18.0,
+     -21.2
+    ]
+   },
+   "routes": [
+    {
+     "id": "left",
+     "gate": "L",
+     "points": [
+      [
+       -18.0,
+       -21.2
+      ],
+      [
+       -15.0,
+       -12.0
+      ],
+      [
+       -9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "right",
+     "gate": "R",
+     "points": [
+      [
+       18.0,
+       -21.2
+      ],
+      [
+       15.0,
+       -12.0
+      ],
+      [
+       9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "center_1b",
+     "gate": "C",
+     "points": [
+      [
+       0.0,
+       -26.0
+      ],
+      [
+       0.0,
+       -16.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "center_3b",
+     "gate": "C",
+     "points": [
+      [
+       0.0,
+       -26.0
+      ],
+      [
+       0.0,
+       -16.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       -9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    }
+   ]
+  },
+  "foul_lines": {
+   "gates": {
+    "L": [
+     -25.4,
+     -15.4
+    ],
+    "C": [
+     0.0,
+     -26.0
+    ],
+    "R": [
+     25.4,
+     -15.4
+    ]
+   },
+   "routes": [
+    {
+     "id": "left_line",
+     "gate": "L",
+     "points": [
+      [
+       -25.4,
+       -15.4
+      ],
+      [
+       -17.0,
+       -7.0
+      ],
+      [
+       -9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "right_line",
+     "gate": "R",
+     "points": [
+      [
+       25.4,
+       -15.4
+      ],
+      [
+       17.0,
+       -7.0
+      ],
+      [
+       9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "center_1b",
+     "gate": "C",
+     "points": [
+      [
+       0.0,
+       -26.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "center_3b",
+     "gate": "C",
+     "points": [
+      [
+       0.0,
+       -26.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       -9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    }
+   ]
+  },
+  "fortress": {
+   "gates": {
+    "L": [
+     -10.0,
+     -24.5
+    ],
+    "R": [
+     10.0,
+     -24.5
+    ]
+   },
+   "routes": [
+    {
+     "id": "west_wind",
+     "gate": "L",
+     "points": [
+      [
+       -10.0,
+       -24.5
+      ],
+      [
+       -19.0,
+       -15.0
+      ],
+      [
+       -8.0,
+       -13.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       -9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "east_wind",
+     "gate": "R",
+     "points": [
+      [
+       10.0,
+       -24.5
+      ],
+      [
+       19.0,
+       -15.0
+      ],
+      [
+       8.0,
+       -13.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    }
+   ]
+  },
+  "citadel": {
+   "gates": {
+    "L": [
+     -25.4,
+     -15.4
+    ],
+    "CL": [
+     -9.3,
+     -24.8
+    ],
+    "CR": [
+     9.3,
+     -24.8
+    ],
+    "R": [
+     25.4,
+     -15.4
+    ]
+   },
+   "routes": [
+    {
+     "id": "left_line",
+     "gate": "L",
+     "points": [
+      [
+       -25.4,
+       -15.4
+      ],
+      [
+       -17.0,
+       -7.0
+      ],
+      [
+       -9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "left_center",
+     "gate": "CL",
+     "points": [
+      [
+       -9.3,
+       -24.8
+      ],
+      [
+       -6.0,
+       -15.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       -9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "right_center",
+     "gate": "CR",
+     "points": [
+      [
+       9.3,
+       -24.8
+      ],
+      [
+       6.0,
+       -15.0
+      ],
+      [
+       0.0,
+       -9.0
+      ],
+      [
+       9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    },
+    {
+     "id": "right_line",
+     "gate": "R",
+     "points": [
+      [
+       25.4,
+       -15.4
+      ],
+      [
+       17.0,
+       -7.0
+      ],
+      [
+       9.5,
+       0.5
+      ],
+      [
+       0.0,
+       10.0
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "arenas": [
+  {
+   "id": "steel_yard",
+   "name": "The Steel Yard",
+   "layout": "classic",
+   "unlock": {
+    "type": "default"
+   },
+   "text": "An industrial baseball fortress forged among the foundries. Where every siege begins.",
+   "modifier": {
+    "name": "Home Field",
+    "text": "No modifier."
+   },
+   "theme": {
+    "time": "sunset",
+    "sky_top": "#1d2b4f",
+    "sky_horizon": "#ff8a3d",
+    "ground_horizon": "#3a2a2a",
+    "sun_color": "#ffc890",
+    "sun_energy": 1.45,
+    "sun_pitch": -27,
+    "sun_yaw": 205,
+    "ambient": "#7d8cbc",
+    "ambient_energy": 0.7,
+    "fog": "#8a6f78",
+    "fog_density": 0.0035,
+    "grass_a": "#3f8a3a",
+    "grass_b": "#4c9a44",
+    "dirt": "#b06a3e",
+    "wall": "#1c2e4a",
+    "trim": "#d7262e",
+    "steel": "#3a4048",
+    "accent": "#ff7a1a",
+    "lamp_energy": 3.0,
+    "background": "industrial",
+    "particles": "embers",
+    "crowd": [
+     "#1c2e4a",
+     "#d7262e",
+     "#f4f1ea",
+     "#f5b82e",
+     "#2f7de1"
+    ]
+   }
+  },
+  {
+   "id": "sunset_grounds",
+   "name": "Sunset Grounds",
+   "layout": "classic",
+   "unlock": {
+    "type": "win_mode",
+    "value": "quick"
+   },
+   "text": "A sun-drenched ballpark on the edge of the city, bathed in golden-hour light.",
+   "modifier": {
+    "name": "Golden Hour",
+    "text": "+15% coins from outs.",
+    "coin_mult": 0.15
+   },
+   "theme": {
+    "time": "golden",
+    "sky_top": "#3a5ea8",
+    "sky_horizon": "#ffc46b",
+    "ground_horizon": "#4a3a2a",
+    "sun_color": "#ffd28a",
+    "sun_energy": 2.0,
+    "sun_pitch": -24,
+    "sun_yaw": 230,
+    "ambient": "#8ea0c8",
+    "ambient_energy": 0.7,
+    "fog": "#e8a860",
+    "fog_density": 0.0025,
+    "grass_a": "#4f9a3c",
+    "grass_b": "#5fae4a",
+    "dirt": "#c47c48",
+    "wall": "#24456e",
+    "trim": "#f5b82e",
+    "steel": "#4a525c",
+    "accent": "#ffb020",
+    "lamp_energy": 1.2,
+    "background": "city",
+    "particles": "dust",
+    "crowd": [
+     "#24456e",
+     "#f5b82e",
+     "#f4f1ea",
+     "#e0262f",
+     "#3ddc84"
+    ]
+   }
+  },
+  {
+   "id": "neon_diamond",
+   "name": "Neon Diamond",
+   "layout": "foul_lines",
+   "unlock": {
+    "type": "level",
+    "value": 3
+   },
+   "text": "A night game under neon skies. The runners pour in from the corners.",
+   "modifier": {
+    "name": "Neon Rush",
+    "text": "+15% energy regeneration, runners +10% speed.",
+    "energy_regen": 0.15,
+    "enemy_speed": 0.1
+   },
+   "theme": {
+    "time": "night",
+    "sky_top": "#060818",
+    "sky_horizon": "#3a1a5e",
+    "ground_horizon": "#0a0a14",
+    "sun_color": "#8fa8ff",
+    "sun_energy": 0.35,
+    "sun_pitch": -40,
+    "sun_yaw": 140,
+    "ambient": "#4a3a8a",
+    "ambient_energy": 0.6,
+    "fog": "#2a1446",
+    "fog_density": 0.004,
+    "grass_a": "#2f6e3a",
+    "grass_b": "#367a42",
+    "dirt": "#8a5a40",
+    "wall": "#10101c",
+    "trim": "#ff2bd6",
+    "steel": "#22232e",
+    "accent": "#00e5ff",
+    "lamp_energy": 6.0,
+    "background": "city_night",
+    "particles": "none",
+    "crowd": [
+     "#ff2bd6",
+     "#00e5ff",
+     "#9b5de5",
+     "#f4f1ea",
+     "#ffe135"
+    ]
+   }
+  },
+  {
+   "id": "iron_fortress",
+   "name": "Iron Fortress",
+   "layout": "fortress",
+   "unlock": {
+    "type": "win_mode",
+    "value": "standard"
+   },
+   "text": "A storm-lashed citadel of riveted iron. Two winding routes, no mercy.",
+   "modifier": {
+    "name": "Fortified",
+    "text": "Defenders +10% damage, more armored runners.",
+    "damage": 0.1,
+    "heavy": 1.0
+   },
+   "theme": {
+    "time": "storm",
+    "sky_top": "#1a1e26",
+    "sky_horizon": "#59606e",
+    "ground_horizon": "#22252c",
+    "sun_color": "#c8d2e6",
+    "sun_energy": 0.9,
+    "sun_pitch": -35,
+    "sun_yaw": 160,
+    "ambient": "#5a6478",
+    "ambient_energy": 0.7,
+    "fog": "#4a505c",
+    "fog_density": 0.006,
+    "grass_a": "#3a6e3a",
+    "grass_b": "#427a40",
+    "dirt": "#7a5a48",
+    "wall": "#2a2d33",
+    "trim": "#c0392b",
+    "steel": "#50565e",
+    "accent": "#ff3d00",
+    "lamp_energy": 4.0,
+    "background": "fortress",
+    "particles": "rain",
+    "crowd": [
+     "#2a2d33",
+     "#c0392b",
+     "#8a939e",
+     "#f4f1ea",
+     "#f5b82e"
+    ]
+   }
+  },
+  {
+   "id": "frostpark",
+   "name": "Frostpark",
+   "layout": "classic",
+   "unlock": {
+    "type": "rank",
+    "value": "silver"
+   },
+   "text": "Snow falls over a frozen ballpark in the mountains. Runners slip, frost bites deeper.",
+   "modifier": {
+    "name": "Permafrost",
+    "text": "Runners -10% speed. Frost and control effects last 25% longer.",
+    "enemy_speed": -0.1,
+    "control_duration": 0.25
+   },
+   "theme": {
+    "time": "dusk_snow",
+    "sky_top": "#22304e",
+    "sky_horizon": "#9fb6d8",
+    "ground_horizon": "#3a4458",
+    "sun_color": "#c8dcff",
+    "sun_energy": 1.0,
+    "sun_pitch": -20,
+    "sun_yaw": 190,
+    "ambient": "#8aa0c8",
+    "ambient_energy": 0.8,
+    "fog": "#a8b8d0",
+    "fog_density": 0.006,
+    "grass_a": "#5a8a68",
+    "grass_b": "#6a9a76",
+    "dirt": "#9a8a88",
+    "wall": "#1e3a5a",
+    "trim": "#7fd8ff",
+    "steel": "#5a6a7a",
+    "accent": "#7fd8ff",
+    "lamp_energy": 2.5,
+    "background": "mountains",
+    "particles": "snow",
+    "crowd": [
+     "#1e3a5a",
+     "#7fd8ff",
+     "#f4f1ea",
+     "#e0262f",
+     "#a8b8d0"
+    ]
+   }
+  },
+  {
+   "id": "champions_citadel",
+   "name": "Champion's Citadel",
+   "layout": "citadel",
+   "unlock": {
+    "type": "rank",
+    "value": "gold"
+   },
+   "text": "The grandest stage in the sport. Four gates, a roaring crowd, and glory for the winner.",
+   "modifier": {
+    "name": "Grand Stage",
+    "text": "Rewards +25%, runners +15% health.",
+    "reward": 0.25,
+    "enemy_hp": 0.15
+   },
+   "theme": {
+    "time": "twilight",
+    "sky_top": "#1a1040",
+    "sky_horizon": "#d65a8a",
+    "ground_horizon": "#2a1a30",
+    "sun_color": "#ffb0c8",
+    "sun_energy": 1.2,
+    "sun_pitch": -12,
+    "sun_yaw": 215,
+    "ambient": "#7a6aa8",
+    "ambient_energy": 0.65,
+    "fog": "#7a3a6a",
+    "fog_density": 0.003,
+    "grass_a": "#3f8a3a",
+    "grass_b": "#4c9a44",
+    "dirt": "#b07048",
+    "wall": "#2a1a4a",
+    "trim": "#ffc83d",
+    "steel": "#3a3048",
+    "accent": "#ffc83d",
+    "lamp_energy": 4.0,
+    "background": "castle",
+    "particles": "confetti",
+    "crowd": [
+     "#2a1a4a",
+     "#ffc83d",
+     "#f4f1ea",
+     "#b45cff",
+     "#e0262f"
+    ]
+   }
+  }
+ ]
+}

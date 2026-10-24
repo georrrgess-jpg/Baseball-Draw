@@ -1,0 +1,23 @@
+{
+  "_comment": "Card combinations surfaced in the deck builder. Each pair is a real mechanical interaction implemented in card_effects.gd / enemy.gd.",
+  "combos": [
+    {"cards": ["curveball", "heat_wave"], "text": "Curved runners take +50% fire damage from Heat Wave and burns."},
+    {"cards": ["twin_play", "grand_relay"], "text": "Twin Play adds one more target to Grand Relay."},
+    {"cards": ["twin_play", "thunderbolt"], "text": "Twin Play adds one more lightning bounce."},
+    {"cards": ["twin_play", "splitter"], "text": "Twin Play adds one more Splitter ball."},
+    {"cards": ["frost_field", "sky_hook"], "text": "Chilled runners are prime critical-hit targets for precision throws."},
+    {"cards": ["frost_field", "power_throw"], "text": "Frost Field's crit bonus applies to every throw at chilled runners."},
+    {"cards": ["magnet_glove", "grand_slam_barrage"], "text": "Pull a crowd together, then rain fire on it."},
+    {"cards": ["magnet_glove", "splitter"], "text": "Clumped runners take every Splitter ball."},
+    {"cards": ["magnet_glove", "power_catch"], "text": "Gather runners, then slam them all with Power Catch."},
+    {"cards": ["lockdown", "heat_wave"], "text": "Rooted runners can't walk out of the fire."},
+    {"cards": ["wall_of_dirt", "grand_slam_barrage"], "text": "Runners pile up behind the wall — a perfect barrage target."},
+    {"cards": ["time_out", "grand_slam_barrage"], "text": "Frozen runners can't dodge the barrage."},
+    {"cards": ["shadow_change", "bunt_trap"], "text": "Dragged-back runners cross your traps again."},
+    {"cards": ["knuckleball", "bunt_trap"], "text": "Confused runners run back over the trap."},
+    {"cards": ["diamond_aura", "rally_cry"], "text": "Attack-speed bonuses stack for a huge burst."},
+    {"cards": ["power_throw", "pickoff"], "text": "Soften a runner with Power Throw, then pick it off."},
+    {"cards": ["seventh_inning_stretch", "grand_slam_barrage"], "text": "Refill energy to afford your most expensive card."},
+    {"cards": ["changeup", "frost_field"], "text": "Stacked slows hold runners inside your kill zone."}
+  ]
+}

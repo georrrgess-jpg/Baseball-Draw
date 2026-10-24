@@ -1,0 +1,24 @@
+{
+  "modes": [
+    {"id": "standard", "name": "Standard Siege", "innings": 9, "waves_per_inning": 3, "bosses": {"3": "iron_slugger", "6": "phantom_captain", "9": "grand_slammer"},
+     "text": "The full nine-inning siege. Escalating waves, three bosses, big rewards.", "rewards": true, "reward_mult": 1.0},
+    {"id": "quick", "name": "Quick Defense", "innings": 3, "waves_per_inning": 3, "bosses": {"3": "iron_slugger"}, "inning_scale": 2.0,
+     "text": "A three-inning sprint to practise builds. Waves ramp up twice as fast.", "rewards": true, "reward_mult": 0.45},
+    {"id": "endless", "name": "The Endless Ninth", "innings": 0, "waves_per_inning": 3, "boss_every": 3,
+     "text": "Survive as long as you can. Random modifiers every inning and a boss every third.", "rewards": true, "reward_mult": 0.8},
+    {"id": "practice", "name": "Practice Field", "innings": 0, "waves_per_inning": 0,
+     "text": "Spawn any runner, test any card. No rewards, no risk.", "rewards": false, "reward_mult": 0.0},
+    {"id": "ranked", "name": "Promotion Challenge", "innings": 3, "waves_per_inning": 3, "bosses": {"3": "phantom_captain"}, "inning_scale": 2.2,
+     "text": "Beat the division challenge to earn promotion.", "rewards": true, "reward_mult": 0.6}
+  ],
+  "endless_modifiers": [
+    {"id": "speed_demons", "name": "Speed Demons", "text": "Runners are 15% faster.", "enemy_speed": 0.15},
+    {"id": "iron_skin", "name": "Iron Skin", "text": "Runners gain +15% armor.", "enemy_armor": 0.15},
+    {"id": "swarm_season", "name": "Swarm Season", "text": "Swarmers flood the field.", "swarm": 1.0},
+    {"id": "fog_delay", "name": "Fog Delay", "text": "Defender range -12%.", "range": -0.12},
+    {"id": "overtime", "name": "Overtime", "text": "Energy +25% faster, runners +10% health.", "energy_regen": 0.25, "enemy_hp": 0.10},
+    {"id": "home_cooking", "name": "Home Cooking", "text": "Coins from outs +40%.", "coin_mult": 0.4},
+    {"id": "heavy_hitters", "name": "Heavy Hitters", "text": "More armored runners and sluggers.", "heavy": 1.0},
+    {"id": "rain_delay", "name": "Rain Delay", "text": "Runners -10% speed but +20% health.", "enemy_speed": -0.10, "enemy_hp": 0.20}
+  ]
+}

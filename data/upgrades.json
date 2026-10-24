@@ -1,0 +1,32 @@
+{
+  "_comment": "Between-innings (run-only) upgrades bought in the dugout with run coins. price grows by price_growth per purchase.",
+  "price_growth": 1.55,
+  "upgrades": [
+    {"id": "stronger_arm", "name": "Stronger Arm", "icon": "damage", "price": 45, "max": 5, "kind": "core",
+     "text": "+12% damage for the whole team.", "effect": {"damage": 0.12}},
+    {"id": "faster_relay", "name": "Faster Relay", "icon": "attack_speed", "price": 45, "max": 5, "kind": "core",
+     "text": "+10% attack speed and +10% throw speed for the whole team.", "effect": {"attack_speed": 0.10, "throw_speed": 0.10}},
+    {"id": "wider_coverage", "name": "Wider Coverage", "icon": "range", "price": 40, "max": 4, "kind": "core",
+     "text": "+8% range for the whole team.", "effect": {"range": 0.08}},
+    {"id": "new_pitch_card", "name": "New Pitch Card", "icon": "deck", "price": 55, "max": 3, "kind": "core",
+     "text": "Choose one of three new ability cards to add to your deck for this run.", "effect": {"card_pick": 3}},
+    {"id": "base_shield", "name": "Base Shield", "icon": "shield", "price": 70, "max": 3, "kind": "core",
+     "text": "+1 home plate shield. Each shield turns a scoring runner into an out.", "effect": {"shields": 1}},
+    {"id": "captains_rally", "name": "Captain's Rally", "icon": "captain", "price": 50, "max": 4, "kind": "core",
+     "text": "Your captain's aura grows: +8% damage to allies and +1.5m radius.", "effect": {"captain_damage": 0.08, "captain_radius": 1.5}},
+    {"id": "energy_drink", "name": "Energy Drink", "icon": "energy", "price": 40, "max": 3, "kind": "random",
+     "text": "+15% energy regeneration.", "effect": {"energy_regen": 0.15}},
+    {"id": "lucky_bat", "name": "Lucky Bat", "icon": "star", "price": 35, "max": 3, "kind": "random",
+     "text": "+6% critical hit chance for the whole team.", "effect": {"crit": 0.06}},
+    {"id": "deep_pockets", "name": "Deep Pockets", "icon": "coin", "price": 30, "max": 2, "kind": "random",
+     "text": "+20% coins from outs for the rest of the run.", "effect": {"coin_mult": 0.20}},
+    {"id": "card_mastery", "name": "Card Mastery", "icon": "upgrade", "price": 40, "max": 3, "kind": "random",
+     "text": "A random card in your deck gains +1 level for this run.", "effect": {"card_level": 1}},
+    {"id": "hot_streak", "name": "Hot Streak", "icon": "fire", "price": 35, "max": 3, "kind": "random_defender",
+     "text": "One defender gains +25% damage for the rest of the run.", "effect": {"defender_damage": 0.25}},
+    {"id": "scouting_report", "name": "Scouting Report", "icon": "info", "price": 30, "max": 2, "kind": "random",
+     "text": "Runners have 8% less health for the rest of the run.", "effect": {"enemy_hp": -0.08}},
+    {"id": "quick_draw", "name": "Quick Draw", "icon": "cooldown", "price": 40, "max": 2, "kind": "random",
+     "text": "Cards are drawn 20% faster and card cooldowns are 10% shorter.", "effect": {"draw_speed": 0.20, "card_cooldown": -0.10}}
+  ]
+}

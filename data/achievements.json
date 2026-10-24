@@ -1,0 +1,32 @@
+{
+  "achievements": [
+    {"id": "first_out", "name": "Called Out", "text": "Record your first out.", "stars": 5, "stat": "total_outs", "goal": 1},
+    {"id": "outs_500", "name": "Out Machine", "text": "Record 500 outs.", "stars": 15, "stat": "total_outs", "goal": 500},
+    {"id": "outs_5000", "name": "Ten Thousand Throws", "text": "Record 5,000 outs.", "stars": 40, "stat": "total_outs", "goal": 5000},
+    {"id": "double_play", "name": "Turn Two", "text": "Turn a Double Play (2 outs in quick succession).", "stars": 5, "stat": "double_plays", "goal": 1},
+    {"id": "triple_play", "name": "Triple Threat", "text": "Turn a Triple Play.", "stars": 10, "stat": "triple_plays", "goal": 1},
+    {"id": "grand_combo", "name": "Grand Slam Combo", "text": "Chain 4 or more outs in one combo.", "stars": 15, "stat": "grand_combos", "goal": 1},
+    {"id": "win_quick", "name": "Warm-Up Complete", "text": "Win a Quick Defense game.", "stars": 10, "stat": "wins_quick", "goal": 1},
+    {"id": "win_standard", "name": "Nine Innings Strong", "text": "Win a Standard Siege.", "stars": 25, "stat": "wins_standard", "goal": 1},
+    {"id": "win_veteran", "name": "Veteran Presence", "text": "Win a Standard Siege on Veteran.", "stars": 35, "stat": "wins_standard_veteran", "goal": 1},
+    {"id": "win_legend", "name": "Living Legend", "text": "Win a Standard Siege on Legend.", "stars": 60, "stat": "wins_standard_legend", "goal": 1},
+    {"id": "perfect_game", "name": "Perfect Game", "text": "Win a Standard Siege without allowing a run.", "stars": 50, "stat": "perfect_games", "goal": 1},
+    {"id": "shutdown", "name": "Shutdown Inning", "text": "Finish 10 innings without allowing a run.", "stars": 10, "stat": "clean_innings", "goal": 10},
+    {"id": "boss_iron", "name": "Scrap Metal", "text": "Defeat the Iron Slugger.", "stars": 10, "stat": "boss_iron_slugger", "goal": 1},
+    {"id": "boss_phantom", "name": "Ghostbuster", "text": "Defeat the Phantom Captain.", "stars": 15, "stat": "boss_phantom_captain", "goal": 1},
+    {"id": "boss_slammer", "name": "Walk-Off", "text": "Defeat the Grand Slammer.", "stars": 25, "stat": "boss_grand_slammer", "goal": 1},
+    {"id": "endless_10", "name": "Extra Innings", "text": "Reach inning 10 in The Endless Ninth.", "stars": 15, "stat": "best_endless_inning", "goal": 10},
+    {"id": "endless_20", "name": "Iron Will", "text": "Reach inning 20 in The Endless Ninth.", "stars": 35, "stat": "best_endless_inning", "goal": 20},
+    {"id": "cards_played", "name": "Card Shark", "text": "Play 300 ability cards.", "stars": 15, "stat": "cards_played", "goal": 300},
+    {"id": "curve_heat", "name": "Curve of Fire", "text": "Hit a Curved runner with Heat Wave.", "stars": 5, "stat": "curve_heat", "goal": 1},
+    {"id": "plate_blocker", "name": "Plate Blocker", "text": "Stop 10 runs with Base Shields.", "stars": 10, "stat": "shield_saves", "goal": 10},
+    {"id": "old_school", "name": "Old School", "text": "Win Quick Defense without playing a card.", "stars": 20, "stat": "no_card_wins", "goal": 1},
+    {"id": "card_max", "name": "Mastered", "text": "Upgrade any card to level 5.", "stars": 15, "stat": "max_card_level", "goal": 5},
+    {"id": "defender_max", "name": "Franchise Player", "text": "Raise a defender to level 10.", "stars": 25, "stat": "max_defender_level", "goal": 10},
+    {"id": "full_collection", "name": "Full Deck", "text": "Collect every ability card.", "stars": 30, "stat": "cards_owned", "goal": 26},
+    {"id": "full_roster", "name": "Full Roster", "text": "Unlock every defender.", "stars": 20, "stat": "defenders_owned", "goal": 9},
+    {"id": "rank_gold", "name": "Golden Glove", "text": "Reach the Gold division.", "stars": 20, "stat": "division", "goal": 3},
+    {"id": "rank_legend", "name": "Hall of Famer", "text": "Reach the Legend division.", "stars": 80, "stat": "division", "goal": 7},
+    {"id": "groundskeeper", "name": "Groundskeeper", "text": "Unlock every stadium.", "stars": 25, "stat": "arenas_owned", "goal": 6}
+  ]
+}

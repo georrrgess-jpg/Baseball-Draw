@@ -1,0 +1,32 @@
+{
+  "_comment": "Permanent gear bought with coins. Each item is owned once and equipped on one defender.",
+  "gear": [
+    {"id": "iron_wristband", "name": "Iron Wristband", "price": 400, "text": "+10% damage.", "effect": {"damage": 0.10}},
+    {"id": "pro_glove", "name": "Pro Glove", "price": 350, "text": "+10 accuracy and +4% critical chance.", "effect": {"accuracy": 10, "crit": 0.04}},
+    {"id": "lightning_cleats", "name": "Lightning Cleats", "price": 450, "text": "+15% throw speed and +6% attack speed.", "effect": {"throw_speed": 0.15, "attack_speed": 0.06}},
+    {"id": "scout_visor", "name": "Scout Visor", "price": 450, "text": "+10% range.", "effect": {"range": 0.10}},
+    {"id": "clutch_gloves", "name": "Clutch Batting Gloves", "price": 500, "text": "+20% power for this defender's signature card.", "effect": {"special_power": 0.20}},
+    {"id": "focus_band", "name": "Focus Band", "price": 500, "text": "-15% cooldown for this defender's signature card.", "effect": {"special_cooldown": -0.15}},
+    {"id": "lucky_charm", "name": "Lucky Charm", "price": 600, "text": "+8% critical chance.", "effect": {"crit": 0.08}},
+    {"id": "titan_belt", "name": "Titan Belt", "price": 800, "text": "+6% damage, +5% range and immunity to the first stun each wave.", "effect": {"damage": 0.06, "range": 0.05, "stun_guard": 1}}
+  ],
+  "traits": [
+    {"level": 3, "options": [
+      {"id": "power", "name": "Power Training", "text": "+8% damage.", "effect": {"damage": 0.08}},
+      {"id": "reach", "name": "Long Arms", "text": "+8% range.", "effect": {"range": 0.08}}]},
+    {"level": 6, "options": [
+      {"id": "tempo", "name": "Tempo", "text": "+10% attack speed.", "effect": {"attack_speed": 0.10}},
+      {"id": "eagle", "name": "Eagle Eye", "text": "+6% critical chance.", "effect": {"crit": 0.06}}]},
+    {"level": 9, "options": [
+      {"id": "clutch", "name": "Clutch", "text": "+25% damage to bosses and captains.", "effect": {"boss_damage": 0.25}},
+      {"id": "signature", "name": "Signature Move", "text": "+20% signature card power.", "effect": {"special_power": 0.20}}]}
+  ],
+  "uniforms": [
+    {"id": "home", "name": "Home Whites", "price_stars": 0, "colors": {"Jersey": "#1C2E4A", "JerseyTrim": "#D7262E", "Pants": "#EDEBE6", "Cap": "#1C2E4A", "Socks": "#1C2E4A", "Number": "#F4F1EA"}},
+    {"id": "away", "name": "Road Greys", "price_stars": 20, "colors": {"Jersey": "#9AA2AE", "JerseyTrim": "#1C2E4A", "Pants": "#9AA2AE", "Cap": "#1C2E4A", "Socks": "#1C2E4A", "Number": "#1C2E4A"}},
+    {"id": "retro", "name": "Retro Cream", "price_stars": 30, "colors": {"Jersey": "#EFE3C8", "JerseyTrim": "#B0221A", "Pants": "#EFE3C8", "Cap": "#B0221A", "Socks": "#B0221A", "Number": "#B0221A"}},
+    {"id": "shadow", "name": "Shadow Ops", "price_stars": 40, "colors": {"Jersey": "#16121F", "JerseyTrim": "#9B5DE5", "Pants": "#2A2436", "Cap": "#16121F", "Socks": "#9B5DE5", "Number": "#C9A8FF"}},
+    {"id": "gold", "name": "Golden Era", "price_stars": 60, "colors": {"Jersey": "#121212", "JerseyTrim": "#F5B82E", "Pants": "#1E1E1E", "Cap": "#121212", "Socks": "#F5B82E", "Number": "#F5B82E"}},
+    {"id": "champion", "name": "Champion White", "price_stars": 80, "colors": {"Jersey": "#F7F5F0", "JerseyTrim": "#F5B82E", "Pants": "#F7F5F0", "Cap": "#F5B82E", "Socks": "#F7F5F0", "Number": "#C8962A"}}
+  ]
+}

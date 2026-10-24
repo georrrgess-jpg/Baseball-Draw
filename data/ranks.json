@@ -1,0 +1,14 @@
+{
+  "_comment": "Offline ranked ladder. Reaching rp_required unlocks the division's Promotion Challenge; winning it promotes.",
+  "divisions": [
+    {"id": "rookie", "name": "Rookie", "rp_required": 0, "challenge_difficulty": "rookie", "color": "#9AA4B2"},
+    {"id": "bronze", "name": "Bronze", "rp_required": 100, "challenge_difficulty": "standard", "color": "#C07A45"},
+    {"id": "silver", "name": "Silver", "rp_required": 260, "challenge_difficulty": "standard", "color": "#C8D0DA"},
+    {"id": "gold", "name": "Gold", "rp_required": 480, "challenge_difficulty": "veteran", "color": "#F5B82E"},
+    {"id": "platinum", "name": "Platinum", "rp_required": 800, "challenge_difficulty": "veteran", "color": "#7FE0D8"},
+    {"id": "diamond", "name": "Diamond", "rp_required": 1200, "challenge_difficulty": "legend", "color": "#6FB8FF"},
+    {"id": "champion", "name": "Champion", "rp_required": 1700, "challenge_difficulty": "legend", "color": "#E0262F"},
+    {"id": "legend", "name": "Legend", "rp_required": 2400, "challenge_difficulty": "legend", "color": "#B45CFF"}
+  ],
+  "challenge_modifiers": ["speed_demons", "iron_skin", "swarm_season", "fog_delay", "heavy_hitters", "overtime", "rain_delay"]
+}
