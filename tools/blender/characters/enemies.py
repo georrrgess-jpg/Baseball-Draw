@@ -410,6 +410,16 @@ def extras(cid, cfg, sk, bb, hb, mats):
         parts += pauldrons(bb, M["Gear"], size=0.95, layers=2, tris=500)
         parts += armband(bb, M["Glow"], "L")
     if cid == "grand_slammer":
+        h = hb.h
+        P = hb.P
+        horns = []
+        for sx in (1, -1):
+            pts = [P(sx * 0.33, 0.02, 0.22), P(sx * 0.52, 0.0, 0.30), P(sx * 0.62, -0.04, 0.48),
+                   P(sx * 0.60, -0.10, 0.66)]
+            horns.append(sdf.polyline_tube(pts, [0.075 * h, 0.06 * h, 0.04 * h, 0.008 * h]))
+        hs = sdf.union(*horns)
+        parts.append(mu.sdf_part("Horns", hs, M["Metal"], 0.008 * h, 500, rigid="head", sym=True,
+                                 sharp=50))
         parts += torso_plate(bb, M["Gear"], grooves=2, tris=1200, front=True, back=True)
         parts += torso_plate(bb, M["Metal"], lo=0.030, hi=0.040, grooves=0, tris=500,
                              z0=bb.lv("chest") + 0.02 * bb.s, z1=bb.lv("chest") + 0.20 * bb.s,

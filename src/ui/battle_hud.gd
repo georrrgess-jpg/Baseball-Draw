@@ -452,9 +452,37 @@ func _build_practice_panel() -> void:
 		battle.cards.cooldown_mult = 0.0 if v else 1.0
 		battle.cards.cooldowns.clear())
 	vb.add_child(nocd)
-	var draw := UITheme.small_button("Draw a card", UITheme.GOLD, 19)
-	draw.pressed.connect(func() -> void: battle.cards.draw(1))
-	vb.add_child(draw)
+	vb.add_child(UITheme.label("Test any card (even uncollected):", 17, UITheme.MUTED))
+	var card_row := HBoxContainer.new()
+	var card_opt := OptionButton.new()
+	card_opt.custom_minimum_size = Vector2(230, 0)
+	for cid in DB.card_order:
+		card_opt.add_item(DB.card(cid).name)
+	card_row.add_child(card_opt)
+	var give := UITheme.small_button("To hand", UITheme.GOLD, 18)
+	give.pressed.connect(func() -> void:
+		var cid: String = DB.card_order[card_opt.selected]
+		if battle.cards.hand.size() >= CardSystem.MAX_HAND:
+			battle.cards.hand.pop_front()
+		battle.cards.hand.append(cid)
+		battle.cards.hand_changed.emit())
+	card_row.add_child(give)
+	vb.add_child(card_row)
+	vb.add_child(UITheme.label("Swap the selected defender for:", 17, UITheme.MUTED))
+	var def_row := HBoxContainer.new()
+	var def_opt := OptionButton.new()
+	def_opt.custom_minimum_size = Vector2(230, 0)
+	for did in DB.defender_order:
+		def_opt.add_item(DB.defender(did).name + ("" if Profile.is_defender_unlocked(did) else " (locked)"))
+	def_row.add_child(def_opt)
+	var swap := UITheme.small_button("Swap", UITheme.BLUE, 18)
+	swap.pressed.connect(func() -> void:
+		if battle.selected == null:
+			Router.toast("Select a defender on the field first (click or Tab).", "warn")
+			return
+		battle.swap_defender(battle.selected, DB.defender_order[def_opt.selected]))
+	def_row.add_child(swap)
+	vb.add_child(def_row)
 	var clear := UITheme.small_button("Clear field", UITheme.BLUE, 19)
 	clear.pressed.connect(func() -> void:
 		for e: Enemy in battle.enemies.duplicate():

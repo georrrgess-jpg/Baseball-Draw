@@ -91,19 +91,46 @@ class BodyBuilder:
                 E = self.j("forearm." + side)
                 d = (E - S) / np.linalg.norm(E - S)
                 L = cfg.get("sleeve_len", 0.15) * s
-                rs = cfg.get("sleeve_r", 0.063) * s * (0.85 + 0.15 * mus)
+                rs = self.sleeve_radius(side)
                 parts.append((0.04 * s, sdf.round_cone(
-                    S + d * 0.01 * s, S + d * L, rs + extra, rs * 0.92 + extra)))
+                    S + d * 0.01 * s, S + d * L, rs + extra, rs * 0.97 + extra)))
         shape = sdf.blend(base, *parts)
         return shape
+
+    def sleeve_radius(self, side):
+        """Sleeve radius = max arm radius over the sleeve span + clearance."""
+        key = "sleeve_r_" + side
+        if key in self.shapes:
+            return self.shapes[key]
+        s = self.s
+        S = self.j("upper_arm." + side)
+        E = self.j("forearm." + side)
+        d = (E - S) / np.linalg.norm(E - S)
+        L = self.cfg.get("sleeve_len", 0.15) * s
+        arm = self.arm_sdf(side, upper=True, lower=False)
+        R = frame_np(d, [0, -1, 0])
+        u, w = R[:, 0], R[:, 2]
+        rmax = 0.0
+        rs_ = np.linspace(0.0, 0.2 * s, 200)
+        for k in np.linspace(0.35, 1.0, 6):
+            c = S + d * L * k
+            for a in np.linspace(0, 2 * np.pi, 16, endpoint=False):
+                dirv = u * np.cos(a) + w * np.sin(a)
+                P = c + rs_[:, None] * dirv
+                v = arm(P)
+                idx = np.argmax(v > 0)
+                rmax = max(rmax, rs_[idx])
+        r = rmax + self.cfg.get("sleeve_gap", 0.011) * s
+        self.shapes[key] = r
+        return r
 
     def sleeve_end(self, side):
         S = self.j("upper_arm." + side)
         E = self.j("forearm." + side)
         d = (E - S) / np.linalg.norm(E - S)
         L = self.cfg.get("sleeve_len", 0.15) * self.s
-        rs = self.cfg.get("sleeve_r", 0.063) * self.s * (0.85 + 0.15 * self.p["muscle"])
-        return S + d * L, d, rs * 0.92
+        rs = self.sleeve_radius(side)
+        return S + d * L, d, rs * 0.97
 
     def build_torso(self, mat, tris=2200, name="Torso"):
         s = self.s
@@ -222,7 +249,7 @@ class BodyBuilder:
     def arm_sdf(self, side, upper=True, lower=True, extra=0.0):
         s = self.s
         p = self.p
-        mus = p["muscle"]
+        mus = 1.0 + 0.45 * (p["muscle"] - 1.0)
         S = self.j("upper_arm." + side)
         E = self.j("forearm." + side)
         W = self.j("hand." + side)

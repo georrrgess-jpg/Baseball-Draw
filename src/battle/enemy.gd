@@ -105,7 +105,8 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	model = CharacterModel.new()
 	add_child(model)
 	var model_id: String = data.get("model", enemy_id)
-	model.setup(model_id, {"accent": Color("#FF7A1A"), "body": Color("#2B2F36"), "scale": Battle.UNIT_SCALE * (_fallback_scale() if not CharacterModel.has_model(model_id) else 1.0)})
+	model.setup(model_id, {"accent": Color("#FF7A1A"), "body": Color("#2B2F36"), "shadows": is_boss,
+		"scale": Battle.UNIT_SCALE * (_fallback_scale() if not CharacterModel.has_model(model_id) else 1.0)})
 	height = model.height
 	if enemy_id == "decoy":
 		model.set_ghost(0.55)

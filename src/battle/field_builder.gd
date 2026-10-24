@@ -91,7 +91,8 @@ static func build(parent: Node3D, theme: Dictionary, routes: Array) -> ShaderMat
 	dm.albedo_color = dirt.darkened(0.04)
 	dm.roughness = 0.97
 	dm.albedo_texture = nt
-	dm.uv1_scale = Vector3(0.5, 0.5, 0.5)
+	dm.uv1_triplanar = true
+	dm.uv1_scale = Vector3(0.15, 0.15, 0.15)
 	mound.material_override = dm
 	root.add_child(mound)
 	var rubber := MeshInstance3D.new()

@@ -866,10 +866,10 @@ func _build_ambient_particles() -> void:
 			p.amount = int(1200 * scale_amt)
 			p.lifetime = 1.2
 			pm.gravity = Vector3(1.0, -28.0, 0)
-			pm.scale_min = 0.02
-			pm.scale_max = 0.03
-			pm.color = Color(0.7, 0.8, 0.95, 0.45)
-			quad.size = Vector2(0.4, 6.0)
+			pm.scale_min = 1.0
+			pm.scale_max = 1.3
+			pm.color = Color(0.7, 0.8, 0.95, 0.22)
+			quad.size = Vector2(0.025, 1.1)
 			m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
 			pm.emission_box_extents = Vector3(50, 1, 45)
 			p.position = Vector3(0, 20, -6)

@@ -1000,14 +1000,33 @@ func _update_buffs(delta: float) -> void:
 
 # ---------------------------------------------------------------- main loop
 
+## Optional per-section timing (enabled by the performance test).
+var profile_sections := false
+var prof: Dictionary = {}
+var _prof_t := 0
+
+
+func _prof_mark(name: String) -> void:
+	if not profile_sections:
+		return
+	var now := Time.get_ticks_usec()
+	prof[name] = float(prof.get(name, 0.0)) + (now - _prof_t)
+	_prof_t = now
+
+
 func _process(delta: float) -> void:
+	if profile_sections:
+		_prof_t = Time.get_ticks_usec()
+		prof["frames"] = float(prof.get("frames", 0.0)) + 1.0
 	_update_buffs(delta)
+	_prof_mark("buffs_auras")
 	for z in zones.duplicate():
 		z.tick(delta)
 	for w in walls.duplicate():
 		w.tick(delta)
 	for t in traps.duplicate():
 		t.tick(delta)
+	_prof_mark("zones_walls")
 	for e in enemies.duplicate():
 		if is_instance_valid(e):
 			e.tick(delta)
@@ -1015,9 +1034,12 @@ func _process(delta: float) -> void:
 	for c in get_children():
 		if c is Enemy and not (c as Enemy).alive:
 			(c as Enemy).tick(delta)
+	_prof_mark("enemies")
 	for df in defenders:
 		df.tick(delta)
+	_prof_mark("defenders")
 	projectiles.tick(delta)
+	_prof_mark("projectiles")
 	cam.handle_input(delta)
 
 	var active := state == "wave" or practice
@@ -1037,12 +1059,15 @@ func _process(delta: float) -> void:
 				break_timer -= delta
 				if break_timer <= 0.0:
 					begin_wave()
+	_prof_mark("cards_state")
 	_update_hover()
+	_prof_mark("hover")
 	_hud_timer -= delta
 	if _hud_timer <= 0.0:
 		_hud_timer = 0.1
 		if hud.has_method("refresh"):
 			hud.refresh()
+	_prof_mark("hud")
 
 
 func _no_live_enemies() -> bool:
@@ -1291,6 +1316,33 @@ func cycle_defender() -> void:
 	var nxt := defenders[(i + 1) % defenders.size()]
 	select_defender(nxt)
 	cam.set_view(nxt.global_position, cam._t_yaw, cam._t_pitch, minf(cam._t_distance, 30.0))
+
+
+## Replaces a defender on the field with another one at the same spot (Practice Field tool).
+func swap_defender(old: Defender, new_id: String) -> void:
+	if old == null or new_id == old.id:
+		return
+	for df in defenders:
+		if df.id == new_id:
+			return
+	var idx := defenders.find(old)
+	var post := old.post
+	var df := Defender.new()
+	df.name = "Def_" + new_id
+	add_child(df)
+	df.setup(self, new_id, _uniform_colors)
+	defenders[idx] = df
+	run.team[run.team.find(old.id)] = new_id
+	if old.is_captain:
+		run.captain = new_id
+	if selected == old:
+		selected = null
+	old.queue_free()
+	df.place(post)
+	df.set_captain(new_id == run.captain)
+	vfx.burst("magic", df.model.chest_position(), DB.defender_accent(new_id))
+	_refresh_team_stats()
+	select_defender(df)
 
 
 func set_captain(df: Defender) -> void:

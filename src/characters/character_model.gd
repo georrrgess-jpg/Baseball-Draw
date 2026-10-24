@@ -12,6 +12,8 @@ const LOOPING := ["idle", "run", "sprint", "stunned", "celebrate", "ready", "vic
 
 static var _scene_cache := {}
 static var _material_cache := {}
+static var _merged_cache := {}
+static var _merged_material: ShaderMaterial
 static var _overlay: ShaderMaterial
 
 var model_id := ""
@@ -78,8 +80,13 @@ func setup(id: String, opts: Dictionary = {}) -> void:
 			height = aabb.size.y
 	else:
 		_build_fallback(opts)
-	if opts.has("colors"):
+	if _fallback == null and bool(opts.get("merge", true)):
+		_merge_surfaces(opts.get("colors", {}), "%s|%s" % [id, str(opts.get("colors", {}))])
+	elif opts.has("colors"):
 		recolor(opts.colors, opts.get("cache_key", id))
+	if opts.has("shadows"):
+		for m in _meshes:
+			m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if opts.shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var s: float = opts.get("scale", 1.0)
 	if s != 1.0:
 		scale = Vector3.ONE * s
@@ -118,6 +125,106 @@ func _combined_aabb() -> AABB:
 		else:
 			box = box.merge(b)
 	return box
+
+
+static func merged_material() -> ShaderMaterial:
+	if _merged_material == null:
+		_merged_material = ShaderMaterial.new()
+		_merged_material.shader = load("res://assets/shaders/character_merged.gdshader")
+	return _merged_material
+
+
+## Collapses every material surface of each mesh into one vertex-coloured surface
+## (one draw call per character instead of ~15). Uniform colours are baked in, and
+## the result is cached per model + colour set so instances share the mesh.
+func _merge_surfaces(colors: Dictionary, key: String) -> void:
+	for mi in _meshes:
+		if mi.mesh == null or mi.mesh.get_surface_count() <= 1:
+			continue
+		var ck := key + "|" + String(mi.name)
+		var merged: ArrayMesh = _merged_cache.get(ck)
+		if merged == null:
+			merged = _build_merged(mi.mesh, colors)
+			if merged == null:
+				continue
+			_merged_cache[ck] = merged
+		mi.mesh = merged
+		mi.material_override = merged_material()
+
+
+static func _build_merged(src: Mesh, colors: Dictionary) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var cols := PackedColorArray()
+	var uv2 := PackedVector2Array()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	var indices := PackedInt32Array()
+	var use8 := false
+	var skinned := false
+	for s in src.get_surface_count():
+		if src.surface_get_format(s) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS:
+			use8 = true
+	for s in src.get_surface_count():
+		var arr := src.surface_get_arrays(s)
+		var sv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var base := verts.size()
+		var mat := src.surface_get_material(s) as BaseMaterial3D
+		var c := Color(0.8, 0.8, 0.8)
+		var rough := 0.7
+		var metal := 0.0
+		var emis := 0.0
+		if mat:
+			c = mat.albedo_color
+			rough = mat.roughness
+			metal = mat.metallic
+			if mat.emission_enabled:
+				emis = clampf(mat.emission_energy_multiplier / 8.0, 0.0, 1.0)
+				c = mat.emission if mat.emission.v > c.v else c
+			if colors.has(mat.resource_name):
+				c = Color(colors[mat.resource_name])
+		var lin := c.srgb_to_linear()
+		lin.a = emis
+		verts.append_array(sv)
+		if arr[Mesh.ARRAY_NORMAL] != null:
+			normals.append_array(arr[Mesh.ARRAY_NORMAL])
+		else:
+			var z := PackedVector3Array()
+			z.resize(sv.size())
+			normals.append_array(z)
+		for i in sv.size():
+			cols.append(lin)
+			uv2.append(Vector2(rough, metal))
+		if arr[Mesh.ARRAY_BONES] != null:
+			skinned = true
+			var b: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+			var w: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+			var per := 8 if (src.surface_get_format(s) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS) else 4
+			var want := 8 if use8 else 4
+			if per == want:
+				bones.append_array(b)
+				weights.append_array(w)
+			else:
+				for v in sv.size():
+					for k in want:
+						bones.append(b[v * per + k] if k < per else 0)
+						weights.append(w[v * per + k] if k < per else 0.0)
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX] if arr[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(sv.size()))
+		for i in idx:
+			indices.append(base + i)
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	out[Mesh.ARRAY_COLOR] = cols
+	out[Mesh.ARRAY_TEX_UV2] = uv2
+	out[Mesh.ARRAY_INDEX] = indices
+	if skinned:
+		out[Mesh.ARRAY_BONES] = bones
+		out[Mesh.ARRAY_WEIGHTS] = weights
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out, [], {}, Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if use8 else 0)
+	return mesh
 
 
 ## Replaces colours of named materials (Jersey, Pants, Cap...) — used for cosmetic uniforms.

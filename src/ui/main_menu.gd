@@ -25,7 +25,7 @@ func _ready() -> void:
 		routes.append(Route.from_points(r.id, r.gate, r.points))
 	FieldBuilder.build(self, arena.get("theme", {}), routes)
 	stadium.set_excitement(0.35)
-	stadium.scoreboard_ui.flash("BASEBALL DRAW", 9999.0)
+	stadium.scoreboard_ui.flash("PLAY BALL!", 9999.0)
 
 	camera = Camera3D.new()
 	camera.fov = 38.0
@@ -53,9 +53,10 @@ func _ready() -> void:
 
 func _spawn_team() -> void:
 	var colors: Dictionary = DB.uniforms.get(Profile.data.get("uniform", "home"), DB.uniforms.home).colors
+	# A V-shaped hero lineup facing the camera, on the right side of the screen.
 	var spots := [
-		[Vector3(2.4, 0, 5.4), "ready"], [Vector3(4.4, 0, 3.6), "idle"], [Vector3(6.6, 0, 4.6), "victory"],
-		[Vector3(3.0, 0, 1.4), "idle"], [Vector3(5.6, 0, 0.8), "ready"], [Vector3(8.2, 0, 2.2), "idle"],
+		[Vector3(3.7, 0, 9.4), "victory"], [Vector3(2.1, 0, 8.4), "ready"], [Vector3(5.3, 0, 8.5), "idle"],
+		[Vector3(0.6, 0, 7.3), "idle"], [Vector3(6.8, 0, 7.4), "ready"], [Vector3(3.7, 0, 6.6), "idle"],
 	]
 	var team: Array = Profile.data.team
 	for i in mini(team.size(), spots.size()):
@@ -66,8 +67,8 @@ func _spawn_team() -> void:
 		c["Undershirt"] = DB.defender(id).accent
 		cm.setup(id, {"accent": DB.defender_accent(id), "colors": c, "cache_key": id, "base": spots[i][1]})
 		cm.position = spots[i][0]
-		var to := Vector3(4.0, 0, 13.5) - cm.position
-		cm.rotation.y = atan2(to.x, to.z) + randf_range(-0.35, 0.35)
+		var to := Vector3(0.5, 0, 17.0) - cm.position
+		cm.rotation.y = atan2(to.x, to.z) + randf_range(-0.2, 0.2)
 		models.append(cm)
 		var shadow := Enemy._make_blob_shadow(0.5)
 		cm.add_child(shadow)
@@ -76,8 +77,8 @@ func _spawn_team() -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	# Slow cinematic orbit in front of home plate.
-	camera.position = Vector3(0.2 + sin(_t * 0.06) * 1.4, 2.7 + sin(_t * 0.09) * 0.25, 12.8 + cos(_t * 0.05) * 0.6)
-	camera.look_at(Vector3(1.6 + sin(_t * 0.04) * 0.4, 1.9, 1.5), Vector3.UP)
+	camera.position = Vector3(-0.4 + sin(_t * 0.06) * 0.8, 1.8 + sin(_t * 0.09) * 0.15, 16.6 + cos(_t * 0.05) * 0.4)
+	camera.look_at(Vector3(2.4 + sin(_t * 0.04) * 0.3, 2.3, 4.0), Vector3.UP)
 	_throw_t -= delta
 	if _throw_t <= 0.0 and models.size() >= 2:
 		_throw_t = randf_range(2.4, 3.6)
@@ -284,9 +285,9 @@ func _next_unlock_text() -> String:
 func _show_welcome() -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.08, 0.14, 0.96), Color(UITheme.SCARLET, 0.7), 2, 12, 22))
-	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	p.position = Vector2(-60, -330)
-	p.custom_minimum_size = Vector2(620, 0)
+	p.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	p.position = Vector2(-600, -290)
+	p.custom_minimum_size = Vector2(560, 0)
 	ui.add_child(p)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 8)
@@ -294,7 +295,7 @@ func _show_welcome() -> void:
 	vb.add_child(UITheme.header("WELCOME, MANAGER!", 34, UITheme.GOLD))
 	var txt := UITheme.label("Rival runners are storming the Steel Yard. Position your six defenders, draw ability cards and keep runners off home plate. Three runs and the game is over.\n\nStart with QUICK DEFENSE on Rookie or Standard — three innings, about ten minutes.", 19, UITheme.OFFWHITE)
 	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	txt.custom_minimum_size = Vector2(580, 0)
+	txt.custom_minimum_size = Vector2(520, 0)
 	vb.add_child(txt)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 10)

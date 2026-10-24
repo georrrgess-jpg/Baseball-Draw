@@ -93,6 +93,97 @@
   "seconds": 159.5,
   "tris": 13675
  },
+ "armored": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.465m@0.97s",
+     "Rarm:0.548m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.069m@0.00s",
+     "Rarm:0.068m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.031m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.095m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.863,
+  "id": "armored",
+  "kind": "enemy",
+  "seconds": 125.2,
+  "tris": 8707
+ },
  "bruno": {
   "anims": {
    "catch": {
@@ -186,6 +277,97 @@
   "kind": "defender",
   "seconds": 155.1,
   "tris": 13572
+ },
+ "captain": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.470m@0.97s",
+     "Rarm:0.553m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.070m@0.00s",
+     "Rarm:0.068m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.031m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.096m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.923,
+  "id": "captain",
+  "kind": "enemy",
+  "seconds": 87.4,
+  "tris": 8709
  },
  "dex": {
   "anims": {
@@ -281,6 +463,98 @@
   "seconds": 140.5,
   "tris": 13568
  },
+ "grand_slammer": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": [
+     "Lleg:0.006m@0.42s",
+     "Rleg:0.006m@0.42s"
+    ]
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:1.028m@0.97s",
+     "Rarm:1.240m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.160m@0.00s",
+     "Rarm:0.157m@0.28s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.069m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 4.207,
+  "id": "grand_slammer",
+  "kind": "boss",
+  "seconds": 142.2,
+  "tris": 21312
+ },
  "hana": {
   "anims": {
    "catch": {
@@ -375,6 +649,98 @@
   "seconds": 198.5,
   "tris": 13559
  },
+ "iron_slugger": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": [
+     "Lleg:0.005m@0.42s",
+     "Rleg:0.005m@0.42s"
+    ]
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.878m@0.97s",
+     "Rarm:1.061m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.137m@0.00s",
+     "Rarm:0.135m@0.28s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.059m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 3.537,
+  "id": "iron_slugger",
+  "kind": "boss",
+  "seconds": 178.7,
+  "tris": 21321
+ },
  "jax": {
   "anims": {
    "catch": {
@@ -468,6 +834,97 @@
   "kind": "defender",
   "seconds": 142.3,
   "tris": 13556
+ },
+ "jumper": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.473m@0.97s",
+     "Rarm:0.549m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.064m@0.00s",
+     "Rarm:0.063m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.029m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.089m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.786,
+  "id": "jumper",
+  "kind": "enemy",
+  "seconds": 104.8,
+  "tris": 8712
  },
  "kai": {
   "anims": {
@@ -747,6 +1204,100 @@
   "seconds": 196.5,
   "tris": 13559
  },
+ "phantom_captain": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": [
+     "Lleg:0.005m@0.42s",
+     "Rleg:0.005m@0.42s"
+    ]
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.732m@0.97s",
+     "Rarm:0.871m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.067m@0.00s",
+     "Rarm:0.065m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.052m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.108m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 3.206,
+  "id": "phantom_captain",
+  "kind": "boss",
+  "seconds": 170.2,
+  "tris": 16969
+ },
  "rico": {
   "anims": {
    "catch": {
@@ -884,8 +1435,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.436m@0.97s",
-     "Rarm:0.515m@0.97s"
+     "Larm:0.434m@0.97s",
+     "Rarm:0.513m@0.97s"
     ]
    },
    "sprint": {
@@ -893,7 +1444,7 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.066m@0.00s",
+     "Larm:0.065m@0.00s",
      "Rarm:0.064m@0.27s"
     ]
    },
@@ -929,7 +1480,377 @@
   "height": 1.765,
   "id": "runner",
   "kind": "enemy",
-  "seconds": 45.6,
-  "tris": 8980
+  "seconds": 125.0,
+  "tris": 8714
+ },
+ "slugger": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": [
+     "Lleg:0.003m@0.42s",
+     "Rleg:0.003m@0.42s"
+    ]
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.586m@0.97s",
+     "Rarm:0.707m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.091m@0.00s",
+     "Rarm:0.090m@0.28s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.040m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 2.358,
+  "id": "slugger",
+  "kind": "enemy",
+  "seconds": 170.1,
+  "tris": 8713
+ },
+ "sprinter": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.470m@0.97s",
+     "Rarm:0.547m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.064m@0.00s",
+     "Rarm:0.063m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.029m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.089m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.785,
+  "id": "sprinter",
+  "kind": "enemy",
+  "seconds": 231.9,
+  "tris": 8714
+ },
+ "swarmer": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": [
+     "Rarm:0.046m@0.45s"
+    ]
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": [
+     "Larm:0.047m@0.00s",
+     "Rarm:0.047m@0.35s"
+    ]
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.258m@0.97s",
+     "Rarm:0.320m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.088m@0.00s",
+     "Rarm:0.087m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.056m@0.55s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.104m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.19,
+  "id": "swarmer",
+  "kind": "enemy",
+  "seconds": 90.4,
+  "tris": 8838
+ },
+ "trickster": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.414m@0.97s",
+     "Rarm:0.494m@0.97s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.037m@0.00s",
+     "Rarm:0.036m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.030m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.062m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.82,
+  "id": "trickster",
+  "kind": "enemy",
+  "seconds": 120.8,
+  "tris": 8705
  }
 }
