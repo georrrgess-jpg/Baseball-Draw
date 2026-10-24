@@ -16,7 +16,7 @@ shot() { # name seconds args...
 		echo "FAILED $name"
 	fi
 }
-shot main_menu 9 --scene=main_menu --profile=shots --no-help
+shot main_menu 9 --scene=main_menu --profile=shots_menu --fresh-profile --no-help
 shot battle 18 --test-battle=quick --auto --profile=shots
 shot action 20 --test-battle=standard --auto --profile=shots --start-inning=4 --cam-view=0,-6,18,-36,26
 shot boss 22 --test-battle=standard --auto --profile=shots --start-inning=9 --start-wave=2 --cam-view=0,-10,15,-38,32

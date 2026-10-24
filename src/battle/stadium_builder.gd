@@ -21,6 +21,7 @@ var scoreboard_viewport: SubViewport
 var scoreboard_ui: Control
 var rng := RandomNumberGenerator.new()
 var _mat_cache := {}
+var arena_name := ""
 
 
 static func prop(name: String) -> Node3D:
@@ -36,6 +37,7 @@ static func prop(name: String) -> Node3D:
 
 func build(parent: Node3D, arena: Dictionary, p_layout: Dictionary, with_gameplay := true) -> Node3D:
 	theme = arena.get("theme", {})
+	arena_name = str(arena.get("name", ""))
 	layout = p_layout
 	rng.seed = hash(arena.get("id", "x"))
 	root = Node3D.new()
@@ -584,6 +586,7 @@ func _build_scoreboard() -> void:
 		board.add_child(screen)
 	else:
 		screen = board.find_child("Screen", true, false) as MeshInstance3D
+		_add_scoreboard_nameplate(board)
 	root.add_child(board)
 	_face(board, pos, Field.HOME)
 	board.scale = Vector3.ONE * 1.15
@@ -603,6 +606,41 @@ func _build_scoreboard() -> void:
 		m.emission_energy_multiplier = 1.4
 		m.roughness = 0.4
 		screen.material_override = m
+
+
+## The scoreboard model has a header plate with one stadium's name modelled in; cover it
+## with a plate in the frame's own scarlet steel and this arena's name.
+func _add_scoreboard_nameplate(board: Node3D) -> void:
+	if arena_name == "":
+		return
+	var plate_mat: Material = null
+	var frame := board.find_child("ScoreboardFrame", true, false) as MeshInstance3D
+	if frame and frame.mesh:
+		for i in frame.mesh.get_surface_count():
+			var m := frame.mesh.surface_get_material(i)
+			if m and m.resource_name == "SteelScarlet":
+				plate_mat = m
+	if plate_mat == null:
+		plate_mat = _mat(Color(0.62, 0.08, 0.1), 0.5, 0.6)
+	var plate := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(9.3, 1.08, 0.1)
+	plate.mesh = bm
+	plate.material_override = plate_mat
+	plate.position = Vector3(0, 14.75, 0.5)
+	board.add_child(plate)
+	var label := Label3D.new()
+	label.text = arena_name.to_upper()
+	label.font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	label.font_size = 96
+	label.outline_size = 0
+	label.modulate = Color(0.95, 0.95, 0.92)
+	label.shaded = true
+	label.double_sided = false
+	var text_w := label.font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x
+	label.pixel_size = minf(0.0095, 8.6 / maxf(text_w, 1.0))
+	label.position = Vector3(0, 14.75, 0.56)
+	board.add_child(label)
 
 
 func _build_banners() -> void:

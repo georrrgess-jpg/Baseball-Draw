@@ -165,6 +165,8 @@ func _ready() -> void:
 			var v := a.split("=")[1].split(",")
 			cam.set_view(Vector3(float(v[0]), 0, float(v[1])), float(v[2]), float(v[3]), float(v[4]), true)
 			cam.cinematic = true
+		elif a == "--no-hud":
+			hud.visible = false
 	if auto_test:
 		var ap := Autopilot.new()
 		ap.battle = self
@@ -190,8 +192,19 @@ func _intro() -> void:
 			run.coins = 260
 			_open_dugout()
 		elif "--show-results" in args:
-			run.outs_total = 140
+			# Screenshot/debug shortcut: a plausible finished three-inning game.
+			run.outs_total = 64
 			run.coins_earned = 400
+			run.score = 6850
+			run.runs = 1
+			run.stats.cards_played = 14
+			run.stats.double_plays = 5
+			run.stats.triple_plays = 1
+			run.stats.max_combo = 4
+			run.stats.bosses = [run.boss_for_inning(run.inning)] if run.boss_for_inning(run.inning) != "" else []
+			for i in run.team.size():
+				run.stats.damage_by[run.team[i]] = 1800 + 700 * ((i * 5) % 6)
+				run.stats.outs_by[run.team[i]] = 6 + (i * 7) % 9
 			finish_run(true)
 		elif typeof(resume) == TYPE_DICTIONARY and bool(resume.get("in_dugout", false)):
 			_open_dugout()
