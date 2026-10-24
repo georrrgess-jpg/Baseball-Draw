@@ -176,9 +176,9 @@
   {
    "id": "grand_slammer",
    "name": "Grand Slammer",
-   "hp": 6200,
+   "hp": 5200,
    "speed": 1.15,
-   "armor": 0.4,
+   "armor": 0.3,
    "evasion": 0.0,
    "runs": 3,
    "coins": 120,

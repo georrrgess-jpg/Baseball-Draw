@@ -23,6 +23,7 @@ var _left: VBoxContainer
 var _rarity_btns := {}
 var _cat_btns := {}
 var _dirty := false
+var _search: LineEdit
 
 
 func _ready() -> void:
@@ -85,7 +86,8 @@ func _build_filters() -> Control:
 	vb.add_child(row1)
 	row1.add_child(UITheme.icon_rect("search", 26, UITheme.MUTED))
 	var le := LineEdit.new()
-	le.placeholder_text = "Search cards..."
+	_search = le
+	le.placeholder_text = "Search cards... (F)"
 	le.custom_minimum_size = Vector2(260, 0)
 	le.text_changed.connect(func(t: String) -> void:
 		search = t.to_lower()
@@ -572,6 +574,14 @@ func _test_deck() -> void:
 	var cfg := Session.new_run_config("practice")
 	cfg.deck = deck.duplicate()
 	Session.start(cfg)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("info") and _search and not _search.has_focus():
+		_search.grab_focus()
+		get_viewport().set_input_as_handled()
+		return
+	super._unhandled_input(event)
 
 
 func go_back() -> void:

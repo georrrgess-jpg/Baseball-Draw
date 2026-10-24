@@ -44,7 +44,9 @@ Detailed asset reports (dimensions, triangle counts, animation timings, loudness
 Characters share one 22-bone armature and one animation set (idle, ready, run, sprint, walk, throw, pitch,
 catch, special, hit, stunned, defeat, celebrate, victory, leap, swing, slam, taunt). At load time each
 character's 13–17 material surfaces are merged into a single vertex-coloured surface (uniform colours baked in,
-cached per model) so a character costs one draw call.
+cached per model) so a character costs one draw call; translucent surfaces (the Phantom Captain's cape) keep their
+own material as a second surface. Clips are baked at 60 Hz so the gameplay events tied to them (ball release,
+catch, bat impact, slam impact) land on exact frames; looping clips have identical first and last keys.
 
 ## 3. Implemented features
 
@@ -85,11 +87,12 @@ cached per model) so a character costs one draw call.
 | Check | How | Result |
 |---|---|---|
 | Every script parses and compiles with autoloads | `tools/check_scripts.sh` | 49 scripts, 0 failures |
-| System tests | `tests/test_suite.tscn` | 865 checks, 0 failures |
+| System tests | `tests/test_suite.tscn` | 859 checks, 0 failures |
 | Interactive flows through simulated mouse/keyboard | `tests/ui_flow_test.gd` | 51 checks, 0 failures |
 | Full runs, all modes | autopilot (`--auto`), `tools/simulate.sh` | Standard, Quick, Endless, Practice completed; wins and losses both reached |
 | Packaged build | Linux export of the same pack as Windows, autopilot game | Completed a Quick Defense win from the exported binary |
 | Windows export | `--export-release "Windows Desktop"` | `BaseballDraw.exe` + `BaseballDraw.pck` produced |
+| Final art in engine | `tools/capture_screenshots.sh` (15 scenes rendered by the game itself) | See section 7 |
 
 The system suite covers data integrity (art for every card, signatures, layouts ending at home plate...),
 save/load round trips, corrupt-save recovery, profile repair, card upgrades, gear and traits affecting stats,
@@ -104,16 +107,22 @@ main-menu destination.
 
 ### Balance simulations (autopilot, fresh level-1 profile)
 
+Balance was iterated in several rounds of simulated games. The first build was far too easy (both bots
+won Standard Siege without allowing a run), so shields were changed to stop one run each, coin income
+was cut, enemy scaling steepened, energy slowed, and bosses tuned individually. Final numbers:
+
 | Mode / difficulty | Card-playing bot | No-cards bot |
 |---|---|---|
-| Standard Siege / Rookie | Won 9/9, 0 runs | Won, 1 run |
-| Standard Siege / Standard | Lost in the 9th to the Grand Slammer (before its HP was lowered) | Lost in the 6th and the 9th |
-| Standard Siege / Veteran | Lost in the 8th | — |
+| Standard Siege / Rookie | Won, 0 runs allowed | Won, 1 run allowed |
+| Standard Siege / Standard | 1 win (all three bosses beaten), 1 loss in the 9th | Lost in the 9th |
+| Standard Siege / Veteran | Lost in the 9th | — |
+| Standard Siege / Legend | Lost in the 8th | — |
 | Quick Defense / Standard | Won (easy by design: a three-inning build-testing mode) | Won |
-| Endless / Standard | Reached inning 6 | — |
+| The Endless Ninth / Standard | Reached inning 13 | — |
 
-The bot plays cards at reasonable but unsophisticated targets, so human players should do somewhat better.
-Permanent progression (defender levels, gear, card levels) makes later runs easier, as intended.
+The bot plays cards at sensible but unfocused targets (it does not save Time Out or Power Catch for bosses),
+so a human player should do better. Permanent progression (defender levels, gear, card levels) makes later
+runs easier, as intended.
 
 ## 5. Performance
 
@@ -135,8 +144,27 @@ Measured with `tests/perf_test.gd` (Practice Field stress test):
   the identical game pack was run successfully through the Linux export.
 * Characters are procedural sculpts with flat-coloured materials (no texture maps); faces are modelled
   geometry. Animations are keyframed procedurally; they read well at gameplay distance but are not motion-capture
-  quality.
+  quality. There are no finger or face bones (fixed hand poses, no blinking) and no corrective shapes, so the crotch
+  and shoulders stretch a little in wide stances and with the arm fully raised. Capes, hoods, scarves and the
+  ponytail follow the spine rather than simulating cloth; at the end of `defeat` the bosses' capes dip into the
+  ground, and shoe tips can dip 2–5 cm below the ground on single frames.
 * Music and sound effects are synthesised; instruments and crowd voices are stylised approximations.
 * The `.exe` does not embed the custom icon (that needs `rcedit` on the build machine); the window icon is set
   at runtime.
 * Balance was tuned with a bot; it should be refined with human playtesting.
+
+## 7. Screenshots
+
+Rendered by the game itself with `tools/capture_screenshots.sh` (Godot under a virtual display, software
+Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
+
+| | |
+|---|---|
+| ![Main menu](screenshots/main_menu.jpg) Main menu with the live 3D lineup | ![Battle](screenshots/battle.jpg) Quick Defense, inning 1 |
+| ![Action](screenshots/action.jpg) Mid-game, inning 4 | ![Boss](screenshots/boss.jpg) Grand Slammer, inning 9 |
+| ![Setup](screenshots/setup.jpg) Setup phase: zones, routes, formation panel | ![Help](screenshots/help.jpg) First-battle help panel |
+| ![Dugout](screenshots/dugout.jpg) Between-innings dugout | ![Results](screenshots/results.jpg) Results screen |
+| ![Play menu](screenshots/play_menu.jpg) Play menu | ![Deck builder](screenshots/deck_builder.jpg) Deck builder |
+| ![Roster](screenshots/roster.jpg) Roster with 3D showcase | ![Progression](screenshots/progression.jpg) Progression |
+| ![Neon Diamond](screenshots/arena_neon_diamond.jpg) Neon Diamond | ![Frostpark](screenshots/arena_frostpark.jpg) Frostpark |
+| ![Champion's Citadel](screenshots/arena_champions_citadel.jpg) Champion's Citadel | |

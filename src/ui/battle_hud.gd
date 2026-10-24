@@ -81,7 +81,8 @@ func _ready() -> void:
 	battle.wave_started.connect(func(_w: Dictionary) -> void: refresh())
 	_rebuild_hand()
 	_on_state(battle.state)
-	if not battle.practice and not battle.auto_test and not bool(Profile.data.flags.get("battle_help", false)):
+	if not battle.practice and not battle.auto_test and not bool(Profile.data.flags.get("battle_help", false)) \
+			and not "--no-help" in OS.get_cmdline_user_args():
 		_show_help()
 
 

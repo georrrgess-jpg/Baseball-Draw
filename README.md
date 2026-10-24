@@ -6,7 +6,14 @@ Baseball Draw is a 3D baseball tower-defense deckbuilder for Windows PC, built w
 Command six fictional baseball defenders on a fortified stadium diamond, position them tactically,
 and play ability cards to stop waves of rival runners — and their bosses — from reaching home plate.
 
-![Battle](docs/screenshots/battle.png)
+![Battle](docs/screenshots/battle.jpg)
+
+| | |
+|---|---|
+| ![Main menu](docs/screenshots/main_menu.jpg) | ![Boss fight](docs/screenshots/boss.jpg) |
+| ![Deck builder](docs/screenshots/deck_builder.jpg) | ![Dugout](docs/screenshots/dugout.jpg) |
+
+All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`); more in `docs/screenshots/`.
 
 ## Features
 
@@ -78,9 +85,11 @@ Keyboard bindings can be changed in **Settings → Controls**. Click the minimap
 
 ### Windows build
 
-The **Build Baseball Draw** GitHub Actions workflow exports the game: open the repository's *Actions* tab,
-choose *Build Baseball Draw*, click *Run workflow*, then download the `BaseballDraw-Windows` artifact.
-Unzip it and run `BaseballDraw.exe` (keep `BaseballDraw.pck` next to it). A Linux build is produced too.
+The **Build Baseball Draw** GitHub Actions workflow imports the project, runs the automated tests and exports
+the game. It runs on pushes to `main`, on `v*` tags, on any push whose commit message contains `[build]`, and on
+demand (repository *Actions* tab → *Build Baseball Draw* → *Run workflow*). Download the `BaseballDraw-Windows`
+artifact from the run, unzip it and run `BaseballDraw.exe` (keep `BaseballDraw.pck` next to it).
+A Linux build is produced too.
 
 ### From source
 
@@ -100,6 +109,8 @@ godot --headless --path . res://tests/test_suite.tscn -- --profile=unittest --fr
 xvfb-run godot --path . -- --ui-test --profile=uitest --fresh-profile     # simulated mouse/keyboard flows
 tools/simulate.sh standard standard 2     # autopilot games for balance (add --no-cards)
 tools/shot.sh out.png 15 --test-battle=quick --auto --profile=test        # in-engine screenshot
+tools/capture_screenshots.sh              # re-render docs/screenshots/
+godot --path . -- --perf-test --profile=perf                              # stress test / frame timings
 ```
 
 See [docs/DEVELOPMENT_REPORT.md](docs/DEVELOPMENT_REPORT.md) for what was built and verified.

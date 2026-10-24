@@ -54,7 +54,7 @@ static func generate(run: RunState, wave_index: int, route_count: int) -> Dictio
 	if ei > 9.0:
 		budget *= pow(1.08, ei - 9.0)
 	if boss != "":
-		budget *= 0.45
+		budget *= 0.35
 
 	# Enemy pool for this inning.
 	var pool: Array[String] = []

@@ -132,7 +132,6 @@ func _build_ui() -> void:
 	grad.texture = gt
 	grad.set_anchors_preset(Control.PRESET_LEFT_WIDE)
 	grad.custom_minimum_size = Vector2(900, 0)
-	grad.size = Vector2(900, 1080)
 	grad.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	grad.stretch_mode = TextureRect.STRETCH_SCALE
 	grad.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -202,7 +201,7 @@ func _build_ui() -> void:
 	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	ver.position = Vector2(-380, -36)
 	ui.add_child(ver)
-	if not bool(Profile.data.flags.get("tutorial_done", false)):
+	if not bool(Profile.data.flags.get("tutorial_done", false)) and not "--no-help" in OS.get_cmdline_user_args():
 		_show_welcome()
 
 
@@ -210,7 +209,10 @@ func _build_profile_panel() -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.04, 0.07, 0.12, 0.88), Color(UITheme.GOLD, 0.35), 1, 12, 18))
 	p.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	p.position = Vector2(-470, 40)
+	p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	p.offset_left = -470.0
+	p.offset_right = -40.0
+	p.offset_top = 40.0
 	p.custom_minimum_size = Vector2(430, 0)
 	ui.add_child(p)
 	_profile_box = VBoxContainer.new()
@@ -264,7 +266,9 @@ func _build_profile_panel() -> void:
 	_profile_box.add_child(UITheme.header("RECENT PROGRESS", 24, UITheme.GOLD))
 	var hist: Array = d.history
 	if hist.is_empty():
-		_profile_box.add_child(UITheme.label("No games played yet. Hit PLAY to start your first siege!", 18, UITheme.MUTED))
+		var none := UITheme.label("No games played yet. Hit PLAY to start your first siege!", 18, UITheme.MUTED)
+		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_profile_box.add_child(none)
 	for h in hist.slice(0, 3):
 		var txt := "%s  %s · %s · inning %d · %s pts" % ["W" if h.won else "L", DB.mode(h.mode).name, DB.difficulty(h.difficulty).name, int(h.inning), UITheme.format_int(int(h.score))]
 		_profile_box.add_child(UITheme.label(txt, 18, UITheme.GREEN if h.won else Color(1.0, 0.55, 0.5), UITheme.font_body()))

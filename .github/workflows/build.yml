@@ -2,19 +2,22 @@ name: Build Baseball Draw
 
 # Builds the Windows (and Linux) game from source, runs the automated tests,
 # and uploads the playable builds as workflow artifacts.
-# Runs on demand (Actions tab -> "Build Baseball Draw" -> Run workflow),
-# on version tags (v*), and on pushes to main.
+# Runs on demand (Actions tab -> "Build Baseball Draw" -> Run workflow), on version
+# tags (v*), on pushes to main, and on any push whose commit message contains "[build]".
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    tags: ["v*"]
 
 env:
   GODOT_VERSION: 4.7.2
 
 jobs:
   build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      contains(github.event.head_commit.message, '[build]')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

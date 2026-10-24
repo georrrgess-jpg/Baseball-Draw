@@ -134,9 +134,10 @@ static func merged_material() -> ShaderMaterial:
 	return _merged_material
 
 
-## Collapses every material surface of each mesh into one vertex-coloured surface
+## Collapses every opaque material surface of each mesh into one vertex-coloured surface
 ## (one draw call per character instead of ~15). Uniform colours are baked in, and
 ## the result is cached per model + colour set so instances share the mesh.
+## Transparent surfaces (the Phantom Captain's cape) stay separate with their own material.
 func _merge_surfaces(colors: Dictionary, key: String) -> void:
 	for mi in _meshes:
 		if mi.mesh == null or mi.mesh.get_surface_count() <= 1:
@@ -149,7 +150,6 @@ func _merge_surfaces(colors: Dictionary, key: String) -> void:
 				continue
 			_merged_cache[ck] = merged
 		mi.mesh = merged
-		mi.material_override = merged_material()
 
 
 static func _build_merged(src: Mesh, colors: Dictionary) -> ArrayMesh:
@@ -165,11 +165,15 @@ static func _build_merged(src: Mesh, colors: Dictionary) -> ArrayMesh:
 	for s in src.get_surface_count():
 		if src.surface_get_format(s) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS:
 			use8 = true
+	var transparent: Array[int] = []
 	for s in src.get_surface_count():
+		var mat := src.surface_get_material(s) as BaseMaterial3D
+		if mat and (mat.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED or mat.albedo_color.a < 0.99):
+			transparent.append(s)
+			continue
 		var arr := src.surface_get_arrays(s)
 		var sv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 		var base := verts.size()
-		var mat := src.surface_get_material(s) as BaseMaterial3D
 		var c := Color(0.8, 0.8, 0.8)
 		var rough := 0.7
 		var metal := 0.0
@@ -224,6 +228,11 @@ static func _build_merged(src: Mesh, colors: Dictionary) -> ArrayMesh:
 		out[Mesh.ARRAY_WEIGHTS] = weights
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out, [], {}, Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if use8 else 0)
+	mesh.surface_set_material(0, merged_material())
+	for s in transparent:
+		var flags: int = src.surface_get_format(s) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, src.surface_get_arrays(s), [], {}, flags)
+		mesh.surface_set_material(mesh.get_surface_count() - 1, src.surface_get_material(s))
 	return mesh
 
 

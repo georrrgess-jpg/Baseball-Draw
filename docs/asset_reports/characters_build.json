@@ -90,7 +90,7 @@
   "height": 1.814,
   "id": "ace",
   "kind": "defender",
-  "seconds": 149.5,
+  "seconds": 156.4,
   "tris": 13675
  },
  "armored": {
@@ -181,7 +181,7 @@
   "height": 1.863,
   "id": "armored",
   "kind": "enemy",
-  "seconds": 135.5,
+  "seconds": 98.8,
   "tris": 8707
  },
  "bruno": {
@@ -275,7 +275,7 @@
   "height": 1.951,
   "id": "bruno",
   "kind": "defender",
-  "seconds": 174.9,
+  "seconds": 145.5,
   "tris": 13570
  },
  "captain": {
@@ -366,7 +366,7 @@
   "height": 1.923,
   "id": "captain",
   "kind": "enemy",
-  "seconds": 139.9,
+  "seconds": 115.2,
   "tris": 8709
  },
  "dex": {
@@ -460,7 +460,7 @@
   "height": 1.778,
   "id": "dex",
   "kind": "defender",
-  "seconds": 135.7,
+  "seconds": 134.6,
   "tris": 13560
  },
  "grand_slammer": {
@@ -469,10 +469,7 @@
     "frames": 61,
     "length": 1.0,
     "loop": true,
-    "warn": [
-     "Lleg:0.006m@0.42s",
-     "Rleg:0.006m@0.42s"
-    ]
+    "warn": []
    },
    "defeat": {
     "frames": 73,
@@ -552,7 +549,7 @@
   "height": 4.207,
   "id": "grand_slammer",
   "kind": "boss",
-  "seconds": 150.8,
+  "seconds": 139.0,
   "tris": 21312
  },
  "hana": {
@@ -646,7 +643,7 @@
   "height": 1.722,
   "id": "hana",
   "kind": "defender",
-  "seconds": 110.4,
+  "seconds": 78.3,
   "tris": 13559
  },
  "iron_slugger": {
@@ -655,10 +652,7 @@
     "frames": 61,
     "length": 1.0,
     "loop": true,
-    "warn": [
-     "Lleg:0.005m@0.42s",
-     "Rleg:0.005m@0.42s"
-    ]
+    "warn": []
    },
    "defeat": {
     "frames": 73,
@@ -738,7 +732,7 @@
   "height": 3.537,
   "id": "iron_slugger",
   "kind": "boss",
-  "seconds": 189.0,
+  "seconds": 168.5,
   "tris": 21315
  },
  "jax": {
@@ -832,7 +826,7 @@
   "height": 1.923,
   "id": "jax",
   "kind": "defender",
-  "seconds": 229.6,
+  "seconds": 201.3,
   "tris": 13558
  },
  "jumper": {
@@ -923,7 +917,7 @@
   "height": 1.786,
   "id": "jumper",
   "kind": "enemy",
-  "seconds": 173.9,
+  "seconds": 166.7,
   "tris": 8712
  },
  "kai": {
@@ -1013,7 +1007,7 @@
   "height": 1.929,
   "id": "kai",
   "kind": "defender",
-  "seconds": 165.3,
+  "seconds": 115.2,
   "tris": 13577
  },
  "maya": {
@@ -1107,7 +1101,7 @@
   "height": 1.733,
   "id": "maya",
   "kind": "defender",
-  "seconds": 168.0,
+  "seconds": 162.1,
   "tris": 13754
  },
  "nova": {
@@ -1201,7 +1195,7 @@
   "height": 1.751,
   "id": "nova",
   "kind": "defender",
-  "seconds": 200.9,
+  "seconds": 198.3,
   "tris": 13557
  },
  "phantom_captain": {
@@ -1210,10 +1204,7 @@
     "frames": 61,
     "length": 1.0,
     "loop": true,
-    "warn": [
-     "Lleg:0.005m@0.42s",
-     "Rleg:0.005m@0.42s"
-    ]
+    "warn": []
    },
    "defeat": {
     "frames": 73,
@@ -1295,7 +1286,7 @@
   "height": 3.206,
   "id": "phantom_captain",
   "kind": "boss",
-  "seconds": 118.8,
+  "seconds": 118.0,
   "tris": 16961
  },
  "rico": {
@@ -1389,7 +1380,7 @@
   "height": 1.768,
   "id": "rico",
   "kind": "defender",
-  "seconds": 167.3,
+  "seconds": 136.4,
   "tris": 13555
  },
  "runner": {
@@ -1480,7 +1471,7 @@
   "height": 1.765,
   "id": "runner",
   "kind": "enemy",
-  "seconds": 119.0,
+  "seconds": 95.5,
   "tris": 8714
  },
  "slugger": {
@@ -1489,10 +1480,7 @@
     "frames": 61,
     "length": 1.0,
     "loop": true,
-    "warn": [
-     "Lleg:0.003m@0.42s",
-     "Rleg:0.003m@0.42s"
-    ]
+    "warn": []
    },
    "defeat": {
     "frames": 73,
@@ -1572,7 +1560,7 @@
   "height": 2.358,
   "id": "slugger",
   "kind": "enemy",
-  "seconds": 134.8,
+  "seconds": 122.9,
   "tris": 8709
  },
  "sprinter": {
@@ -1663,7 +1651,7 @@
   "height": 1.785,
   "id": "sprinter",
   "kind": "enemy",
-  "seconds": 189.6,
+  "seconds": 187.7,
   "tris": 8713
  },
  "swarmer": {
@@ -1759,7 +1747,7 @@
   "height": 1.19,
   "id": "swarmer",
   "kind": "enemy",
-  "seconds": 144.9,
+  "seconds": 127.4,
   "tris": 8838
  },
  "trickster": {
@@ -1850,7 +1838,7 @@
   "height": 1.82,
   "id": "trickster",
   "kind": "enemy",
-  "seconds": 113.1,
+  "seconds": 105.6,
   "tris": 8707
  }
 }
