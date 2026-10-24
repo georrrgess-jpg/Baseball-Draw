@@ -38,17 +38,30 @@ jobs:
       - name: Import project
         run: godot --headless --path . --import || true
 
+      # Each test exits non-zero on failure (the default shell runs with pipefail);
+      # the autopilot game must reach the results screen. A summary goes on the run page.
       - name: Run automated tests
         run: |
-          godot --headless --path . res://tests/check_all.tscn
-          godot --headless --path . res://tests/test_suite.tscn -- --profile=ci --fresh-profile
-          godot --headless --path . --fixed-fps 30 -- --test-battle=quick --auto --profile=ci_sim --fresh-profile
+          godot --headless --path . res://tests/check_all.tscn 2>&1 | tee check.log
+          godot --headless --path . res://tests/test_suite.tscn -- --profile=ci --fresh-profile 2>&1 | tee suite.log
+          godot --headless --path . --fixed-fps 30 -- --test-battle=quick --auto --profile=ci_sim --fresh-profile 2>&1 | tee sim.log
+          {
+            echo "### Automated tests"
+            echo '```'
+            grep -h "CHECKED" check.log
+            grep -h "checks, " suite.log
+            grep -h "FINISHED" sim.log || echo "autopilot game did not finish"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -q "FINISHED" sim.log
 
       - name: Export Windows and Linux builds
         run: |
           mkdir -p build/windows build/linux
-          godot --headless --path . --export-release "Windows Desktop" build/windows/BaseballDraw.exe
-          godot --headless --path . --export-release "Linux" build/linux/BaseballDraw.x86_64
+          godot --headless --path . --export-release "Windows Desktop" build/windows/BaseballDraw.exe > export_windows.log 2>&1 || { tail -40 export_windows.log; exit 1; }
+          godot --headless --path . --export-release "Linux" build/linux/BaseballDraw.x86_64 > export_linux.log 2>&1 || { tail -40 export_linux.log; exit 1; }
+          test -s build/windows/BaseballDraw.pck && test -s build/linux/BaseballDraw.pck
+          ls -la build/windows build/linux
           cp README.md build/windows/ && cp README.md build/linux/
 
       - uses: actions/upload-artifact@v4
