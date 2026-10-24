@@ -51,6 +51,7 @@ func test_data() -> void:
 		ok(c.target in ["none", "enemy", "area", "path", "defender"], "%s target valid" % id)
 		ok(int(c.cost) >= 0 and int(c.cost) <= 10, "%s cost within energy cap" % id)
 		ok(DB.card_texture(id) != null, "%s has card art" % id)
+		ok(DB.icon(str(c.category)) != null, "%s has a category icon" % id)
 		ok(not "{" in DB.card_text(id, 1), "%s text placeholders resolve" % id)
 		if c.has("linked"):
 			ok(DB.defenders.has(c.linked), "%s linked defender exists" % id)
@@ -79,6 +80,12 @@ func test_data() -> void:
 			ok(DB.cards.has(cid), "combo card %s exists" % cid)
 	for uid in DB.upgrade_order:
 		ok(not DB.upgrades[uid].effect.is_empty(), "upgrade %s has an effect" % uid)
+
+	# CardView draws icons in _draw(), which only records the texture RID: DB must keep the texture alive.
+	var icon_ref := weakref(DB.icon("lock"))
+	ok(icon_ref.get_ref() != null, "UI icons stay loaded after the caller drops them")
+	var portrait_ref := weakref(DB.portrait("ace"))
+	ok(portrait_ref.get_ref() != null, "portraits stay loaded after the caller drops them")
 
 
 # ---------------------------------------------------------------- saves

@@ -34,6 +34,7 @@ var uniform_order: Array[String] = []
 var divisions: Array = []
 var challenge_modifiers: Array = []
 var combos: Array = []
+var _textures: Dictionary = {}   # path -> Texture2D (or null when missing)
 
 var card_growth_rate := 0.12
 var card_max_level := 5
@@ -228,21 +229,22 @@ func defender_accent(id: String) -> Color:
 
 
 func card_texture(id: String) -> Texture2D:
-	var path := "res://assets/textures/cards/%s.png" % id
-	if ResourceLoader.exists(path):
-		return load(path)
-	return null
+	return _texture("res://assets/textures/cards/%s.png" % id)
 
 
 func portrait(id: String) -> Texture2D:
-	var path := "res://assets/textures/portraits/%s.png" % id
-	if ResourceLoader.exists(path):
-		return load(path)
-	return null
+	return _texture("res://assets/textures/portraits/%s.png" % id)
 
 
 func icon(name: String) -> Texture2D:
-	var path := "res://assets/textures/icons/%s.svg" % name
-	if ResourceLoader.exists(path):
-		return load(path)
-	return null
+	return _texture("res://assets/textures/icons/%s.svg" % name)
+
+
+## Loads and keeps a reference to UI textures. Custom _draw() code only records the
+## texture's RID, so an uncached texture would be freed before the frame renders.
+func _texture(path: String) -> Texture2D:
+	if _textures.has(path):
+		return _textures[path]
+	var tex: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	_textures[path] = tex
+	return tex

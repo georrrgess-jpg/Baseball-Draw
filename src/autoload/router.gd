@@ -166,6 +166,11 @@ func _loading_tip() -> String:
 	return tips[randi() % tips.size()]
 
 
+## Moves the toast stack down (the battle HUD keeps its threat panel in the top-right corner).
+func set_toast_top(y: float) -> void:
+	_toast_box.position.y = y
+
+
 func toast(text: String, kind := "info", duration := 3.2) -> void:
 	var panel := PanelContainer.new()
 	var accent := {"info": UITheme.BLUE, "achievement": UITheme.GOLD, "level": UITheme.GREEN, "warn": UITheme.SCARLET}.get(kind, UITheme.BLUE)

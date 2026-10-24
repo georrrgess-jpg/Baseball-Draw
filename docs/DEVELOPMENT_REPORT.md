@@ -87,7 +87,7 @@ catch, bat impact, slam impact) land on exact frames; looping clips have identic
 | Check | How | Result |
 |---|---|---|
 | Every script parses and compiles with autoloads | `tools/check_scripts.sh` | 49 scripts, 0 failures |
-| System tests | `tests/test_suite.tscn` | 859 checks, 0 failures |
+| System tests | `tests/test_suite.tscn` | 887 checks, 0 failures |
 | Interactive flows through simulated mouse/keyboard | `tests/ui_flow_test.gd` | 51 checks, 0 failures |
 | Full runs, all modes | autopilot (`--auto`), `tools/simulate.sh` | Standard, Quick, Endless, Practice completed; wins and losses both reached |
 | Packaged build | Linux export of the same pack as Windows, autopilot game | Completed a Quick Defense win from the exported binary |
