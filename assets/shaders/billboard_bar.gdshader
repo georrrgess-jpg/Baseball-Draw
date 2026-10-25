@@ -1,8 +1,8 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_test_disabled, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled, skip_vertex_transform;
 // Runner health bar: a camera-facing quad drawn on top of everything (never hidden by
-// its own model or by a crowd). It keeps at least `min_px` pixels of width when the
-// camera is far away and grows upward from its anchor so it never covers the head.
+// its own model or by a crowd). It keeps between `min_px` and `min_px * max_px_ratio` pixels of
+// width at any camera distance and grows upward from its anchor so it never covers the head.
 // Per-instance values (fill, chip trail, hit pulse) avoid material duplication; one
 // shared material per bar style (runner / elite / boss).
 
@@ -14,6 +14,7 @@ instance uniform float visible_alpha = 1.0;
 uniform vec2 bar_size = vec2(1.3, 0.24);    // world size of the quad (matches the QuadMesh)
 uniform float min_px = 58.0;                // minimum on-screen width in pixels at 1000 px viewport height
 uniform float max_grow = 3.2;               // cap on the distance compensation
+uniform float max_px_ratio = 1.7;           // maximum on-screen width, as a multiple of min_px
 uniform float border = 0.2;                 // outline thickness, as a fraction of the height
 uniform vec4 frame_color : source_color = vec4(0.02, 0.02, 0.03, 1.0);
 uniform vec4 trim_color : source_color = vec4(0.0, 0.0, 0.0, 0.0);  // elite / boss accent line
@@ -29,7 +30,9 @@ void vertex() {
 		px_per_m = PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y * 0.5;
 	}
 	float want_px = min_px * clamp(VIEWPORT_SIZE.y / 1000.0, 0.8, 2.2);
-	float grow = clamp(want_px / max(bar_size.x * px_per_m, 0.001), 1.0, max_grow);
+	float bar_px = max(bar_size.x * px_per_m, 0.001);
+	// Grow when far away, shrink when the camera is close so bars never swamp the runners.
+	float grow = min(clamp(bar_px, want_px, want_px * max_px_ratio) / bar_px, max_grow);
 	float pop = 1.0 + 0.28 * pulse;
 	float s = grow * pop;
 	vec2 v = VERTEX.xy * s;
