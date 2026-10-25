@@ -238,6 +238,19 @@ Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
     something even when its effect is quiet.
 * **Field view** (`src/battle/camera_rig.gd`, `src/ui/battle_hud.gd`): the default camera shows all three gates,
   including the middle one, and home plate above the hand. The scoreboard moved to a compact top-right panel.
+* **Hits are easy to see** (`src/battle/enemy.gd`, `src/battle/projectiles.gd`, `src/vfx/vfx.gd`,
+  `assets/shaders/rim_overlay.gdshader`): a hit flashes the runner white-hot, squashes and pushes it away from
+  the throw, shows a comic starburst with a shock ring and sparks, and the ball deflects off (or whiffs past on
+  a miss). Crits and big hits add a gold flare. A runner that is out gets a bigger burst and ground shockwave,
+  is knocked back, falls and shrinks away. Defenders hit by sluggers and bosses flinch and flash.
+* **Health bars** (`assets/shaders/billboard_bar.gdshader`): thicker, outlined, coloured by health
+  (green → yellow → red, or the colour-blind palette), with a white chip that drains after each hit. They draw on
+  top of models and the crowd and keep a minimum on-screen size when the camera is far. Elites and the captain
+  get a larger gold-trimmed bar; bosses a large bar with ticks.
+* **Every card shows something** (`src/battle/card_effects.gd`, `src/vfx/card_fx.gd`): cards cast with no valid
+  target still throw or strike and show a small fizzle ("NO TARGET", "NO RUNNERS", "NO EFFECT", "IMMUNE",
+  "SHIELDS FULL"), Changeup and Seventh-Inning Stretch got clearer effects, and every cast pops a coloured ring
+  at the casting defender's feet.
 * **Dugout** (`src/ui/dugout_screen.gd`, `data/upgrades.json`, `src/core/run_state.gd`): upgrades are cards with
   level pips, a NOW → NEXT line in plain words ("Team damage +10 % → +20 %") and one buy button
   ("BUY 80", "NEED 30 MORE", "MAXED"). Effects are round steps (+10 %, +5 %, 0.1 s) and prices are rounded
@@ -267,3 +280,15 @@ Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
 * **Sock fix** (`tools/blender/characters/hero_body.py`, `hero.py`): the sock top sits lower and narrower under
   the trouser cuff and shares the leg's skin weights, so it no longer pokes through the trousers when the
   defenders run. All nine models were rebuilt.
+
+Verification for this update: `tools/check_scripts.sh` (54 scripts, 0 failed), the system test suite
+(928 checks, 0 failed, including the new level-road checks) and the full UI flow test (90 checks, 0 failed),
+which plays the guided first game, card selection and casting, the dugout, pack opening and the new deck screen.
+
+Known limitations of this update:
+* Frame rates were measured only on the software renderer. The new hit effects use the existing pools and
+  add no lights, and the per-frame battle cost stayed close to before.
+* The sock fix was checked on renders of the running and fielding poses. On Rico the result was hard to confirm
+  from the renders. Jersey/trouser and sleeve layering were not changed.
+* When runners bunch tightly, their health bars overlap (the nearest is drawn on top).
+* The Windows executable is built by CI but was not run on Windows here.
