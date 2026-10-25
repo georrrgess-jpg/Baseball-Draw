@@ -210,7 +210,10 @@ func _fill_list() -> void:
 		var n := UITheme.label(d.name + tag, 24, accent.lightened(0.3) if unlocked else UITheme.MUTED, UITheme.font_header())
 		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vb.add_child(n)
-		var s := UITheme.label("%s · Lv %d" % [DB.roles[d.role].name, Profile.defender_level(id)] if unlocked else "LOCKED · " + Profile.defender_unlock_text(id), 16, UITheme.MUTED, UITheme.font_body_bold())
+		var sub_txt := "%s · Lv %d" % [DB.roles[d.role].name, Profile.defender_level(id)] if unlocked else "LOCKED · " + Profile.defender_unlock_text(id)
+		if unlocked and Profile.pending_traits(id) > 0:
+			sub_txt += "  ·  ★ NEW TRAIT"
+		var s := UITheme.label(sub_txt, 16, UITheme.GREEN if unlocked and Profile.pending_traits(id) > 0 else UITheme.MUTED, UITheme.font_body_bold())
 		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vb.add_child(s)
 		hb.add_child(vb)
@@ -236,19 +239,7 @@ func _fill_info() -> void:
 	if not unlocked:
 		_info.add_child(UITheme.label("LOCKED — " + Profile.defender_unlock_text(selected), 24, UITheme.SCARLET, UITheme.font_display()))
 	var lvl := Profile.defender_level(selected)
-	var xp_row := HBoxContainer.new()
-	xp_row.add_child(UITheme.label("Level %d" % lvl, 26, UITheme.GOLD, UITheme.font_display()))
-	var xp := ProgressBar.new()
-	xp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	xp.custom_minimum_size = Vector2(0, 12)
-	xp.show_percentage = false
-	var need := Profile.defender_xp_needed(lvl)
-	xp.max_value = maxi(need, 1)
-	xp.value = Profile.defender_xp(selected) if need > 0 else need
-	xp.add_theme_stylebox_override("fill", UITheme.panel_style(accent, Color(0, 0, 0, 0), 0, 4, 0))
-	xp_row.add_child(xp)
-	xp_row.add_child(UITheme.label("%d / %d XP" % [Profile.defender_xp(selected), need] if need > 0 else "MAX", 18, UITheme.MUTED))
-	_info.add_child(xp_row)
+	_info.add_child(_level_section(selected, lvl, accent, unlocked))
 	# Stats with permanent modifiers.
 	var st: Dictionary = d.stats
 	var pm := Profile.defender_mods(selected)
@@ -370,6 +361,82 @@ func _fill_info() -> void:
 			_refresh())
 		uf.add_child(b)
 	_info.add_child(uf)
+
+
+## Level badge, XP to the next level and the level road (a reward at every level).
+func _level_section(id: String, lvl: int, accent: Color, unlocked: bool) -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 12)
+	box.add_child(head)
+	var badge := PanelContainer.new()
+	badge.add_theme_stylebox_override("panel", UITheme.panel_style(Color(accent, 0.25), UITheme.GOLD, 2, 30, 6))
+	badge.custom_minimum_size = Vector2(64, 64)
+	var bl := UITheme.label(str(lvl), 38, UITheme.GOLD, UITheme.font_display())
+	bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge.add_child(bl)
+	head.add_child(badge)
+	var xv := VBoxContainer.new()
+	xv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(xv)
+	var need := Profile.defender_xp_needed(lvl)
+	var have := Profile.defender_xp(id)
+	var maxed := lvl >= DB.defender_max_level
+	xv.add_child(UITheme.label("LEVEL %d%s" % [lvl, "  ·  MAX" if maxed else ""], 22, UITheme.OFFWHITE, UITheme.font_header()))
+	var bar := ProgressBar.new()
+	bar.custom_minimum_size = Vector2(0, 16)
+	bar.show_percentage = false
+	bar.max_value = maxi(need, 1)
+	bar.value = need if maxed else have
+	bar.add_theme_stylebox_override("fill", UITheme.panel_style(accent.lightened(0.1), Color(0, 0, 0, 0), 0, 6, 0))
+	bar.add_theme_stylebox_override("background", UITheme.panel_style(Color(0, 0, 0, 0.45), Color(1, 1, 1, 0.12), 1, 6, 0))
+	xv.add_child(bar)
+	var growth := int(round(DB.defender_level_growth * 100.0 * (lvl - 1)))
+	xv.add_child(UITheme.label(("Max level reached" if maxed else "%d XP to level %d" % [need - have, lvl + 1]) + "   ·   Power +%d%%" % growth, 16, UITheme.MUTED, UITheme.font_body_bold()))
+	# Level road
+	var road := HBoxContainer.new()
+	road.add_theme_constant_override("separation", 4)
+	box.add_child(road)
+	var next_text := ""
+	for l in range(1, DB.defender_max_level + 1):
+		var r := Profile.defender_level_reward(l)
+		var reached := l <= lvl
+		var node := VBoxContainer.new()
+		node.add_theme_constant_override("separation", 1)
+		node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var circ := PanelContainer.new()
+		var fill := Color(accent, 0.85) if reached else Color(0.08, 0.1, 0.16, 0.95)
+		var border := UITheme.GOLD if l == lvl + 1 else (Color(accent.lightened(0.3), 0.9) if reached else Color(1, 1, 1, 0.15))
+		circ.add_theme_stylebox_override("panel", UITheme.panel_style(fill, border, 2, 16, 2))
+		circ.custom_minimum_size = Vector2(32, 32)
+		circ.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		var nl := UITheme.label(str(l), 17, Color.WHITE if reached else UITheme.MUTED, UITheme.font_header())
+		nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		circ.add_child(nl)
+		node.add_child(circ)
+		var icon := "upgrade"
+		if r.has("coins"):
+			icon = "coin"
+		elif r.has("pack"):
+			icon = "deck"
+		elif r.has("trait"):
+			icon = "star"
+		if not r.is_empty():
+			var ic := UITheme.icon_rect(icon, 18, (UITheme.GOLD if not reached else Color(1, 1, 1, 0.45)))
+			ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			node.add_child(ic)
+		node.tooltip_text = "Level %d: %s" % [l, Profile.level_reward_text(r) if not r.is_empty() else "Starting level"]
+		node.mouse_filter = Control.MOUSE_FILTER_PASS
+		road.add_child(node)
+		if l == lvl + 1 and not r.is_empty():
+			next_text = "NEXT REWARD — Level %d: %s" % [l, Profile.level_reward_text(r)]
+	if next_text != "" and unlocked:
+		box.add_child(UITheme.label(next_text, 18, UITheme.GOLD, UITheme.font_body_bold()))
+	if Profile.pending_traits(id) > 0 and unlocked:
+		box.add_child(UITheme.label("★ New trait unlocked — choose it under TRAINING TRAITS below!", 18, UITheme.GREEN, UITheme.font_body_bold()))
+	return box
 
 
 func _toggle_team() -> void:

@@ -43,6 +43,7 @@ var card_max_level := 5
 var defender_level_growth := 0.06
 var defender_max_level := 10
 var defender_xp_curve: Array = []
+var defender_level_rewards: Dictionary = {}   # "level" -> {coins | pack | trait}
 var upgrade_price_growth := 1.5
 
 const RARITY_ORDER := ["common", "uncommon", "rare", "epic", "legendary"]
@@ -92,6 +93,7 @@ func _load_all() -> void:
 	defender_level_growth = float(d.get("level_growth", 0.06))
 	defender_max_level = int(d.get("max_level", 10))
 	defender_xp_curve = d.get("xp_curve", [])
+	defender_level_rewards = d.get("level_rewards", {})
 	roles = d.get("roles", {})
 	synergies = d.get("synergies", [])
 	for def in d.get("defenders", []):

@@ -25,13 +25,22 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 	Profile.add_coins(coins)
 	var levels := Profile.add_xp(xp)
 
-	# Defender XP: everyone on the team, MVP gets +50%.
+	# Defender XP: everyone on the team, +3 per runner they got out, MVP +50%.
 	var mvp := run.mvp()
 	var def_xp := {}
 	for id in run.team:
-		var amount := int(round(xp * 0.55 * (1.5 if id == mvp else 1.0)))
+		var outs := int(run.stats.get("outs_by", {}).get(id, 0))
+		var amount := int(round((xp * 0.55 + outs * 3) * (1.5 if id == mvp else 1.0)))
+		var d_level_before := Profile.defender_level(id)
+		var xp_before := Profile.defender_xp(id)
 		var gained := Profile.add_defender_xp(id, amount)
-		def_xp[id] = {"xp": amount, "levels": gained, "level": Profile.defender_level(id)}
+		var rewards: Array = []
+		for l in range(d_level_before + 1, Profile.defender_level(id) + 1):
+			var t := Profile.level_reward_text(Profile.defender_level_reward(l))
+			if t != "":
+				rewards.append(t)
+		def_xp[id] = {"xp": amount, "levels": gained, "level": Profile.defender_level(id), "level_before": d_level_before,
+			"xp_before": xp_before, "xp_after": Profile.defender_xp(id), "rewards": rewards, "outs": outs}
 
 	# Card packs (opened from the Packs screen). Level-up and signature packs are added by Profile.
 	var src := "%s %s" % [mode.name, "win" if won else "reward"]

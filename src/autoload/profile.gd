@@ -290,11 +290,44 @@ func add_defender_xp(id: String, amount: int) -> int:
 		d.xp -= defender_xp_needed(d.level)
 		d.level += 1
 		gained += 1
+		_grant_level_reward(id, int(d.level))
 	if d.level >= DB.defender_max_level:
 		d.xp = 0
 	set_stat_max("max_defender_level", d.level)
 	changed.emit()
 	return gained
+
+
+## Level road reward for reaching `level` (coins, a pack, or a trait choice).
+func defender_level_reward(level: int) -> Dictionary:
+	return DB.defender_level_rewards.get(str(level), {})
+
+
+func level_reward_text(r: Dictionary) -> String:
+	if r.has("coins"):
+		return "%d coins" % int(r.coins)
+	if r.has("pack"):
+		return DB.pack(str(r.pack)).name
+	if r.has("trait"):
+		return "Choose a trait"
+	return ""
+
+
+func _grant_level_reward(id: String, level: int) -> void:
+	var r := defender_level_reward(level)
+	if r.has("coins"):
+		data.coins += int(r.coins)
+	if r.has("pack"):
+		add_pack(str(r.pack), "%s reached level %d" % [DB.defender(id).name, level])
+
+
+## Trait tiers the defender has reached but not chosen yet (shown as a "!" on the Team screen).
+func pending_traits(id: String) -> int:
+	var n := 0
+	for tier in DB.traits:
+		if defender_level(id) >= int(tier.level) and chosen_trait(id, int(tier.level)) == "":
+			n += 1
+	return n
 
 
 func unlock_defender(id: String) -> void:

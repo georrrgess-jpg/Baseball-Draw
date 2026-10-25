@@ -14,6 +14,10 @@
   3450,
   4500
  ],
+ "level_rewards": {
+  "2": {"coins": 100}, "3": {"trait": 1}, "4": {"pack": "rookie"}, "5": {"coins": 250},
+  "6": {"trait": 2}, "7": {"pack": "pro"}, "8": {"coins": 400}, "9": {"trait": 3}, "10": {"pack": "champion"}
+ },
  "roles": {
   "pitcher": {
    "name": "Pitcher",

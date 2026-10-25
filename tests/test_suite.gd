@@ -312,6 +312,17 @@ func test_packs() -> void:
 				var res := Profile.open_pack(i)
 				ok(res.cards.size() == 1 and res.cards[0].id == sig and Profile.is_card_owned(sig), "the Signature Pack contains the signature card")
 				break
+	# Defender level road: coins, packs and trait choices.
+	var coins0 := int(Profile.data.coins)
+	var packs0 := Profile.pack_count()
+	Profile.add_defender_xp("ace", 1000)
+	ok(Profile.defender_level("ace") >= 5, "defender XP raises the level (%d)" % Profile.defender_level("ace"))
+	ok(int(Profile.data.coins) >= coins0 + 100 + 250, "level road coin rewards are paid")
+	ok(Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "rookie" and str(pk.source).begins_with("Ace reached level 4")), "level 4 gives a Rookie Pack")
+	ok(Profile.pack_count() >= packs0 + 1, "level rewards add packs")
+	ok(Profile.pending_traits("ace") == 1, "level 3 unlocks a trait to choose")
+	Profile.choose_trait("ace", 3, "power")
+	ok(Profile.pending_traits("ace") == 0, "choosing the trait clears the reminder")
 	# Save round trip keeps unopened packs.
 	Profile.add_pack("pro", "test")
 	Profile.save_now()

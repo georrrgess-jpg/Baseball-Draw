@@ -139,15 +139,16 @@ func _ready() -> void:
 		open.pressed.connect(func() -> void: Router.goto("packs"))
 		pack_row.add_child(open)
 	rv.add_child(UITheme.hsep())
-	var dx := HFlowContainer.new()
-	dx.add_theme_constant_override("h_separation", 18)
+	rv.add_child(UITheme.header("TEAM PROGRESS", 24, UITheme.GOLD))
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 10)
+	rv.add_child(grid)
+	var ti := 0
 	for id in result.get("defender_xp", {}).keys():
-		var d: Dictionary = result.defender_xp[id]
-		var txt := "%s +%d XP" % [DB.defender(id).name, int(d.xp)]
-		if int(d.levels) > 0:
-			txt += "  ▲ Lv %d" % int(d.level)
-		dx.add_child(UITheme.label(txt, 19, Color(DB.defender(id).accent).lightened(0.35) if int(d.levels) > 0 else UITheme.OFFWHITE, UITheme.font_body_bold()))
-	rv.add_child(dx)
+		grid.add_child(_progress_tile(id, result.defender_xp[id], 2.0 + ti * 0.25))
+		ti += 1
 	for rec in result.get("records", []):
 		rv.add_child(UITheme.label("★ " + rec, 22, UITheme.GOLD, UITheme.font_body_bold()))
 	for aid in result.get("achievements", []):
@@ -172,6 +173,71 @@ func _ready() -> void:
 	var menu := UITheme.menu_button("MAIN MENU", UITheme.SCARLET)
 	menu.pressed.connect(func() -> void: Router.goto("main_menu"))
 	buttons.add_child(menu)
+
+
+## One defender's XP gain: the bar fills from before to after; each level gained flashes
+## LEVEL UP! and shows the level road reward it unlocked.
+func _progress_tile(id: String, d: Dictionary, delay: float) -> Control:
+	var accent := Color(DB.defender(id).accent)
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.06, 0.09, 0.15, 0.95), Color(accent, 0.45), 1, 10, 8))
+	p.custom_minimum_size = Vector2(250, 0)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	p.add_child(hb)
+	var pt := DB.portrait(id)
+	if pt:
+		var tr := TextureRect.new()
+		tr.texture = pt
+		tr.custom_minimum_size = Vector2(52, 52)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hb.add_child(tr)
+	var vb := VBoxContainer.new()
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_theme_constant_override("separation", 2)
+	hb.add_child(vb)
+	var top := HBoxContainer.new()
+	vb.add_child(top)
+	var nm := UITheme.label(DB.defender(id).name, 20, accent.lightened(0.35), UITheme.font_header())
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(nm)
+	var lvl_l := UITheme.label("LV %d" % int(d.get("level_before", d.level)), 20, UITheme.GOLD, UITheme.font_display())
+	top.add_child(lvl_l)
+	var bar := ProgressBar.new()
+	bar.custom_minimum_size = Vector2(0, 12)
+	bar.show_percentage = false
+	bar.max_value = 1.0
+	bar.add_theme_stylebox_override("fill", UITheme.panel_style(accent.lightened(0.15), Color(0, 0, 0, 0), 0, 4, 0))
+	var lb := int(d.get("level_before", d.level))
+	var need0 := maxi(1, Profile.defender_xp_needed(lb))
+	bar.value = clampf(float(d.get("xp_before", 0)) / need0, 0.0, 1.0)
+	vb.add_child(bar)
+	var info := UITheme.label("+%d XP" % int(d.xp) + ("  ·  %d outs" % int(d.outs) if int(d.get("outs", 0)) > 0 else ""), 15, UITheme.MUTED, UITheme.font_body_bold())
+	vb.add_child(info)
+	var levels := int(d.get("levels", 0))
+	var after := clampf(float(d.get("xp_after", 0)) / maxi(1, Profile.defender_xp_needed(int(d.level))), 0.0, 1.0)
+	if int(d.level) >= DB.defender_max_level:
+		after = 1.0
+	var tw := create_tween()
+	tw.tween_interval(delay)
+	for k in levels:
+		var lv := lb + k + 1
+		tw.tween_property(bar, "value", 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(func() -> void:
+			Audio.play("level_up", -4.0)
+			lvl_l.text = "LV %d" % lv
+			p.modulate = Color(1.5, 1.4, 1.1)
+			p.pivot_offset = p.size * 0.5
+			p.scale = Vector2(1.06, 1.06)
+			var rewards: Array = d.get("rewards", [])
+			info.text = "LEVEL UP!" + ("  +" + str(rewards[k]) if k < rewards.size() else "")
+			info.add_theme_color_override("font_color", UITheme.GOLD)
+			bar.value = 0.0)
+		tw.tween_property(p, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(p, "modulate", Color.WHITE, 0.4)
+	tw.tween_property(bar, "value", after, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	return p
 
 
 func _panel(title: String) -> PanelContainer:
