@@ -29,6 +29,8 @@ PALETTE = dict(
     pupil="#0B0B0E",
     metal="#B7BDC6",
     bat="#C9A169",
+    mouth="#5C1E24",
+    sole="#E8E5DE",
     # enemies
     gunmetal="#2B2F36",
     hazard="#FF7A1A",
@@ -40,7 +42,7 @@ PALETTE = dict(
 # name -> (roughness, metallic)
 SURFACE = {
     "Skin": (0.52, 0.0),
-    "Hair": (0.45, 0.0),
+    "Hair": (0.62, 0.0),
     "Eyes": (0.18, 0.0),
     "Iris": (0.15, 0.0),
     "Pupil": (0.15, 0.0),
@@ -61,6 +63,9 @@ SURFACE = {
     "Bat": (0.45, 0.0),
     "Cloth": (0.8, 0.0),
     "Visor": (0.08, 0.6),
+    "Mouth": (0.45, 0.0),
+    "Sole": (0.6, 0.0),
+    "EyeHighlight": (0.2, 0.0),
 }
 
 

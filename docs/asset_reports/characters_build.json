@@ -36,8 +36,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.045m@0.67s",
-     "Rarm:0.119m@1.08s"
+     "Lleg:0.046m@0.67s",
+     "Rarm:0.137m@1.08s"
     ]
    },
    "ready": {
@@ -57,7 +57,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.040m@0.88s"
+     "Rarm:0.050m@0.88s"
     ]
    },
    "stunned": {
@@ -71,7 +71,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.044m@0.47s"
+     "Rarm:0.054m@0.47s"
     ]
    },
    "victory": {
@@ -87,11 +87,11 @@
     "warn": []
    }
   },
-  "height": 1.814,
+  "height": 1.813,
   "id": "ace",
   "kind": "defender",
-  "seconds": 156.4,
-  "tris": 13675
+  "seconds": 4.8,
+  "tris": 19096
  },
  "armored": {
   "anims": {
@@ -221,8 +221,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.048m@0.67s",
-     "Rarm:0.129m@1.08s"
+     "Lleg:0.044m@0.67s",
+     "Rarm:0.150m@1.08s"
     ]
    },
    "ready": {
@@ -242,7 +242,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.044m@0.88s"
+     "Rarm:0.055m@0.88s"
     ]
    },
    "stunned": {
@@ -256,7 +256,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.047m@0.47s"
+     "Rarm:0.059m@0.47s"
     ]
    },
    "victory": {
@@ -272,11 +272,11 @@
     "warn": []
    }
   },
-  "height": 1.951,
+  "height": 1.954,
   "id": "bruno",
   "kind": "defender",
-  "seconds": 145.5,
-  "tris": 13570
+  "seconds": 7.5,
+  "tris": 17896
  },
  "captain": {
   "anims": {
@@ -406,8 +406,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.044m@0.67s",
-     "Rarm:0.117m@1.08s"
+     "Lleg:0.045m@0.67s",
+     "Rarm:0.134m@1.08s"
     ]
    },
    "ready": {
@@ -427,7 +427,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.040m@0.88s"
+     "Rarm:0.049m@0.88s"
     ]
    },
    "stunned": {
@@ -441,7 +441,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.043m@0.47s"
+     "Rarm:0.053m@0.47s"
     ]
    },
    "victory": {
@@ -457,11 +457,11 @@
     "warn": []
    }
   },
-  "height": 1.778,
+  "height": 1.777,
   "id": "dex",
   "kind": "defender",
-  "seconds": 134.6,
-  "tris": 13560
+  "seconds": 5.6,
+  "tris": 19758
  },
  "grand_slammer": {
   "anims": {
@@ -589,8 +589,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.042m@0.67s",
-     "Rarm:0.112m@1.08s"
+     "Lleg:0.043m@0.67s",
+     "Rarm:0.129m@1.08s"
     ]
    },
    "ready": {
@@ -610,7 +610,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.038m@0.88s"
+     "Rarm:0.047m@0.88s"
     ]
    },
    "stunned": {
@@ -624,7 +624,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.041m@0.47s"
+     "Rarm:0.051m@0.47s"
     ]
    },
    "victory": {
@@ -640,11 +640,11 @@
     "warn": []
    }
   },
-  "height": 1.722,
+  "height": 1.709,
   "id": "hana",
   "kind": "defender",
-  "seconds": 78.3,
-  "tris": 13559
+  "seconds": 8.5,
+  "tris": 19334
  },
  "iron_slugger": {
   "anims": {
@@ -772,8 +772,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.047m@0.67s",
-     "Rarm:0.126m@1.08s"
+     "Lleg:0.048m@0.67s",
+     "Rarm:0.145m@1.08s"
     ]
    },
    "ready": {
@@ -793,7 +793,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.043m@0.88s"
+     "Rarm:0.053m@0.88s"
     ]
    },
    "stunned": {
@@ -807,7 +807,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.046m@0.47s"
+     "Rarm:0.057m@0.47s"
     ]
    },
    "victory": {
@@ -823,11 +823,11 @@
     "warn": []
    }
   },
-  "height": 1.923,
+  "height": 1.921,
   "id": "jax",
   "kind": "defender",
-  "seconds": 201.3,
-  "tris": 13558
+  "seconds": 6.9,
+  "tris": 19606
  },
  "jumper": {
   "anims": {
@@ -957,8 +957,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.038m@0.67s",
-     "Rarm:0.098m@1.08s"
+     "Lleg:0.047m@0.67s",
+     "Rarm:0.100m@1.08s"
     ]
    },
    "ready": {
@@ -1004,11 +1004,11 @@
     "warn": []
    }
   },
-  "height": 1.929,
+  "height": 1.927,
   "id": "kai",
   "kind": "defender",
-  "seconds": 115.2,
-  "tris": 13577
+  "seconds": 5.9,
+  "tris": 19276
  },
  "maya": {
   "anims": {
@@ -1047,8 +1047,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.042m@0.67s",
-     "Rarm:0.113m@1.08s"
+     "Lleg:0.044m@0.67s",
+     "Rarm:0.131m@1.08s"
     ]
    },
    "ready": {
@@ -1068,7 +1068,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.038m@0.88s"
+     "Rarm:0.048m@0.88s"
     ]
    },
    "stunned": {
@@ -1082,7 +1082,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.042m@0.47s"
+     "Rarm:0.051m@0.47s"
     ]
    },
    "victory": {
@@ -1098,11 +1098,11 @@
     "warn": []
    }
   },
-  "height": 1.733,
+  "height": 1.732,
   "id": "maya",
   "kind": "defender",
-  "seconds": 162.1,
-  "tris": 13754
+  "seconds": 7.0,
+  "tris": 19942
  },
  "nova": {
   "anims": {
@@ -1141,8 +1141,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.043m@0.67s",
-     "Rarm:0.114m@1.08s"
+     "Lleg:0.044m@0.67s",
+     "Rarm:0.132m@1.08s"
     ]
    },
    "ready": {
@@ -1162,7 +1162,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.039m@0.88s"
+     "Rarm:0.048m@0.88s"
     ]
    },
    "stunned": {
@@ -1176,7 +1176,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.042m@0.47s"
+     "Rarm:0.052m@0.47s"
     ]
    },
    "victory": {
@@ -1192,11 +1192,11 @@
     "warn": []
    }
   },
-  "height": 1.751,
+  "height": 1.75,
   "id": "nova",
   "kind": "defender",
-  "seconds": 198.3,
-  "tris": 13557
+  "seconds": 5.7,
+  "tris": 19790
  },
  "phantom_captain": {
   "anims": {
@@ -1326,8 +1326,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Lleg:0.057m@0.67s",
-     "Rarm:0.134m@1.08s"
+     "Lleg:0.042m@0.67s",
+     "Rarm:0.137m@1.08s"
     ]
    },
    "ready": {
@@ -1347,7 +1347,7 @@
     "length": 1.2,
     "loop": false,
     "warn": [
-     "Rarm:0.055m@0.88s"
+     "Rarm:0.050m@0.88s"
     ]
    },
    "stunned": {
@@ -1361,7 +1361,7 @@
     "length": 0.75,
     "loop": false,
     "warn": [
-     "Rarm:0.059m@0.47s"
+     "Rarm:0.054m@0.47s"
     ]
    },
    "victory": {
@@ -1377,11 +1377,11 @@
     "warn": []
    }
   },
-  "height": 1.768,
+  "height": 1.756,
   "id": "rico",
   "kind": "defender",
-  "seconds": 136.4,
-  "tris": 13555
+  "seconds": 6.0,
+  "tris": 19638
  },
  "runner": {
   "anims": {

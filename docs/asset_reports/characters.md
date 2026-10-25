@@ -1,8 +1,44 @@
 # Characters — build report
 
-**Status: COMPLETE — all 20 GLBs + 20 portraits are final builds** (ace+runner were delivered first; everything was
-rebuilt from the final generator at the end). Every GLB was imported into a scratch Godot 4.7.2 project and
+**Status: COMPLETE — all 20 GLBs + 20 portraits are final builds.** The 9 defenders were later **redesigned as
+stylised heroes and rebuilt with a new mesh-modelling path** (section 0); enemies/bosses are unchanged. Every GLB was imported into a scratch Godot 4.7.2 project and
 inspected, and re-imported into Blender to measure foot sliding / ground contact / loop seams.
+
+## 0. Defenders: stylised hero rebuild
+
+The first defender pass (SDF sculpts polygonised with surface nets, then decimated) read as small, lumpy, near-identical
+figures from the game camera. All nine were rebuilt with a new generator path (`hero.py`, `hero_head.py`,
+`hero_body.py`, `hero_wear.py`, `geo.py`, `hutil.py`); the GLB contract (nodes, 22 bones, clip names/lengths/events,
+material names, origin, heights) is unchanged.
+
+* **Proportions**: head ≈ 1/5.3–1/5.6 of the height (chin→crown 0.32–0.36 m), short neck, broad shoulders, tapered
+  waist, legs ≈ 47–51 % of the height, chunky hands (`hand_scale` 1.2–1.5) and cleats. Body types kept: Bruno huge
+  with a belly, Rico stocky/short-legged, Jax broad V, Kai long-legged, Maya/Nova/Hana slim.
+* **Modelling** (no SDF polygonisation, no decimation): limbs, torso, socks, sleeves and cleats are parametric lofts
+  (cubic-spline profiles, crisp folded hems); the pants are a mirrored box cage (crotch topology) + Catmull-Clark
+  with creased hems; head, hair, cap crown, visor, helmet and beards are clean sphere grids projected onto smooth
+  implicit shapes; numbers, emblems, eyes, brows, mouth, laces, swooshes, buckle and V-insert are thin decals
+  projected onto the surface under them (they copy its skin weights, so they never float).
+* **Faces**: big eye whites with iris, pupil and two emissive highlights (`EyeHighlight`), dark upper lid line (+ lash
+  flick for the women), shaped brows, simple nose, expressive mouths (smirk / smile / open smile / grin with teeth).
+* **Uniform**: jersey with collar + V piping, accent V-insert, placket piping, sleeve-hem piping, front + back numbers
+  with gold outline, belt with buckle and loops, pant side stripes, socks with two stripes, cleats with white sole,
+  laces and an accent swoosh; caps with 4 panel seams, accent button, accent emblem with white outline, brim piping.
+* **Identities (silhouette + accent)**: Ace spiky tufts + flame cap; Rico blue catcher helmet/face cage, chest
+  protector, shin guards, round mitt; Maya swinging ponytail with green tie, bare forearms + green wristbands; Jax
+  backwards cap, framing beard, eye black; Kai cyan wraparound shades; Bruno bald with purple headband, big red beard,
+  bare forearms; Nova platinum pixie with side-swept fringe, bolt cap; Dex curls around the cap; Hana black bob with
+  bangs + pink-striped sun visor.
+* **Budget** raised to 20 000 triangles; every defender is built under it without decimation. Build time ≈ 10 s per
+  defender + portrait.
+* **Animation**: same clips/lengths/events. Because the legs are shorter relative to the global scale, defender hip
+  offsets and stride lengths now scale with the leg length (`anim.Ctx.lk`, 1.0 for enemies, so enemy clips are
+  unchanged); the pitch kick dips the hips a little more so the pivot leg stays planted.
+
+![defenders](img/godot_lineup_defenders.png)
+
+Current stylised defenders in Godot through the game's `CharacterModel` (merged vertex-colour shader, home uniform),
+`idle` pose.
 
 ## 1. Rebuild
 
@@ -16,16 +52,18 @@ inspected, and re-imported into Blender to measure foot sliding / ground contact
 ```
 
 Outputs `assets/models/characters/<id>.glb`, `assets/textures/portraits/<id>.png`, and machine-readable summaries
-`docs/asset_reports/characters_build.json` / `characters_verify.json`. Fully procedural and deterministic: bodies,
-heads, clothes and gear are numpy SDF sculpts polygonised with surface nets and decimated in Blender to the budgets;
+`docs/asset_reports/characters_build.json` / `characters_verify.json`. Fully procedural and deterministic: defenders
+are mesh-modelled (section 0); enemy/boss bodies, heads, clothes and gear are numpy SDF sculpts polygonised with
+surface nets and decimated in Blender to the budgets;
 weights are computed procedurally; animations are authored with a custom FK/two-bone-IK pose solver and baked.
 Jersey numbers use the repo font `assets/fonts/RussoOne-Regular.ttf`. Materials are flat colours only (no textures,
 no UVs needed).
 
 Source `tools/blender/characters/`: `build_characters.py` (entry, assembly, export), `roster.py` (all character
 definitions), `rig.py` (shared armature + pose solver), `anim.py` (all clips), `skin.py` (weights), `body.py`,
-`heads.py`, `outfit.py`, `enemies.py` (modelling), `sdf.py` (SDF + polygoniser), `meshutil.py`, `materials.py`,
-`render.py`, `portrait.py`, `verify_characters.py`.
+`heads.py`, `outfit.py`, `enemies.py` (enemy modelling), `hero.py` + `hero_head.py`, `hero_body.py`,
+`hero_wear.py`, `hutil.py`, `geo.py` (defender modelling), `sdf.py` (SDF + polygoniser), `meshutil.py`,
+`materials.py`, `render.py`, `portrait.py`, `verify_characters.py`.
 
 ## 2. GLB contents (verified in Godot 4.7.2, identical for all 20)
 
@@ -45,10 +83,13 @@ definitions), `rig.py` (shared armature + pose solver), `anim.py` (all clips), `
 * Tracks: `Armature/Skeleton3D:<bone>` rotations for all bones + `hips` position. Godot's importer drops tracks
   that never change (e.g. `root`, clavicles) — expected.
 * Rigid parts use 100 % weight on one bone: cap/helmet/hair/eyes/glasses/horns → `head`, mitt → `hand.L`,
-  bats → `hand.R`. `hand.R` of defenders is empty (game spawns the ball).
-* Materials (exact spec names): defenders `Skin, Hair, Eyes, Iris, Jersey, JerseyTrim, Number, Pants, Socks, Shoes,
-  Belt, Cap, Glove, Undershirt, Metal` (+ `Gear` for Rico). `Undershirt` = accent colour (sleeves, cap emblem, glove
-  lacing, shoe swoosh, Maya's hair tie/wristbands, Bruno's headband). Hana's sun visor uses `Cap`.
+  bats → `hand.R`, defender right hand → `hand.R` (the game spawns the ball there), Rico's shin guards → `shin.*`.
+* Materials (exact spec names): defenders `Skin, Hair, Eyes, Iris, Pupil, Jersey, JerseyTrim, Number,
+  NumberOutline, Pants, Socks, Shoes, Belt, Cap, Glove, Undershirt, Metal, Mouth, Sole, EyeHighlight` (+ `Gear` for
+  Rico, `Visor` for Kai, `Brow` for Nova). `Undershirt` = accent colour (undershirt sleeves, V-neck insert, cap button
+  + emblem, glove lacing + patch, shoe swoosh, Maya's hair tie/wristbands, Bruno's headband, Hana's visor stripe).
+  Hana's sun visor uses `Cap`. Every small detail (eye highlights, piping, numbers, laces) is separate geometry with
+  its own material, so it survives the game's merge into one vertex-coloured mesh.
   Enemies/bosses `Jersey` (gunmetal), `JerseyTrim` (type accent), `Pants, Socks, Shoes, Belt, Glove`,
   `Undershirt` (charcoal long sleeves + head under the helmet), `Gear` (helmet/dark armour), `Metal`
   (steel/iron/gold plates, buckle), `Glow` (emissive eye slit, molten seams, phantom trims), `Bat`, `Cloth` (capes,
@@ -92,15 +133,15 @@ request).
 
 | id | kind | height (m) | triangles (budget) | clips | natural speed walk / run / sprint (m/s) |
 |---|---|---|---|---|---|
-| ace | defender | 1.81 | 13675 (14000) | 13 | 0.81 / 2.62 |
-| rico | defender | 1.77 | 13555 (14000) | 13 | 0.81 / 2.62 |
-| maya | defender | 1.73 | 13754 (14000) | 13 | 0.77 / 2.49 |
-| jax | defender | 1.92 | 13558 (14000) | 13 | 0.85 / 2.78 |
-| kai | defender | 1.93 | 13577 (14000) | 13 | 0.84 / 2.72 |
-| bruno | defender | 1.95 | 13570 (14000) | 13 | 0.87 / 2.83 |
-| nova | defender | 1.75 | 13557 (14000) | 13 | 0.77 / 2.51 |
-| dex | defender | 1.78 | 13560 (14000) | 13 | 0.79 / 2.57 |
-| hana | defender | 1.72 | 13559 (14000) | 13 | 0.76 / 2.46 |
+| ace | defender | 1.81 | 19096 (20000) | 13 | 0.77 / 2.50 |
+| rico | defender | 1.76 | 19638 (20000) | 13 | 0.71 / 2.30 |
+| maya | defender | 1.73 | 19942 (20000) | 13 | 0.73 / 2.39 |
+| jax | defender | 1.92 | 19606 (20000) | 13 | 0.82 / 2.65 |
+| kai | defender | 1.93 | 19276 (20000) | 13 | 0.86 / 2.78 |
+| bruno | defender | 1.95 | 17896 (20000) | 13 | 0.84 / 2.74 |
+| nova | defender | 1.75 | 19790 (20000) | 13 | 0.74 / 2.41 |
+| dex | defender | 1.78 | 19758 (20000) | 13 | 0.76 / 2.45 |
+| hana | defender | 1.71 | 19334 (20000) | 13 | 0.72 / 2.35 |
 | runner | enemy | 1.76 | 8714 (9000) | 12 | 0.78 / 2.54 / 4.08 |
 | sprinter | enemy | 1.78 | 8713 (9000) | 12 | 0.77 / 2.51 / 4.03 |
 | armored | enemy | 1.86 | 8707 (9000) | 12 | 0.83 / 2.68 / 4.31 |
@@ -115,15 +156,15 @@ request).
 
 | id | look |
 |---|---|
-| ace | athletic pitcher, medium-brown skin, spiky dark hair under the cap, red-orange accent, flame cap emblem, #21 back + small front (gold outline) |
-| rico | stocky catcher, tan skin, steel-blue catcher helmet + steel face cage, chest protector, knee/shin guards (`Gear`), round catcher's mitt, #8 |
-| maya | slim infielder, light-medium skin, dark ponytail out of the back of the cap (green tie), green wristbands, #5 |
-| jax | tall muscular infielder, dark skin, short beard, cap backwards (snapback opening), eye black, orange-gold accent, #34 |
-| kai | lean tall outfielder, stylised East-Asian features, cyan wraparound reflective sunglasses, #11 |
-| bruno | huge heavy-set outfielder, pale skin, bald, red beard, purple headband, short sleeves + big bare forearms, #44 |
-| nova | female pitcher, platinum pixie cut with side-swept fringe, yellow accent, lightning-bolt emblem, #99 |
-| dex | slim infielder, curly hair around the cap, smirk, teal accent, #2 |
-| hana | female outfielder, black bob with bangs, sun visor, pink accent, #17 |
+| ace | stylised athletic pitcher, medium-brown skin, spiky dark tufts under the cap, confident smirk, red-orange accent, flame cap emblem, #21 |
+| rico | stocky catcher, tan skin, steel-blue hockey-style catcher helmet with steel face cage + black trim, segmented chest protector, knee caps + shin guards (`Gear`), round catcher's mitt, big grin, #8 (back only) |
+| maya | slim infielder, light-medium skin, big swinging ponytail out of the cap's back opening (green tie), side locks, bare forearms + green wristbands, open smile, #5 |
+| jax | tall broad infielder, dark skin, cap backwards (snapback opening at the forehead), framing beard + mustache, eye black, orange-gold accent, #34 |
+| kai | lean long-legged outfielder, cyan wraparound shades with black frame, short hair tufts, #11 |
+| bruno | huge heavy-set outfielder, bald, purple headband with knot tails, big red beard, grin, purple elbow sleeves + bare forearms, #44 |
+| nova | female pitcher, platinum pixie with side-swept fringe and nape tufts, darker brows, yellow accent, lightning-bolt emblem, #99 |
+| dex | slim infielder, curls bursting from under the cap, sly smirk, teal accent, #2 |
+| hana | female outfielder, black bob with pointed bangs + flipped ends, navy sun visor with pink stripe, big smile, #17 |
 | runner | Wrecker base: gunmetal uniform, hazard-orange trim/socks, batting helmet + ear flap, dark visor, glowing V slit, claw chest emblem, #13 |
 | sprinter | slim, aerodynamic tail helmet, yellow lightning bolts on torso sides and thighs, #7 |
 | armored | bulky, steel chest/back plate, layered pauldrons, greaves + knee caps, two-flap riot helmet, #66 |
@@ -139,8 +180,9 @@ request).
 ## 5. Portraits
 
 512×512 RGBA, transparent, Cycles CPU (96 samples + OpenImageDenoise), head-and-shoulders 3/4 view of the `idle` pose,
-identical key/fill/2-rim/top rig scaled by head size; enemies use a tighter, more frontal crop so helmet colours and
-the glowing eyes read at icon size.
+identical key/fill/2-rim/top rig scaled by head size. Defenders: tight crop (1.6 head heights), slightly low camera,
+warm key + cool fill + soft bounce; enemies use a more frontal crop so helmet colours and the glowing eyes read at
+icon size.
 
 ![portraits](img/portraits_sheet.png)
 
@@ -152,15 +194,15 @@ the glowing eyes read at icon size.
 
 | id | max foot slide in planted clips (m) | lowest mesh point over all clips (m) | worst loop seam (m) |
 |---|---|---|---|
-| ace | 0.0000 | -0.017 (defeat: -0.033) | 0.0000 |
-| rico | 0.0000 | -0.014 (defeat: -0.034) | 0.0000 |
-| maya | 0.0000 | -0.017 (defeat: -0.031) | 0.0000 |
-| jax | 0.0000 | -0.018 (defeat: -0.035) | 0.0000 |
-| kai | 0.0000 | -0.021 (defeat: -0.033) | 0.0000 |
-| bruno | 0.0000 | -0.018 (defeat: -0.036) | 0.0000 |
-| nova | 0.0000 | -0.017 (defeat: -0.032) | 0.0000 |
-| dex | 0.0000 | -0.018 (defeat: -0.033) | 0.0000 |
-| hana | 0.0000 | -0.016 (defeat: -0.030) | 0.0000 |
+| ace | 0.0000 | -0.017 (defeat: -0.012) | 0.0000 |
+| rico | 0.0000 | -0.022 (defeat: -0.016) | 0.0000 |
+| maya | 0.0000 | -0.017 (defeat: -0.026) | 0.0000 |
+| jax | 0.0000 | -0.018 (defeat: -0.014) | 0.0000 |
+| kai | 0.0000 | -0.021 (defeat: -0.012) | 0.0000 |
+| bruno | 0.0000 | -0.019 (defeat: -0.021) | 0.0000 |
+| nova | 0.0000 | -0.017 (defeat: -0.011) | 0.0000 |
+| dex | 0.0000 | -0.017 (defeat: -0.012) | 0.0000 |
+| hana | 0.0000 | -0.016 (defeat: -0.011) | 0.0000 |
 | runner | 0.0000 | -0.022 (defeat: -0.032) | 0.0000 |
 | sprinter | 0.0000 | -0.019 (defeat: -0.032) | 0.0000 |
 | armored | 0.0000 | -0.024 (defeat: -0.034) | 0.0000 |
@@ -174,13 +216,17 @@ the glowing eyes read at icon size.
 | grand_slammer | 0.0000 | -0.052 (defeat: -0.424) | 0.0000 |
 
    Foot slide is measured on grounded feet in idle/ready/stunned/hit/victory/taunt/slam/catch (IK-locked → 0).
+   Rebuilt defenders: cleats are weighted to `foot`/`toe` only, the heel raise is clamped at ≥ 0 and the toes stay flat
+   while the heel leaves the ground in `defeat`, so their lowest points stay within the first pass's range (walk
+   toe-off ≈ 1.6–2.2 cm) and `defeat` now rests on the back at ≈ 1–2.6 cm (was ≈ 3.3 cm).
    The lowest non-`defeat` points are single frames of shoe tips at the `leap` landing / `pitch` pivot (≈1–2 % of
    height). In `defeat` the cape wearers' capes sink into the ground while lying on the back.
 3. In-engine (Godot Forward+, directional light):
 
 ![ace and runner](img/godot_ace_runner.png)
 
-ace idle / throw at 0.30 (release) / run mid-stride; runner idle / run / swing at 0.50.
+ace idle / throw at 0.30 (release) / run mid-stride; runner idle / run / swing at 0.50. (This image and the next one
+show the first-pass defender models; the current defenders are in the lineup below and in section 0.)
 
 ![poses](img/godot_poses.png)
 
@@ -189,9 +235,13 @@ jumper leap at 0.45 (node not moved, so it hangs in the air).
 
 ![defenders](img/godot_lineup_defenders.png)
 
+Current stylised defenders in Godot through the game's `CharacterModel` (merged vertex-colour shader, home uniform),
+`idle` pose.
+
 ![enemies and bosses](img/godot_lineup_enemies.png)
 
-4. Blender close-ups (Cycles): face/cap, mitt pocket in `ready`, right hand on hip, cleats.
+4. Blender close-ups of the rebuilt ace (Cycles): face/cap in `idle`, glove pocket + laced web at the `catch` event
+   (0.25 s), right hand over the glove in `ready`, cleats (white sole, laces, accent swoosh).
 
 ![close-ups](img/closeups.png)
 
@@ -199,17 +249,24 @@ jumper leap at 0.45 (node not moved, so it hangs in the air).
 
 * **Baked at 60 Hz instead of 30 fps**: 0.35 s (`hit`) and 0.75 s (`throw`) are not whole frames at 30 fps
   (they imported as 0.333 / 0.733 s). At 60 Hz all lengths and event times are exact. Times in seconds unchanged.
-* **Three extra material names**: `Pupil` (black pupils, mouth line, eye black, Kai's glasses frame),
+* **Extra material names**: `Mouth` (mouth interior/line), `Sole` (cleat soles + laces), `EyeHighlight` (emissive
+  eye sparkles), `Brow` (Nova's darker brows), and from the first pass `Pupil` (black pupils, lid lines, eye black,
+  Kai's glasses frame),
   `NumberOutline` (gold number outline asked for by the palette section), `Visor` (glossy dark enemy visors, Kai's
   cyan lenses). No spec name was renamed or repurposed.
 * `walk` added to enemies/bosses (lead request).
+* Defenders (redesign, lead request): head ≈ 1/5.3–1/5.6 of the height instead of ASSET_SPEC's ≈ 1/6.5, and a
+  20 000-triangle budget (was 14 000). Heights stay within 1 % of the first pass (Hana 1.709 vs 1.722 m, Rico 1.756
+  vs 1.768 m), so the game's AABB-based scaling is unchanged.
 * Heights within 2 % of targets (runner 1.76, slugger 2.36, iron_slugger 3.54, phantom 3.21, grand_slammer 4.21,
   swarmer 1.19 m).
 * `Metal` metallic 0.55–0.7 (not 1.0) so plates stay readable without a sky/reflection probe.
 
 ## 8. Known limitations
 
-* No finger/face bones (per spec): hands are fixed sculpted poses (relaxed right hand, fists for enemies); no blinking.
+* No finger/face bones (per spec): hands are fixed modelled poses (relaxed right hand, fists for enemies); no blinking.
+* Defender parts are separate overlapping shells (sleeve over arm, cap over hair, decals over cloth); at extreme arm
+  raises the sleeve's shoulder cap and the jersey's shoulder line meet with a visible crease.
 * Linear-blend skinning, no corrective shapes: some stretch at the crotch/inner thigh in wide stances and at the
   shoulder with the arm fully raised.
 * Capes, hood, scarf, ponytail are skinned to spine/neck/hips (no secondary motion): capes can touch the thighs in long
@@ -219,5 +276,6 @@ jumper leap at 0.45 (node not moved, so it hangs in the air).
 * Arms are IK-clamped (fully extended) in a few frames where the target is out of reach (throw/pitch follow-through,
   slam on big bodies).
 * Phantom's `Cloth` is alpha-blended (sorting may need care in Godot; it also matters if the game merges surfaces).
-* Hair and thin shells are decimated SDF meshes: light hair (Nova) shows some faceting in close-ups.
+* Enemy/boss hair and thin shells are decimated SDF meshes (defenders no longer use that path).
+* Hair, ponytail and beards are rigid to `head` (no secondary motion).
 * Loop mode must be set by the game (glTF has no loop flag).

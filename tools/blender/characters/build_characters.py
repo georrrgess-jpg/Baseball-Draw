@@ -7,6 +7,9 @@ Usage (from the repo root):
 Builds assets/models/characters/<id>.glb (mesh + shared armature + all
 animation clips) and assets/textures/portraits/<id>.png for every id given
 (default: all 20).  Everything is procedural and deterministic.
+
+Defenders are stylised mesh-modelled heroes (hero.py + hero_head/body/wear,
+geo.py); enemies/bosses use the SDF sculpt path (body/heads/outfit/enemies).
 """
 import os
 import sys
@@ -89,187 +92,35 @@ def defender_materials(cfg):
                 Pupil=P["pupil"], Jersey=P["jersey"], JerseyTrim=P["trim"], Number=P["number"],
                 NumberOutline=P["gold"], Pants=P["pants"], Socks=P["socks"], Shoes=P["shoes"],
                 Belt=P["belt"], Cap=P["cap"], Glove=P["glove"], Undershirt=cfg["accent"],
-                Metal=P["metal"])
+                Metal=P["metal"], Mouth=P["mouth"], Sole=P["sole"])
     if cfg.get("gear"):
         cols["Gear"] = cfg["accent"]
     if cfg.get("sunglasses"):
         cols["Visor"] = cfg["accent"]
+    if cfg.get("brow_col"):
+        cols["Brow"] = cfg["brow_col"]
     mats = M.material_set(cols)
+    mats["EyeHighlight"] = M.make("EyeHighlight", "#FFFFFF", "#FFFFFF", 1.5, rough=0.2)
     if cfg.get("sunglasses"):
-        M.make("Visor", cfg["accent"], rough=0.05, metal=0.85)
+        mats["Visor"] = M.make("Visor", cfg["accent"], rough=0.12, metal=0.45)
     if cfg.get("gear"):
-        M.make("Gear", cfg["accent"], rough=0.3, metal=0.15)
+        mats["Gear"] = M.make("Gear", cfg["accent"], rough=0.3, metal=0.15)
     return mats
 
 
 def build_defender(cid):
+    """Stylised hero defender (mesh-modelled, see hero.py)."""
+    import hero
     cfg = roster.DEFENDERS[cid]
-    sk = rig.Skeleton(cfg.get("props", {}))
+    sk = hero.make_skeleton(cfg)
     arm = sk.build("Armature")
     mats = defender_materials(cfg)
-    s = sk.s
-    face = dict(cfg.get("face", {}))
-    o, h = sk.head_frame()
-    neck_base = (0, 0.015 * s, sk.levels["neck"] - 0.05 * s)
-    hb = heads.HeadBuilder(o, h, face, neck_r=sk.p["neck_r"] * s, neck_base=neck_base)
-    parts = []
-    head_obj = hb.build_skin(mats["Skin"], tris=1900)
-    parts.append(head_obj)
-    parts += hb.build_eyes(mats)
-    parts.append(hb.build_brows(mats["Hair"], tris=220))
-    parts.append(hb.build_mouth(mats["Pupil"], tris=80))
-    if hb.f.get("lashes"):
-        parts.append(hb.build_lashes(mats["Pupil"], tris=120))
-    hw = cfg.get("headwear", "cap")
-    hair_clip = None
-    if hw in ("cap", "cap_back", "visor"):
-        cb = outfit.CapBuilder(hb, mats, mats["Undershirt"], emblem=cfg.get("emblem"),
-                               yaw=180 if hw == "cap_back" else 0,
-                               visor_only=(hw == "visor"))
-        parts += cb.build(tris_crown=600, tris_brim=240)
-        if hw != "visor":
-            hair_clip = sdf.offset(cb.crown(), 0.010 * h)
-    elif hw == "headband":
-        parts += outfit.build_headband(hb, mats["Undershirt"])
-    elif hw == "catcher":
-        parts += build_catcher_helmet(hb, mats)
-    parts += outfit.build_hair(hb, cfg.get("hair_style", "short"), mats["Hair"],
-                               accent_mat=mats["Undershirt"], tris=800, clip=hair_clip)
-    if cfg.get("beard"):
-        parts += outfit.build_beard(hb, mats["Hair"], full=False, tris=400)
-    if cfg.get("full_beard"):
-        parts += outfit.build_beard(hb, mats["Hair"], full=True, tris=700)
-    if cfg.get("eyeblack"):
-        parts.append(outfit.build_eye_black(hb, mats["Pupil"], hb.skin_sdf()))
-    if cfg.get("sunglasses"):
-        parts += outfit.build_sunglasses(hb, mats["Visor"], mats["Pupil"])
-    bcfg = dict(sleeve_len=0.15, vneck=True)
-    bb = body.BodyBuilder(sk, mats, bcfg)
-    parts.append(bb.build_torso(mats["Jersey"], tris=1500))
-    parts.append(bb.build_collar_trim(mats["JerseyTrim"], tris=200))
-    parts.append(bb.build_undershirt_collar(mats["Undershirt"], tris=120))
-    parts += bb.build_placket(mats["JerseyTrim"], mats["Number"], tris=200)
-    parts += bb.build_sleeve_trim(mats["JerseyTrim"], tris=80)
-    if cfg.get("undershirt") == "elbow":
-        for sd in "LR":
-            parts.append(bb.build_arm(sd, mats["Undershirt"], tris=260, lower=False,
-                                      name="ArmUpper." + sd))
-            parts.append(bb.build_arm(sd, mats["Skin"], tris=360, upper=False,
-                                      name="Forearm." + sd))
-    else:
-        for sd in "LR":
-            parts.append(bb.build_arm(sd, mats["Undershirt"], tris=450))
-    if cfg.get("wristbands"):
-        for sd in "LR":
-            parts.append(bb.build_wrist_band(sd, mats["Undershirt"] if False else mats["Undershirt"],
-                                             tris=120))
-    parts.append(bb.build_hand("R", mats["Skin"], tris=600))
-    parts += outfit.build_mitt(bb, "L", mats["Glove"], mats["Undershirt"],
-                               catcher=(cfg.get("mitt") == "catcher"))
-    parts.append(bb.build_pants(mats["Pants"], tris=1400))
-    parts += bb.build_belt(mats["Belt"], mats["Metal"], mats["Pants"], tris=260)
-    parts += bb.build_socks(mats["Socks"], tris=260, stripe_mat=mats["JerseyTrim"])
-    parts += bb.build_shoes(mats["Shoes"], tris=420, stripe_mat=mats["Undershirt"])
-    if cfg.get("gear"):
-        parts += build_catcher_gear(bb, mats)
-    parts += outfit.build_numbers(bb, cfg["number"], FONT, mats["Number"], mats["NumberOutline"],
-                                  front=not cfg.get("gear"))
-    return finish(cid, "defender", sk, arm, parts, style={"idle": cfg.get("idle", "relaxed")})
-
-
-def build_catcher_helmet(hb, mats):
-    """Hockey-style catcher's helmet (Gear) with ear guards + steel face cage."""
-    h = hb.h
-    P = hb.P
-    parts = []
-    shell = sdf.ellipsoid(P(0, 0.06, 0.06), hb.R(0.40, 0.47, 0.50))
-    helm = sdf.intersect(shell, sdf.halfspace(P(0, 0, -0.40), [0, 0.30, -1.0]))
-    # face opening (oval from brow to chin)
-    helm = sdf.subtract(helm, sdf.ellipsoid(P(0, -0.52, -0.14), hb.R(0.27, 0.34, 0.36)),
-                        k=0.03 * h)
-    # ridge on top
-    ridge = sdf.intersect(sdf.offset(shell, 0.02 * h), sdf.box(P(0, 0.1, 0.4), hb.R(0.05, 0.6, 0.3)))
-    helm = sdf.blend(helm, 0.02 * h, ridge)
-    helm.bbox = (np.array(hb.o) + np.array([-0.6, -0.8, -0.7]) * h,
-                 np.array(hb.o) + np.array([0.6, 0.9, 0.75]) * h)
-    ears = [sdf.ellipsoid(P(sx * 0.365, 0.05, -0.08), hb.R(0.06, 0.13, 0.16)) for sx in (1, -1)]
-    helm = sdf.blend(helm, 0.04 * h, *ears)
-    helm.bbox = (np.array(hb.o) + np.array([-0.6, -0.8, -0.7]) * h,
-                 np.array(hb.o) + np.array([0.6, 0.9, 0.75]) * h)
-    parts.append(mu.sdf_part("CatcherHelmet", helm, mats["Gear"], 0.008 * h, 1000, rigid="head",
-                             sym=True))
-    # face cage: bars in front of the face (Metal), frame joins the helmet rim
-    bars = []
-    face = sdf.ellipsoid(P(0, -0.05, -0.10), hb.R(0.42, 0.57, 0.58))
-    for x in (-0.09, 0.09):
-        pts = [_on_shell(face, P(x, -0.9, z), hb) for z in np.linspace(0.20, -0.50, 6)]
-        bars.append(sdf.polyline_tube(pts, [0.017 * h] * len(pts)))
-    for z in (0.20, 0.02, -0.16, -0.34):
-        pts = [_on_shell(face, P(x, -0.9, z), hb) for x in np.linspace(-0.36, 0.36, 7)]
-        bars.append(sdf.polyline_tube(pts, [0.017 * h] * len(pts)))
-    # side struts to the helmet rim
-    for sx in (1, -1):
-        e1 = _on_shell(face, P(sx * 0.36, -0.9, 0.20), hb)
-        bars.append(sdf.capsule(e1, e1 + np.array([sx * 0.01, 0.10, 0.0]) * h, 0.02 * h))
-        e2 = _on_shell(face, P(sx * 0.36, -0.9, -0.34), hb)
-        bars.append(sdf.capsule(e2, e2 + np.array([sx * 0.01, 0.12, 0.02]) * h, 0.02 * h))
-    cage = sdf.union(*bars)
-    parts.append(mu.sdf_part("FaceCage", cage, mats["Metal"], 0.006 * h, 900, rigid="head",
-                             sym=True))
-    return parts
-
-
-def _on_shell(shape, start, hb):
-    """March from ``start`` toward the head centre until hitting shape."""
-    c = np.array(hb.o)
-    st = np.array(start)
-    d = c - st
-    ts = np.linspace(0, 1, 300)
-    pts = st + ts[:, None] * d
-    v = shape(pts)
-    k = int(np.argmax(v < 0))
-    return pts[k]
-
-
-def build_catcher_gear(bb, mats):
-    s = bb.s
-    parts = []
-    torso = bb.torso_sdf(with_sleeves=False)
-    zc = bb.lv("chest")
-    zp = bb.lv("pelvis")
-    # chest protector: thick shell over the front of the torso
-    prot = sdf.intersect(sdf.offset(torso, 0.024 * s),
-                         sdf.halfspace([0, -0.03 * s, 0], [0, 1, 0]))
-    prot = sdf.intersect(prot, sdf.halfspace([0, 0, zp + 0.02 * s], [0, 0, -1]))
-    prot = sdf.intersect(prot, sdf.halfspace([0, 0, bb.lv("neck") - 0.03 * s], [0, 0, 1]))
-    # segment grooves
-    grooves = [sdf.box([0, -0.3 * s, z], [0.3 * s, 0.2 * s, 0.006 * s])
-               for z in np.linspace(zp + 0.12 * s, zc + 0.15 * s, 4)]
-    prot = sdf.subtract(prot, *grooves, k=0.004 * s)
-    prot.bbox = (np.array([-0.3, -0.35, zp - 0.05]) * 1.0 * s / s * np.array([s, s, 1]),
-                 np.array([0.3 * s, 0.1 * s, bb.lv("neck") + 0.02 * s]))
-    prot.bbox = (np.array([-0.3 * s, -0.35 * s, zp - 0.05 * s]),
-                 np.array([0.3 * s, 0.1 * s, bb.lv("neck") + 0.02 * s]))
-    parts.append(mu.sdf_part("ChestProtector", prot, mats["Gear"], 0.0065 * s, 700,
-                             bones=["hips", "spine", "chest"], sym=True, sharp=50))
-    # straps over the back (thin)
-    for sd in ("L", "R"):
-        sh = bb.sock_sdf(sd, extra=0.0)
-        K = bb.j("shin." + sd)
-        Ak = bb.j("foot." + sd)
-        guard = sdf.intersect(sdf.offset(sh, 0.018 * s),
-                              sdf.halfspace(K + np.array([0, 0.005 * s, 0]), [0, 1, 0]))
-        knee = sdf.ellipsoid(K + np.array([0, -0.06 * s, 0.02 * s]), [0.07 * s, 0.05 * s, 0.075 * s])
-        guard = sdf.blend(guard, 0.03 * s, knee)
-        guard = sdf.intersect(guard, sdf.halfspace(Ak + np.array([0, 0, 0.035 * s]), [0, 0, -1]))
-        ribs = [sdf.box(K + np.array([x, -0.1 * s, -0.17 * s]), [0.005 * s, 0.1 * s, 0.17 * s])
-                for x in (-0.025 * s, 0.025 * s)]
-        guard = sdf.subtract(guard, *ribs, k=0.003 * s)
-        guard.bbox = (K - np.array([0.15, 0.2, 0.0]) * s - np.array([0, 0, K[2]]),
-                      K + np.array([0.15, 0.15, 0.15]) * s)
-        parts.append(mu.sdf_part("ShinGuard." + sd, guard, mats["Gear"], 0.006 * s, 500,
-                                 bones=["thigh." + sd, "shin." + sd, "foot." + sd], sharp=50))
-    return parts
+    hb = hero.Hero(cid, cfg, sk, mats, FONT)
+    parts = hb.build()
+    tot, rows = hero.report(parts)
+    print("TRIS", cid, tot, rows[:12])
+    return finish(cid, "defender", sk, arm, parts, style={"idle": cfg.get("idle", "relaxed")},
+                  hero_parts=True)
 
 
 # ---------------------------------------------------------------------------
@@ -408,13 +259,22 @@ def enemy_extras(cid, cfg, sk, bb, hb, mats):
 LAST = {}
 
 
-def finish(cid, kind, sk, arm, parts, style):
+def finish(cid, kind, sk, arm, parts, style, hero_parts=False):
     parts = [p for p in parts if p is not None]
     budget = roster.BUDGET[kind]
-    tot = enforce_budget(parts, budget)
-    for p in parts:
-        mu.cleanup(p)
-        skin.apply_weights(p, sk)
+    if hero_parts:
+        # clean quad meshes built to budget: no decimation, decals copy the
+        # weights of the surface under them
+        import hero
+        hero.apply_weights(parts, sk)
+        tot = sum(mu.tri_count(p) for p in parts)
+        if tot > budget:
+            print("WARNING: %s over budget: %d > %d" % (cid, tot, budget))
+    else:
+        tot = enforce_budget(parts, budget)
+        for p in parts:
+            mu.cleanup(p)
+            skin.apply_weights(p, sk)
     body_obj = skin.join_parts(parts, "Body", arm)
     arm["props"] = json.dumps(sk.p)
     arm["kind"] = kind

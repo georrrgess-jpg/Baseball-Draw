@@ -113,6 +113,9 @@ class Ctx:
         self.l2 = sk.length["forearm.L"]
         self.la = self.l1 + self.l2
         self.leg = sk.length["thigh.L"] + sk.length["shin.L"]
+        # stylised defenders have shorter legs relative to the global scale:
+        # hip offsets and strides follow the leg length (enemies: 1.0)
+        self.lk = (self.leg / (0.855 * s)) if kind == "defender" else 1.0
         self.ank = {sd: sk.heads["foot." + sd].copy() for sd in "LR"}
         self.ball = {sd: sk.heads["toe." + sd].copy() for sd in "LR"}
         self.hipj = {sd: sk.heads["thigh." + sd].copy() for sd in "LR"}
@@ -140,7 +143,7 @@ class Ctx:
     # torso ----------------------------------------------------------------
     def torso(self, P, hips=(0, 0, 0), hips_rot=(0, 0, 0), spine=(0, 0, 0),
               chest=(0, 0, 0), neck=(0, 0, 0), head=(0, 0, 0), sh_L=None, sh_R=None):
-        P.hips_off = Vector(hips) * self.s
+        P.hips_off = Vector(hips) * self.s * self.lk
         P.rot["hips"] = body_rot(*hips_rot)
         P.rot["spine"] = body_rot(*spine)
         P.rot["chest"] = body_rot(*chest)
@@ -159,6 +162,10 @@ class Ctx:
         raised about the heel (heel strike)."""
         s = self.s
         sx = 1 if side == "L" else -1
+        if self.kind == "defender":
+            # spline overshoot must never sink the heel below the ground
+            heel = max(0.0, heel)
+            toe = max(0.0, toe)
         if x is None:
             x = self.ball[side].x
         if y is None:
@@ -386,8 +393,9 @@ def _loco(c, t, L, stance, d_st, lift, lean, bob, arm_amp, arm_bend, kick,
 def clip_run(c, t):
     h = c.style["heavy"]
     s = c.s
-    return _loco(c, t, 0.70, stance=0.36, d_st=0.66 * s, lift=0.30 * s, lean=12 + 4 * h,
-                 bob=0.022 * s, arm_amp=1.0, arm_bend=0.15, kick=0.36 * s, heavy=h)
+    k = c.lk
+    return _loco(c, t, 0.70, stance=0.36, d_st=0.66 * s * k, lift=0.30 * s * k, lean=12 + 4 * h,
+                 bob=0.022 * s * k, arm_amp=1.0, arm_bend=0.15, kick=0.36 * s * k, heavy=h)
 
 
 def clip_sprint(c, t):
@@ -405,7 +413,7 @@ def clip_walk(c, t):
     P = c.new()
     ph = (t / L) % 1.0
     stance = 0.62
-    d_st = (0.50 + 0.06 * h) * s
+    d_st = (0.50 + 0.06 * h) * s * c.lk
     # hips: highest at mid-stance in walking (inverted pendulum), stomp drop
     zb = 0.012 * math.cos(4 * math.pi * (ph - stance * 0.5)) * (1 - 0.5 * h)
     stomp = 0.0
@@ -440,7 +448,7 @@ def clip_walk(c, t):
             a1 = c.plant(P2, side, x, -d_st / 2 + fy_off, yaw=sx * 6,
                          toe=18 * (1 - 0.6 * h))
             hz = c.ank[side].z
-            lift = (0.09 + 0.12 * h) * s
+            lift = (0.09 + 0.12 * h) * s * c.lk
             keys = [(0.0, a0),
                     (0.35, Vector((x, d_st * 0.22, hz + lift * 0.8))),
                     (0.65, Vector((x, -d_st * 0.25, hz + lift))),
@@ -515,6 +523,8 @@ def clip_defeat(c, t):
     P = c.new()
     L = c.L
     lie_z = (c.sk.p["pelvis_d"] * 0.95 + 0.065) * s
+    if c.kind == "defender":
+        lie_z -= 0.036 * s     # stylised bodies: rest the back on the ground
     # hips offset relative to rest pelvis height
     dz_end = lie_z - L["pelvis"]
     y_end = 0.55 * s
@@ -529,7 +539,11 @@ def clip_defeat(c, t):
     sp = K(t, [(0, 0), (0.15, -10), (0.4, -6), (0.66, 4), (0.74, 8), (0.9, 0), (1.2, 0)])
     P.rot["spine"] = body_rot(sp, 0, -tw * 0.5)
     P.rot["chest"] = body_rot(sp, 3, -tw * 0.3)
-    nk = K(t, [(0, 0), (0.15, -20), (0.45, 10), (0.66, 25), (0.74, 30), (0.9, 18), (1.2, 18)])
+    if c.kind == "defender":
+        # big stylised heads (ponytail, backwards brim): keep the head up off the ground
+        nk = K(t, [(0, 0), (0.15, -20), (0.45, 12), (0.66, 32), (0.74, 40), (0.9, 34), (1.2, 34)])
+    else:
+        nk = K(t, [(0, 0), (0.15, -20), (0.45, 10), (0.66, 25), (0.74, 30), (0.9, 18), (1.2, 18)])
     P.rot["neck"] = body_rot(nk, 0, 0)
     P.rot["head"] = body_rot(nk * 0.6, K(t, [(0, 0), (0.9, 0), (1.2, 12)]), K(t, [(0, 0), (0.9, 5), (1.2, 18)]))
     # legs: first planted, then thrown up, end lying with knees slightly bent
@@ -548,7 +562,8 @@ def clip_defeat(c, t):
             # final: lying, ankle on ground in front of hips (toward -Y)
             knee_bend = 0.88 if side == "L" else 0.80
             a_end = Vector((c.fx * (1.6 if side == "L" else 1.2) * sx,
-                            y_end - c.leg * knee_bend, c.sk.p["ankle_r"] * s * 1.3 + 0.03 * s))
+                            y_end - c.leg * knee_bend, c.sk.p["ankle_r"] * s * 1.3 + 0.03 * s +
+                            (0.040 * s if c.kind == "defender" else 0.0)))
             a_air = Vector((c.fx * 1.4 * sx, 0.05 * s, 0.45 * s))
             ank = KV(t, [(0.30, a0), (0.55, a_air + Vector((0, -0.05 * s * sx, 0.05 * s))),
                          (0.74, a_end + Vector((0, 0, 0.10 * s))), (0.88, a_end), (1.2, a_end)])
@@ -556,7 +571,11 @@ def clip_defeat(c, t):
             pole = Vector((sx * 0.3, -0.4, 1.0))
             if t < 0.45:
                 pole = Vector((sx * 0.2, -1.0, 0.2)).lerp(pole, sstep(0.3, 0.45, t))
-            c.free_foot(P, side, ank, pitch=pitch_f, yaw=sx * 12, pole=pole)
+            tb = 0.0
+            if c.kind == "defender" and pitch_f > 0:
+                # keep the toes flat while the heel leaves the ground
+                tb = -pitch_f * (1 - sstep(0.30, 0.50, t))
+            c.free_foot(P, side, ank, pitch=pitch_f, yaw=sx * 12, pole=pole, toe_bend=tb)
     # arms fly up, end spread on the ground
     k = sstep(0.0, 0.25, t)
     k2 = sstep(0.55, 0.9, t)
@@ -673,14 +692,14 @@ def _throw_core(c, P, t, keys_t, stride_y=0.30, stride_lift=0.16, jump=0.0):
             knee_out=0.35, knee_yaw=K(t, [(T0, -14), (Tc, -45), (Tr, 10), (Te, -14)]))
     lx = c.fx * 2.1
     ly_ready = c.fy - 0.02 * s
-    ly_str = ly_ready - stride_y * s
+    ly_str = ly_ready - stride_y * s * c.lk
     if t <= Tg:
         c.plant(P, "L", lx, ly_ready, yaw=14, knee_out=0.35)
     elif t < Tc + (Tr - Tc) * 0.35:
         k = (t - Tg) / (Tc + (Tr - Tc) * 0.35 - Tg)
         a0 = c.ankle_of("L", lx, ly_ready, yaw=14)
         a1 = c.ankle_of("L", lx - 0.03 * s, ly_str, yaw=-10)
-        mid = a0.lerp(a1, 0.5) + Vector((0.04 * s, 0, stride_lift * s))
+        mid = a0.lerp(a1, 0.5) + Vector((0.04 * s, 0, stride_lift * s * c.lk))
         ank = KV(k, [(0, a0), (0.5, mid), (1.0, a1)])
         c.free_foot(P, "L", ank, pitch=K(k, [(0, 0), (0.5, -10), (1.0, 0)]),
                     yaw=K(k, [(0, 14), (1, -10)]), knee_out=0.3)
@@ -791,7 +810,7 @@ def clip_pitch(c, t):
                   (T["release"], 15), (T["follow"], 30), (T["field"], 5), (T["end"], 0)])
     fwd = K(t, [(0, 4), (T["set"], 2), (T["kick"], -6), (T["stride"], 4), (T["release"], 22),
                 (T["follow"], 40), (T["field"], 22), (T["end"], 18)])
-    hz = K(t, [(0, -0.03), (T["set"], -0.05), (T["kick"], -0.07), (T["stride"], -0.17),
+    hz = K(t, [(0, -0.03), (T["set"], -0.055), (T["kick"], -0.09), (T["stride"], -0.17),
                (T["release"], -0.17), (T["follow"], -0.20), (T["field"], -0.15), (T["end"], -0.13)])
     hy = K(t, [(0, 0.0), (T["set"], 0.0), (T["kick"], 0.02), (T["stride"], -0.10),
                (T["release"], -0.24), (T["follow"], -0.30), (T["field"], -0.14), (T["end"], 0.045)])
@@ -814,7 +833,7 @@ def clip_pitch(c, t):
     elif t < T["field"]:
         k = (t - T["release"]) / (T["field"] - T["release"])
         a0 = c.ankle_of("R", rxp, c.fy, yaw=-60, heel=40)
-        a1 = c.ankle_of("R", -c.fx * 2.0, c.fy - 0.42 * s, yaw=-14)
+        a1 = c.ankle_of("R", -c.fx * 2.0, c.fy - 0.42 * s * c.lk, yaw=-14)
         mid = a0.lerp(a1, 0.5) + Vector((0.05 * s, 0.0, 0.30 * s))
         ank = KV(k, [(0, a0), (0.45, mid), (1.0, a1)])
         c.free_foot(P, "R", ank, pitch=K(k, [(0, 40), (0.45, 15), (1, 0)]), yaw=lerp(-60, -14, k),
@@ -822,7 +841,7 @@ def clip_pitch(c, t):
     else:
         k = sstep(T["field"], T["end"], t)
         if k < 0.999:
-            a0 = c.ankle_of("R", -c.fx * 2.0, c.fy - 0.42 * s, yaw=-14)
+            a0 = c.ankle_of("R", -c.fx * 2.0, c.fy - 0.42 * s * c.lk, yaw=-14)
             a1 = c.ankle_of("R", -c.fx * 2.0, c.fy + 0.02 * s, yaw=-14)
             ank = KV(k, [(0, a0), (0.5, a0.lerp(a1, 0.5) + Vector((0, 0, 0.07 * s))), (1, a1)])
             c.free_foot(P, "R", ank, pitch=0, yaw=-14, knee_out=0.35)
@@ -830,15 +849,15 @@ def clip_pitch(c, t):
             c.plant(P, "R", -c.fx * 2.0, c.fy + 0.02 * s, yaw=-14, knee_out=0.35)
     # --- left (stride) leg: kick then stride to -Y
     lx0 = c.fx * 1.2
-    ly_str = c.fy - 0.72 * s
+    ly_str = c.fy - 0.72 * s * c.lk
     if t < T["set"] * 0.6:
         c.plant(P, "L", lx0, c.fy, yaw=6)
     elif t < T["stride"]:
         k0 = T["set"] * 0.6
         a0 = c.ankle_of("L", lx0, c.fy, yaw=6)
         a_set = c.ankle_of("L", c.fx * 0.4, c.fy + 0.05 * s, yaw=-60, z=0.0)
-        a_kick = Vector((c.fx * 0.1, 0.06 * s, c.L["hip"] - 0.16 * s))
-        a_reach = Vector((c.fx * 0.8, c.fy - 0.55 * s, 0.22 * s))
+        a_kick = Vector((c.fx * 0.1, 0.06 * s, c.L["hip"] - 0.16 * s * c.lk))
+        a_reach = Vector((c.fx * 0.8, c.fy - 0.55 * s * c.lk, 0.22 * s * c.lk))
         a_land = c.ankle_of("L", lx0, ly_str, yaw=-10)
         ank = KV(t, [(k0, a0), (T["turn"], a_set + Vector((0, 0, 0.06 * s))),
                      (T["kick"], a_kick), (T["kick"] + 0.12, a_reach), (T["stride"], a_land)])
