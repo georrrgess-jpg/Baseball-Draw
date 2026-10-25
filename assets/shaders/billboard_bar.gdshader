@@ -12,7 +12,7 @@ instance uniform float pulse = 0.0;         // 1 on a hit, decays to 0 (scale po
 instance uniform float shield = 0.0;
 instance uniform float visible_alpha = 1.0;
 uniform vec2 bar_size = vec2(1.3, 0.24);    // world size of the quad (matches the QuadMesh)
-uniform float min_px = 58.0;                // minimum on-screen width in pixels
+uniform float min_px = 58.0;                // minimum on-screen width in pixels at 1000 px viewport height
 uniform float max_grow = 3.2;               // cap on the distance compensation
 uniform float border = 0.2;                 // outline thickness, as a fraction of the height
 uniform vec4 frame_color : source_color = vec4(0.02, 0.02, 0.03, 1.0);
@@ -28,7 +28,8 @@ void vertex() {
 	if (PROJECTION_MATRIX[3][3] > 0.5) {
 		px_per_m = PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y * 0.5;
 	}
-	float grow = clamp(min_px / max(bar_size.x * px_per_m, 0.001), 1.0, max_grow);
+	float want_px = min_px * clamp(VIEWPORT_SIZE.y / 1000.0, 0.8, 2.2);
+	float grow = clamp(want_px / max(bar_size.x * px_per_m, 0.001), 1.0, max_grow);
 	float pop = 1.0 + 0.28 * pulse;
 	float s = grow * pop;
 	vec2 v = VERTEX.xy * s;
@@ -39,9 +40,9 @@ void vertex() {
 }
 
 vec3 health_color(float f) {
-	vec3 hi = colorblind ? vec3(0.25, 0.62, 1.0) : vec3(0.26, 0.92, 0.32);
-	vec3 mid = colorblind ? vec3(1.0, 0.86, 0.2) : vec3(1.0, 0.84, 0.16);
-	vec3 lo = colorblind ? vec3(1.0, 0.45, 0.05) : vec3(1.0, 0.2, 0.16);
+	vec3 hi = colorblind ? vec3(0.15, 0.55, 1.0) : vec3(0.12, 0.88, 0.18);
+	vec3 mid = colorblind ? vec3(1.0, 0.82, 0.1) : vec3(1.0, 0.8, 0.06);
+	vec3 lo = colorblind ? vec3(1.0, 0.42, 0.02) : vec3(1.0, 0.14, 0.1);
 	vec3 c = mix(lo, mid, smoothstep(0.22, 0.38, f));
 	return mix(c, hi, smoothstep(0.52, 0.66, f));
 }
@@ -67,9 +68,10 @@ void fragment() {
 			c = vec3(1.0, 0.97, 0.9);
 		}
 		if (x < fill) {
-			c = health_color(fill) * (1.08 - 0.32 * y);
+			// Over-bright so the colour survives the scene's tonemapping.
+			c = health_color(fill) * (1.2 - 0.38 * y);
 			// Gloss on the top third.
-			c += vec3(0.18) * (1.0 - smoothstep(0.0, 0.4, y));
+			c += vec3(0.12) * (1.0 - smoothstep(0.0, 0.4, y));
 		}
 		if (shield > 0.0 && x < shield) {
 			c = mix(c, vec3(0.7, 0.75, 0.8), 0.55);

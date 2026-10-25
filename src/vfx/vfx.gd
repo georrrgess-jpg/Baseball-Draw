@@ -713,12 +713,12 @@ func impact_ring(pos: Vector3, normal: Vector3, color: Color, radius: float, tim
 ## imploding ring and a short label. Used when a card lands on nothing or the target is immune.
 func fizzle(pos: Vector3, text := "NO EFFECT", color := Color(0.8, 0.82, 0.88)) -> void:
 	var p := Vector3(pos.x, maxf(pos.y, 0.6), pos.z)
-	emit("smoke", p, 4, Color(0.5, 0.52, 0.56, 0.6), 1.3, 0.6, 1.0, 0.7, 0.8)
-	spray("spark", p, 7, Color(0.85, 0.87, 0.92), 4.5, Vector3.UP, 1.0, 0.6, 0.7)
-	emit_one("ring", toward_camera(p, 0.3), Vector3.ZERO, Color(color, 0.55), 0.9, 0.8)
-	shockwave(Vector3(p.x, 0.0, p.z), 1.3, Color(color, 0.75), 0.35, 0.05, 0.0, true)
+	emit("smoke", p, 6, Color(0.42, 0.44, 0.48, 0.75), 1.4, 0.6, 1.0, 1.0, 0.9)
+	spray("spark", p, 8, Color(0.9, 0.92, 0.96), 4.5, Vector3.UP, 1.0, 0.7, 0.7)
+	emit_one("ring", toward_camera(p, 0.3), Vector3.ZERO, Color(color, 0.7), 1.1, 0.9)
+	shockwave(Vector3(p.x, 0.0, p.z), 1.6, Color(color, 0.85), 0.4, 0.06, 0.0, true)
 	if text != "":
-		text_popup(p + Vector3(0, 0.8, 0), text, color, 0.6, 0.9)
+		text_popup(p + Vector3(0, 0.8, 0), text, color, 0.8, 1.1)
 	Audio.play("swing_whoosh", -18.0, 0.1, 150)
 
 
