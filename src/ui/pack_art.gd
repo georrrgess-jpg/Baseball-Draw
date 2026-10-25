@@ -23,6 +23,19 @@ func set_pack(type: String, card := "") -> void:
 
 
 func _draw() -> void:
+	# Painted pack fronts (tools/art/packs.py); Signature packs get the defender's portrait
+	# in the medallion window (centre 256,370, radius 82 on the 512x788 artwork).
+	var tex: Texture2D = DB._texture("res://assets/textures/packs/%s.png" % pack_type)
+	if tex:
+		draw_texture_rect(tex, Rect2(Vector2.ZERO, size), false)
+		if pack_type == "signature" and signature_card != "":
+			var linked := str(DB.card(signature_card).get("linked", ""))
+			var pt := DB.portrait(linked) if linked != "" else null
+			if pt:
+				var k := size.x / 512.0
+				var r := 80.0 * k
+				draw_texture_rect(pt, Rect2(Vector2(256, 370) * k - Vector2(r, r), Vector2(r, r) * 2.0), false)
+		return
 	var pd := DB.pack(pack_type)
 	var w := size.x
 	var h := size.y

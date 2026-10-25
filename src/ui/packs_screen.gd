@@ -12,6 +12,13 @@ const PACK_H := 2.0
 const PACK_BULGE := 0.07
 const CRIMP_H := 0.13
 const PACK_POS := Vector3(0, 1.05, 0)
+## How each pack type opens: longer, darker and bigger for the premium packs.
+const TIER_FX := {
+	"rookie": {"charge": 1.0, "spin": 0.0, "dim": 0.0, "rays": 1.6, "ray_count": 14.0, "arcs": false, "spiral": false, "pulses": 0, "confetti": false, "shake": 0.35, "push": 0.25},
+	"pro": {"charge": 1.35, "spin": 0.0, "dim": 0.45, "rays": 2.4, "ray_count": 18.0, "arcs": true, "spiral": false, "pulses": 0, "confetti": false, "shake": 0.55, "push": 0.45},
+	"champion": {"charge": 2.0, "spin": 1.0, "dim": 0.75, "rays": 3.4, "ray_count": 24.0, "arcs": false, "spiral": true, "pulses": 3, "confetti": true, "shake": 0.85, "push": 0.65},
+	"signature": {"charge": 1.5, "spin": 0.5, "dim": 0.55, "rays": 2.6, "ray_count": 16.0, "arcs": false, "spiral": true, "pulses": 1, "confetti": false, "shake": 0.5, "push": 0.55},
+}
 const REVEAL_SOUNDS := {"common": "reveal_common", "uncommon": "reveal_common", "rare": "reveal_rare",
 	"epic": "reveal_epic", "legendary": "reveal_legendary"}
 
@@ -37,6 +44,12 @@ var _art: PackArt
 var _back_vp: SubViewport
 var _rays: MeshInstance3D
 var _rays_mat: ShaderMaterial
+var _env: Environment
+var _backdrop_mat: ShaderMaterial
+var _spot: SpotLight3D
+var _arc_light: OmniLight3D
+var _spiral: GPUParticles3D
+var _arc_sparks: GPUParticles3D
 var _leak: GPUParticles3D
 var _burst: GPUParticles3D
 var _confetti: GPUParticles3D
@@ -47,6 +60,9 @@ var _shake := 0.0
 var _cam_shake := 0.0
 var _charge := 0.0
 var _time := 0.0
+var _spin := 0.0
+var _pulse_amt := 0.0
+var _pack_base := 1.0
 var _star_tex: Texture2D
 var _dot_tex: Texture2D
 var _rng := RandomNumberGenerator.new()
@@ -88,6 +104,7 @@ func _build_stage() -> void:
 	env.ambient_light_color = Color(0.5, 0.55, 0.7)
 	env.ambient_light_energy = 0.55
 	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	_env = env
 	env.glow_enabled = true
 	env.glow_intensity = 0.9
 	env.glow_bloom = 0.08
@@ -107,6 +124,13 @@ func _build_stage() -> void:
 	spot.light_energy = 6.0
 	spot.light_color = Color(1.0, 0.96, 0.9)
 	stage.add_child(spot)
+	_spot = spot
+	_arc_light = OmniLight3D.new()
+	_arc_light.position = PACK_POS + Vector3(0, 0, 1.0)
+	_arc_light.omni_range = 5.0
+	_arc_light.light_energy = 0.0
+	_arc_light.light_color = Color(0.75, 0.45, 1.0)
+	stage.add_child(_arc_light)
 	for side in [-1.0, 1.0]:
 		var rim := OmniLight3D.new()
 		rim.position = Vector3(2.6 * side, 2.2, -1.2)
@@ -116,6 +140,7 @@ func _build_stage() -> void:
 		stage.add_child(rim)
 	# Backdrop glow and slowly turning light rays behind the pack.
 	var back := _glow_quad(Vector2(14, 9), Color(0.12, 0.25, 0.6), 0.55, 0.0)
+	_backdrop_mat = back.material_override
 	back.position = Vector3(0, 1.2, -3.5)
 	stage.add_child(back)
 	_rays = _glow_quad(Vector2(5.5, 5.5), Color(0.5, 0.75, 1.0), 0.35, 1.0)
@@ -175,6 +200,34 @@ func _build_stage() -> void:
 	stage.add_child(_burst)
 	_confetti = _make_confetti()
 	stage.add_child(_confetti)
+	# Premium packs: sparkles spiralling up around the pack, and electric sparks off its edges.
+	_spiral = _particles(120, 1.6, _star_tex, 0.08, false, 0.0)
+	var sm: ParticleProcessMaterial = _spiral.process_material
+	sm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
+	sm.emission_ring_axis = Vector3(0, 1, 0)
+	sm.emission_ring_radius = 1.25
+	sm.emission_ring_inner_radius = 1.0
+	sm.emission_ring_height = 0.2
+	sm.direction = Vector3(0, 1, 0)
+	sm.spread = 8.0
+	sm.initial_velocity_min = 1.2
+	sm.initial_velocity_max = 2.4
+	sm.gravity = Vector3.ZERO
+	sm.tangential_accel_min = 2.0
+	sm.tangential_accel_max = 4.0
+	_spiral.position = PACK_POS + Vector3(0, -1.2, 0)
+	stage.add_child(_spiral)
+	_arc_sparks = _particles(70, 0.35, _star_tex, 0.06, false, 0.0)
+	var am: ParticleProcessMaterial = _arc_sparks.process_material
+	am.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	am.emission_box_extents = Vector3(PACK_W * 0.55, PACK_H * 0.52, 0.1)
+	am.spread = 180.0
+	am.initial_velocity_min = 2.0
+	am.initial_velocity_max = 4.0
+	am.gravity = Vector3.ZERO
+	am.color = Color(0.85, 0.6, 1.0)
+	_arc_sparks.position = PACK_POS
+	stage.add_child(_arc_sparks)
 	_burst_light = OmniLight3D.new()
 	_burst_light.position = PACK_POS + Vector3(0, PACK_H * 0.5, 0.8)
 	_burst_light.omni_range = 7.0
@@ -428,6 +481,10 @@ func _show_pack(type: String, card := "") -> void:
 		m.set_shader_parameter("foil_color", foil)
 		m.set_shader_parameter("charge", 0.0)
 		m.set_shader_parameter("brightness", 1.0)
+	var back_tex: Texture2D = DB._texture("res://assets/textures/packs/%s_back.png" % type)
+	if back_tex and _pack_mats.size() > 1:
+		_pack_mats[1].set_shader_parameter("art", back_tex)
+		_pack_mats[1].set_shader_parameter("is_back", 0.0)
 	for m in _crimp_mats:
 		m.set_shader_parameter("color", Color(str(pd.get("color", "#2F7BE0"))).lightened(0.45))
 		m.set_shader_parameter("charge", 0.0)
@@ -438,7 +495,8 @@ func _show_pack(type: String, card := "") -> void:
 	_pack_top.rotation = Vector3.ZERO
 	_pack_top.scale = Vector3.ONE
 	_pack_top.visible = true
-	_pack_root.scale = Vector3.ONE
+	_pack_base = 1.08 if type == "champion" else 1.0
+	_pack_root.scale = Vector3.ONE * _pack_base
 	_pack_root.rotation = Vector3.ZERO
 	_pack_root.position = PACK_POS + Vector3(0, 3.0, 0)
 	var tw := create_tween()
@@ -770,26 +828,84 @@ func _open_selected() -> void:
 	var pd := DB.pack(str(_result.type))
 	var accent := Color(str(pd.accent))
 	_create_cards()
+	var fx: Dictionary = TIER_FX.get(str(_result.type), TIER_FX.rookie)
+	var charge := float(fx.charge)
 	Audio.play("pack_shake", 0.0, 0.0, 0)
 	(_leak.process_material as ParticleProcessMaterial).color = Color(accent.lightened(0.3), 1.0)
 	_leak.emitting = true
+	_set_stage_dim(float(fx.dim), 0.5, accent)
+	if bool(fx.spiral):
+		(_spiral.process_material as ParticleProcessMaterial).color = Color(accent.lightened(0.4), 1.0)
+		_spiral.emitting = true
+	if bool(fx.arcs):
+		_arc_sparks.emitting = true
+		for i in int(charge * 7.0):
+			get_tree().create_timer(0.12 + i * charge / (charge * 7.0) + _rng.randf_range(0.0, 0.08)).timeout.connect(_arc_flicker)
+	for i in int(fx.pulses):
+		get_tree().create_timer(charge * (0.35 + 0.6 * float(i) / maxf(1.0, float(fx.pulses)))).timeout.connect(_pulse.bind(accent))
 	var tw := create_tween()
-	tw.tween_method(_set_charge, 0.0, 1.0, 1.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(self, "_shake", 1.0, 1.0)
-	tw.parallel().tween_property(_pack_root, "position", PACK_POS + Vector3(0, 0.15, 0.7), 1.0).set_trans(Tween.TRANS_SINE)
-	tw.tween_callback(_tear.bind(best, best_col))
+	tw.tween_method(_set_charge, 0.0, 1.0, charge).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(self, "_shake", 1.0, charge)
+	tw.parallel().tween_property(_pack_root, "position", PACK_POS + Vector3(0, 0.15 + 0.2 * float(fx.spin), 0.7), charge).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(camera, "position:z", 6.4 - float(fx.push), charge).set_trans(Tween.TRANS_SINE)
+	if float(fx.spin) > 0.0:
+		_spin = 0.0
+		tw.parallel().tween_property(self, "_spin", TAU * float(fx.spin), charge * 0.85).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_callback(_tear.bind(best, best_col, fx))
 	tw.tween_interval(0.25)
 	tw.tween_callback(_rise_cards)
 	tw.tween_interval(0.55)
 	tw.tween_callback(_drop_pack)
 	tw.tween_interval(0.25)
 	tw.tween_callback(_fan_cards)
+	tw.parallel().tween_property(camera, "position:z", 6.4, 0.8).set_trans(Tween.TRANS_SINE)
 	tw.tween_interval(0.75)
 	tw.tween_callback(func() -> void:
+		_spiral.emitting = false
+		_arc_sparks.emitting = false
 		state = "reveal"
 		_update_action()
 		if _cards.size() == 1:
 			_flip(0))
+
+
+## Darkens the stage (premium packs open under a spotlight); 0 restores it.
+func _set_stage_dim(amount: float, time: float, tint := Color.WHITE) -> void:
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(_env, "background_color", Color(0.03, 0.05, 0.1).lerp(Color(0.0, 0.0, 0.01), amount), time)
+	tw.tween_property(_env, "ambient_light_energy", lerpf(0.55, 0.2, amount), time)
+	tw.tween_property(_spot, "light_energy", lerpf(6.0, 9.0, amount), time)
+	tw.tween_method(func(v: float) -> void: _backdrop_mat.set_shader_parameter("intensity", v), lerpf(0.55, 0.55, 0.0), lerpf(0.55, 0.12, amount), time)
+	_spot.light_color = Color(1.0, 0.96, 0.9).lerp(tint.lightened(0.3), amount * 0.5)
+
+
+## Pro packs: a crackle of electricity around the pack.
+func _arc_flicker() -> void:
+	if state != "opening":
+		return
+	Audio.play("lightning_zap", -10.0, 0.15, 40)
+	var tw := create_tween()
+	tw.tween_property(_arc_light, "light_energy", _rng.randf_range(4.0, 8.0), 0.03)
+	tw.tween_property(_arc_light, "light_energy", 0.0, 0.12)
+	_flash_screen(Color(0.75, 0.5, 1.0, 0.08), 0.12)
+
+
+## Champion/Signature packs: a heartbeat pulse with a ring shockwave.
+func _pulse(col: Color) -> void:
+	if state != "opening":
+		return
+	Audio.play("earth_rumble", -6.0, 0.0, 0)
+	_cam_shake = maxf(_cam_shake, 0.2)
+	var sw := _glow_quad(Vector2(5, 5), col.lightened(0.3), 1.2, 0.0)
+	sw.position = _pack_root.position + Vector3(0, 0, -0.1)
+	var m: ShaderMaterial = sw.material_override
+	stage.add_child(sw)
+	var tw := create_tween()
+	tw.tween_method(func(v: float) -> void: m.set_shader_parameter("ring_radius", v), 0.2, 0.95, 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(sw.queue_free)
+	_pulse_amt = 0.09
+	var pt := create_tween()
+	pt.tween_property(self, "_pulse_amt", 0.0, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func _set_charge(v: float) -> void:
@@ -800,11 +916,18 @@ func _set_charge(v: float) -> void:
 		m.set_shader_parameter("charge", v * 0.6)
 
 
-func _tear(best: String, best_col: Color) -> void:
+func _tear(best: String, best_col: Color, fx: Dictionary = {}) -> void:
 	_shake = 0.0
 	_leak.emitting = false
+	_spiral.emitting = false
+	_arc_sparks.emitting = false
 	Audio.play("pack_tear", 2.0, 0.0, 0)
-	_cam_shake = 0.35 + 0.12 * DB.rarity_index(best)
+	_cam_shake = float(fx.get("shake", 0.35)) + 0.12 * DB.rarity_index(best)
+	_rays_mat.set_shader_parameter("ray_count", float(fx.get("ray_count", 14.0)))
+	if bool(fx.get("confetti", false)):
+		_confetti.restart()
+		_confetti.emitting = true
+		Audio.play("crowd_cheer", -6.0, 0.0, 0)
 	var bm: ParticleProcessMaterial = _burst.process_material
 	bm.color = Color(best_col.lightened(0.35), 1.0)
 	_burst.global_position = _pack_root.global_position + Vector3(0, PACK_H * 0.5, 0.1)
@@ -817,7 +940,7 @@ func _tear(best: String, best_col: Color) -> void:
 	lt.tween_property(_burst_light, "light_energy", 0.0, 0.8)
 	_rays_mat.set_shader_parameter("color", best_col.lightened(0.15))
 	var rt := create_tween()
-	rt.tween_method(func(v: float) -> void: _rays_mat.set_shader_parameter("intensity", v), 0.35, 1.6 + 0.3 * DB.rarity_index(best), 0.25)
+	rt.tween_method(func(v: float) -> void: _rays_mat.set_shader_parameter("intensity", v), 0.35, float(fx.get("rays", 1.6)) + 0.3 * DB.rarity_index(best), 0.25)
 	_flash_screen(Color(best_col.lightened(0.6), 0.35), 0.35)
 	# The sealed top flies off with a spin.
 	var tt := create_tween()
@@ -1049,6 +1172,8 @@ func _finish_reveal() -> void:
 		tw.chain().tween_callback(func() -> void:
 			c.root.queue_free()
 			c.vp.queue_free())
+	_set_stage_dim(0.0, 0.6)
+	_rays_mat.set_shader_parameter("ray_count", 14.0)
 	var done := create_tween()
 	done.tween_interval(0.6)
 	done.tween_callback(func() -> void:
@@ -1100,7 +1225,8 @@ func _process(delta: float) -> void:
 		elif state == "opening" and _shake > 0.0:
 			var a := _shake * _shake
 			_pack_root.rotation = Vector3(_rng.randf_range(-1, 1) * 0.03, _rng.randf_range(-1, 1) * 0.05, _rng.randf_range(-1, 1) * 0.06) * a
-			_pack_root.scale = Vector3.ONE * (1.0 + 0.04 * a + sin(_time * 40.0) * 0.012 * a)
+			_pack_root.rotation.y += _spin
+			_pack_root.scale = Vector3.ONE * _pack_base * (1.0 + 0.04 * a + sin(_time * 40.0) * 0.012 * a + _pulse_amt)
 	# Gentle hover sway of revealed cards.
 	for i in _cards.size():
 		var c: Dictionary = _cards[i]

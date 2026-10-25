@@ -194,7 +194,7 @@ func _draw() -> void:
 	# Illustration window
 	var art_rect := Rect2(inner.position + Vector2(5, 31) * s, Vector2(inner.size.x - 10 * s, inner.size.y * 0.41))
 	if _art:
-		draw_texture_rect(_art, art_rect, false, Color(dim, dim, dim))
+		draw_texture_rect_region(_art, art_rect, _cover_region(_art, art_rect.size), Color(dim, dim, dim))
 	else:
 		_draw_v_gradient(art_rect, cat_col.darkened(0.5) * dc, cat_col.darkened(0.1) * dc)
 		var ic := DB.icon(c.category)
@@ -348,6 +348,18 @@ func _draw_corner_ornaments(rect: Rect2, s: float, col: Color, dim: float, legen
 			var q: Vector2 = p + (k[1] + k[2]) * 5.0 * s
 			var d := 2.6 * s
 			draw_colored_polygon(PackedVector2Array([q + Vector2(0, -d), q + Vector2(d, 0), q + Vector2(0, d), q + Vector2(-d, 0)]), Color(1, 1, 0.9, dim))
+
+
+## Source rect that fills `dst` without stretching (centred crop, like "cover").
+func _cover_region(tex: Texture2D, dst: Vector2) -> Rect2:
+	var tw := float(tex.get_width())
+	var th := float(tex.get_height())
+	var a := dst.x / maxf(dst.y, 1.0)
+	if a > tw / th:
+		var ch := tw / a
+		return Rect2(0, (th - ch) * 0.5, tw, ch)
+	var cw := th * a
+	return Rect2((tw - cw) * 0.5, 0, cw, th)
 
 
 func _rr_points(r: Rect2, rad: float, seg := 5) -> PackedVector2Array:
