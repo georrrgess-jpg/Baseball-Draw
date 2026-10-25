@@ -3,8 +3,13 @@ extends Node3D
 ## Pooled baseballs with ribbon trails. Balls fly on a shallow arc toward a
 ## (moving) runner or a fixed point, then resolve hits, misses, splash,
 ## ricochets and lightning chains.
+## Cosmetic payload keys (never read by gameplay): "trail" picks a trail style
+## (comet, fire, spiral, wobble, hook, heavy) and "fx" an impact effect drawn by
+## battle.vfx.cards.ball_impact(). Spiral / wobble only offset the drawn ball; the
+## flight time and landing point are unchanged.
 
 const MAX_TRAIL := 12
+const TRAIL_LEN := {"comet": 18, "fire": 16, "spiral": 24, "wobble": 22, "hook": 44, "heavy": 18}
 
 class Ball:
 	var node: Node3D
@@ -24,12 +29,18 @@ class Ball:
 	var color := Color.WHITE
 	var width := 0.12
 	var fading := 0.0
+	var glow: MeshInstance3D
+	var glow_mat: StandardMaterial3D
+	var trail_kind := ""
+	var max_trail := MAX_TRAIL
+	var side := Vector3.RIGHT
 
 var battle: Battle
 var balls: Array[Ball] = []
 var _ball_mesh: Mesh
 var _ball_mat: StandardMaterial3D
-var _trail_mat: StandardMaterial3D
+var _trail_mat: ShaderMaterial
+var _glow_tex: Texture2D
 var _camera: Camera3D
 
 
@@ -53,13 +64,12 @@ func _ready() -> void:
 		if mi and mi.mesh:
 			_ball_mesh = mi.mesh
 		inst.free()
-	_trail_mat = StandardMaterial3D.new()
-	_trail_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_trail_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_trail_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	_trail_mat.vertex_color_use_as_albedo = true
-	_trail_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_trail_mat.disable_receive_shadows = true
+	# Glowing ribbon: white-hot core, coloured falloff (shared with the VFX bolts).
+	_trail_mat = ShaderMaterial.new()
+	_trail_mat.shader = load("res://assets/shaders/vfx/fx_bolt.gdshader")
+	_trail_mat.set_shader_parameter("core_width", 0.24)
+	_trail_mat.render_priority = 4
+	_glow_tex = load("res://assets/textures/vfx/glow.png")
 	for i in 48:
 		balls.append(_make_ball())
 
@@ -92,6 +102,22 @@ func _make_ball() -> Ball:
 	b.trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	b.trail.top_level = true
 	add_child(b.trail)
+	# Halo around coloured / special balls.
+	b.glow = MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(1, 1)
+	b.glow.mesh = q
+	b.glow_mat = StandardMaterial3D.new()
+	b.glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	b.glow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	b.glow_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	b.glow_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	b.glow_mat.albedo_texture = _glow_tex
+	b.glow_mat.no_depth_test = false
+	b.glow_mat.render_priority = 4
+	b.glow.material_override = b.glow_mat
+	b.glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	b.node.add_child(b.glow)
 	b.node.visible = false
 	b.trail.visible = false
 	return b
@@ -119,6 +145,22 @@ func _prepare(b: Ball, from: Vector3, to: Vector3, speed: float, payload: Dictio
 	if payload.get("fire", false):
 		b.color = Color(1.0, 0.45, 0.1)
 	b.width = 0.16 if payload.get("big", false) or payload.get("fastball", false) else 0.11
+	b.trail_kind = String(payload.get("trail", ""))
+	b.max_trail = int(TRAIL_LEN.get(b.trail_kind, MAX_TRAIL))
+	if b.trail_kind in ["comet", "hook", "heavy"]:
+		b.width *= 1.7
+	elif b.trail_kind == "fire":
+		b.width *= 2.6
+	var flat := Vector3(to.x - from.x, 0, to.z - from.z)
+	b.side = flat.cross(Vector3.UP).normalized() if flat.length() > 0.01 else Vector3.RIGHT
+	var special: bool = b.trail_kind != "" or payload.has("color") or bool(payload.get("fire", false))
+	b.glow.visible = special
+	if special:
+		var gs := 2.4 if b.trail_kind == "fire" else (1.3 if b.trail_kind in ["comet", "hook", "heavy"] else 0.8)
+		b.glow.scale = Vector3.ONE * gs
+		var gc := b.color.lerp(Color.WHITE, 0.25)
+		gc.a = 0.9
+		b.glow_mat.albedo_color = gc
 	b.points.clear()
 	b.node.visible = true
 	b.trail.visible = true
@@ -166,10 +208,13 @@ func _step(b: Ball, delta: float) -> void:
 	var k := clampf(b.t / b.duration, 0.0, 1.0)
 	var pos := b.start.lerp(b.end, k)
 	pos.y += sin(k * PI) * b.arc
+	if b.trail_kind != "":
+		pos += _visual_offset(b, k)
+		_trail_particles(b, pos, delta)
 	b.node.global_position = pos
 	b.mesh.rotate_x(delta * 30.0)
 	b.points.push_front(pos)
-	if b.points.size() > MAX_TRAIL:
+	if b.points.size() > b.max_trail:
 		b.points.pop_back()
 	_draw_trail(b)
 	if k >= 1.0:
@@ -177,6 +222,44 @@ func _step(b: Ball, delta: float) -> void:
 		b.node.visible = false
 		b.fading = 0.25
 		_arrive(b)
+
+
+## Cosmetic sway of the drawn ball (spiral curveball, fluttering knuckleball).
+func _visual_offset(b: Ball, k: float) -> Vector3:
+	var env := sin(k * PI)
+	match b.trail_kind:
+		"spiral":
+			var a := k * TAU * 2.5
+			return (b.side * cos(a) + Vector3.UP * sin(a)) * 0.75 * env
+		"wobble":
+			return b.side * sin(k * 27.0) * 0.5 * env + Vector3.UP * sin(k * 17.0) * 0.25 * env
+	return Vector3.ZERO
+
+
+func _trail_particles(b: Ball, pos: Vector3, delta: float) -> void:
+	var vfx = battle.vfx
+	var sc: float = vfx._scale
+	match b.trail_kind:
+		"fire":
+			for i in 3:
+				if randf() < sc:
+					var back := (b.start - b.end).normalized() * randf_range(0.0, 0.8)
+					vfx.emit_one("fire", pos + back + Vector3(randf_range(-0.15, 0.15), randf_range(-0.15, 0.15), randf_range(-0.15, 0.15)), Vector3(randf_range(-0.5, 0.5), 1.5, randf_range(-0.5, 0.5)), Color(1.0, 0.45, 0.08), randf_range(0.9, 1.3), randf_range(0.5, 0.75))
+			if randf() < 0.5 * sc:
+				vfx.emit_one("smoke", pos, Vector3(0, 0.8, 0), Color(0.16, 0.13, 0.12, 0.5), 0.8, 0.8)
+			if randf() < 0.6 * sc:
+				vfx.emit_one("ember", pos, Vector3(randf_range(-1, 1), randf_range(-0.5, 1.5), randf_range(-1, 1)), Color(1.0, 0.6, 0.2), 1.0, 0.7)
+		"comet":
+			if randf() < 0.7 * sc:
+				vfx.emit_one("glow", pos, Vector3.ZERO, Color(b.color, 0.6), 0.6, 0.4)
+			if randf() < 0.4 * sc:
+				vfx.emit_one("spark", pos, Vector3(randf_range(-2, 2), randf_range(-1, 2), randf_range(-2, 2)), b.color.lerp(Color.WHITE, 0.4), 0.7, 0.5)
+		"spiral", "wobble", "heavy":
+			if randf() < 0.5 * sc:
+				vfx.emit_one("magic", pos, Vector3(randf_range(-0.5, 0.5), 0.3, randf_range(-0.5, 0.5)), b.color.lerp(Color.WHITE, 0.3), 0.7, 0.7)
+		"hook":
+			if randf() < 0.6 * sc:
+				vfx.emit_one("magic", pos, Vector3(0, -0.3, 0), Color(0.6, 0.95, 1.0), 0.8, 1.0)
 
 
 func _draw_trail(b: Ball) -> void:
@@ -195,11 +278,13 @@ func _draw_trail(b: Ball) -> void:
 			dir = Vector3.FORWARD
 		var side := dir.cross(cam - p).normalized()
 		var f := 1.0 - float(i) / float(n)
-		var w := b.width * f
-		var c := Color(b.color.r, b.color.g, b.color.b, f * 0.9)
+		var w := b.width * (0.25 + 0.75 * f)
+		var c := Color(b.color.r, b.color.g, b.color.b, f * f * 0.95)
 		b.imesh.surface_set_color(c)
+		b.imesh.surface_set_uv(Vector2(0, f))
 		b.imesh.surface_add_vertex(p + side * w)
 		b.imesh.surface_set_color(c)
+		b.imesh.surface_set_uv(Vector2(1, f))
 		b.imesh.surface_add_vertex(p - side * w)
 	b.imesh.surface_end()
 
@@ -238,6 +323,8 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> void:
 	battle.on_damage_dealt(source, t, dealt, p.get("crit", false))
 	Audio.play("crit_hit" if p.get("crit", false) else "ball_hit", -5.0 if p.get("crit", false) else -9.0, 0.08, 40)
 	battle.vfx.burst("crit" if p.get("crit", false) else "hit", at, p.get("color", Color.WHITE))
+	if p.has("fx"):
+		battle.vfx.cards.ball_impact(String(p.fx), at, p.get("color", Color.WHITE), t)
 	if p.has("burn") and t.alive:
 		var bv: Vector2 = p.burn
 		t.apply_burn(bv.x, bv.y, source)
@@ -277,7 +364,7 @@ func hit_chain_continue(t: Enemy, p: Dictionary, at: Vector3) -> void:
 	cp.chain = int(p.chain) - 1
 	cp.damage = float(p.damage) * float(p.get("chain_mult", 0.5))
 	cp.chained = chained + [nxt]
-	battle.vfx.lightning(at, nxt.center(), Color(1.0, 0.95, 0.4))
+	battle.vfx.cards.chain_arc(at, nxt.center(), Color(1.0, 0.95, 0.4))
 	var dealt := nxt.take_damage(float(cp.damage), {"source": p.get("source"), "kind": "lightning"})
 	battle.on_damage_dealt(p.get("source"), nxt, dealt, false)
 	if cp.chain > 0:
