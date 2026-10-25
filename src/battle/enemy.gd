@@ -72,6 +72,14 @@ var _death_t := 0.0
 var _last_hit_info: Dictionary = {}
 var _burn_tick := 0.0
 var _rim_dirty := true
+# Status visuals (created on first use; see _update_status_fx).
+var _fx_ground: MeshInstance3D
+var _fx_head: MeshInstance3D
+var _fx_ice: MeshInstance3D
+var _fx_cage: MeshInstance3D
+var _fx_key := 0
+var _ice_k := 0.0
+var _cage_k := 0.0
 
 
 func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, opts: Dictionary) -> void:
@@ -348,6 +356,7 @@ func die(info: Dictionary = {}) -> void:
 		_marker.visible = false
 	model.set_rim(Color(0, 0, 0, 0))
 	model.freeze_animation(false)
+	_clear_status_fx()
 	model.play_action("defeat", 1.0)
 	_death_t = 0.0
 	battle.on_enemy_out(self, info)
@@ -370,6 +379,7 @@ func tick(delta: float) -> void:
 	_tick_behavior(delta)
 	_move(delta)
 	_update_visuals()
+	_update_status_fx(delta)
 
 
 func _tick_status(delta: float) -> void:
@@ -408,7 +418,8 @@ func _tick_status(delta: float) -> void:
 			_burn_tick = 0.0
 			var dealt := take_damage(burn_dps * 0.5, {"kind": "fire", "source": burn_source, "dot": true})
 			if dealt > 0.0:
-				battle.vfx.damage_number(center(), dealt, false, Color(1.0, 0.55, 0.15))
+				# No number for damage over time: the flames flare up on each tick instead.
+				battle.vfx.burn_tick(center())
 				if burn_source and is_instance_valid(burn_source) and battle.run:
 					battle.run.add_damage(burn_source.id, dealt)
 		if burn_t <= 0.0:
@@ -520,8 +531,100 @@ func _update_visuals() -> void:
 			rim = Color(0.6, 0.9, 1.0, 1.0)
 		if id != "decoy" and untargetable_t <= 0.0:
 			model.set_rim(rim)
-	if burn_t > 0.0 and randf() < 0.25:
-		battle.vfx.ember(center())
+
+
+# ---------------------------------------------------------------- status visuals
+
+const SLOW_COLORS := {"curveball": Color(0.62, 0.45, 1.0), "changeup": Color(0.5, 0.55, 1.0), "shadow": Color(0.72, 0.3, 1.0),
+	"lockdown": Color(0.35, 0.68, 1.0)}
+
+
+## Readable status markers that outlive the card's impact: a shackle / slow / frost /
+## magnet ring at the feet, stars / ? / reticle over the head, an ice block while
+## frozen, a cage of light while rooted, flames while burning.
+func _update_status_fx(delta: float) -> void:
+	var vfx := battle.vfx
+	var rooted := root_t > 0.0 and not is_airborne()
+	var slowed := not slows.is_empty()
+	var chilled := chill_t > 0.0
+	var magnet := magnet_t > 0.0
+	var stunned := stun_t > 0.0
+	var confused := confuse_t > 0.0
+	var marked := mark_t > 0.0
+	var broken := armor_break_t > 0.0
+	var frozen := freeze_t > 0.0
+	var key := int(rooted) | int(slowed) << 1 | int(chilled) << 2 | int(magnet) << 3 | int(stunned) << 4 \
+		| int(confused) << 5 | int(marked) << 6 | int(broken) << 7 | int(frozen) << 8
+	if key != _fx_key:
+		_fx_key = key
+		var ground := rooted or slowed or chilled or magnet
+		if ground and _fx_ground == null:
+			_fx_ground = vfx.make_status_ground()
+			add_child(_fx_ground)
+			var r := 0.62 * height / 1.8 * 1.15 * 1.35
+			_fx_ground.scale = Vector3(r, 1, r)
+		if _fx_ground:
+			_fx_ground.visible = ground
+			_fx_ground.set_instance_shader_parameter("st", Vector4(float(rooted), float(slowed), float(chilled), float(magnet)))
+			if slowed:
+				var sc := Color(0.5, 0.7, 1.0)
+				for k in slows.keys():
+					sc = SLOW_COLORS.get(k, sc)
+				_fx_ground.set_instance_shader_parameter("slow_col", sc)
+		var head := stunned or confused or marked or broken
+		if head and _fx_head == null:
+			_fx_head = vfx.make_status_head()
+			add_child(_fx_head)
+			var hs := clampf(height / 2.6, 0.8, 2.2)
+			_fx_head.position = Vector3(0, height + 0.75 * hs, 0)
+			_fx_head.scale = Vector3(1.5 * hs, 0.75 * hs, 1.0)
+		if _fx_head:
+			_fx_head.visible = head
+			_fx_head.set_instance_shader_parameter("st", Vector4(float(stunned), float(confused), float(marked), float(broken)))
+	if _fx_ground and _fx_ground.visible:
+		_fx_ground.global_position = Vector3(global_position.x, 0.06, global_position.z)
+	# Ice block while frozen.
+	var ice_target := 1.0 if frozen else 0.0
+	if _ice_k != ice_target:
+		_ice_k = move_toward(_ice_k, ice_target, delta * (7.0 if frozen else 3.0))
+		if _fx_ice == null and _ice_k > 0.0:
+			_fx_ice = vfx.make_ice_shell()
+			add_child(_fx_ice)
+			_fx_ice.scale = Vector3(height * 0.44, height * 1.02, height * 0.44)
+			_fx_ice.rotation.y = randf() * TAU
+		if _fx_ice:
+			_fx_ice.visible = _ice_k > 0.0
+			_fx_ice.set_instance_shader_parameter("fade", _ice_k)
+	# Cage of light bars while rooted.
+	var cage_target := 1.0 if rooted else 0.0
+	if _cage_k != cage_target:
+		_cage_k = move_toward(_cage_k, cage_target, delta * (5.0 if rooted else 3.0))
+		if _fx_cage == null and _cage_k > 0.0:
+			_fx_cage = vfx.make_status_cage()
+			add_child(_fx_cage)
+			var cr := 0.55 * height / 1.8 * 1.3
+			_fx_cage.scale = Vector3(cr, height * 0.8, cr)
+			_fx_cage.position = Vector3(0, height * 0.4, 0)
+			_fx_cage.set_instance_shader_parameter("color", Color(0.4, 0.75, 1.0, 1.0))
+		if _fx_cage:
+			_fx_cage.visible = _cage_k > 0.0
+			_fx_cage.set_instance_shader_parameter("progress", _cage_k if rooted else 1.0)
+			_fx_cage.set_instance_shader_parameter("vis", 1.0 if rooted else _cage_k)
+	if burn_t > 0.0:
+		vfx.status_burn(global_position, height, delta)
+	if chilled and not frozen:
+		vfx.status_chill(global_position, height, delta)
+	if magnet:
+		vfx.status_magnet(global_position, magnet_center - global_position, height, delta)
+
+
+func _clear_status_fx() -> void:
+	for n in [_fx_ground, _fx_head, _fx_ice, _fx_cage]:
+		if n:
+			n.visible = false
+	_fx_key = 0
+	_ice_k = 0.0
+	_cage_k = 0.0
 
 
 # ---------------------------------------------------------------- behaviours
