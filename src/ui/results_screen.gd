@@ -1,5 +1,5 @@
 extends Control
-## End-of-run results: outcome, stats, rewards (coins, XP, defender XP, card pack,
+## End-of-run results: outcome, stats, rewards (coins, XP, defender XP, card packs,
 ## rank points), records and achievements.
 
 var battle: Battle
@@ -111,23 +111,33 @@ func _ready() -> void:
 	elif Profile.promotion_available():
 		rv.add_child(UITheme.label("Promotion Challenge available: %s!" % Profile.next_division().name, 22, UITheme.GOLD, UITheme.font_body_bold()))
 	rv.add_child(UITheme.hsep())
-	rv.add_child(UITheme.header("CARD PACK", 26, UITheme.GOLD))
+	var packs: Array = result.get("packs", [])
+	rv.add_child(UITheme.header("PACKS EARNED" if not packs.is_empty() else "NO PACKS THIS TIME", 26, UITheme.GOLD))
 	var pack_row := HBoxContainer.new()
-	pack_row.add_theme_constant_override("separation", 16)
+	pack_row.add_theme_constant_override("separation", 14)
 	rv.add_child(pack_row)
 	var i := 0
-	for p in result.get("pack", []):
-		var cv := CardView.new(p.id, Profile.card_level(p.id))
-		cv.set_card(p.id, Profile.card_level(p.id))
-		cv.custom_minimum_size = Vector2(150, 210)
-		cv.count_badge = "NEW" if p.new else "+%d" % int(p.copies)
-		cv.modulate.a = 0.0
-		pack_row.add_child(cv)
+	for pk in packs:
+		var art := PackArt.new(str(pk.type), str(pk.get("card", "")))
+		art.custom_minimum_size = Vector2(96, 148)
+		art.pivot_offset = Vector2(48, 74)
+		art.modulate.a = 0.0
+		art.scale = Vector2.ONE * 0.6
+		art.tooltip_text = "%s — %s" % [DB.pack(str(pk.type)).name, pk.get("source", "")]
+		pack_row.add_child(art)
 		var t := create_tween()
-		t.tween_interval(1.8 + i * 0.35)
+		t.tween_interval(1.6 + i * 0.25)
 		t.tween_callback(func() -> void: Audio.play("card_draw"))
-		t.tween_property(cv, "modulate:a", 1.0, 0.25)
+		t.set_parallel(true)
+		t.tween_property(art, "modulate:a", 1.0, 0.25)
+		t.tween_property(art, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		i += 1
+	if not packs.is_empty():
+		var open := UITheme.menu_button("OPEN PACKS", UITheme.GOLD, 30)
+		open.custom_minimum_size = Vector2(250, 60)
+		open.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		open.pressed.connect(func() -> void: Router.goto("packs"))
+		pack_row.add_child(open)
 	rv.add_child(UITheme.hsep())
 	var dx := HFlowContainer.new()
 	dx.add_theme_constant_override("h_separation", 18)
@@ -156,7 +166,7 @@ func _ready() -> void:
 		cfg.team = Profile.data.team.duplicate()
 		Session.start(cfg))
 	buttons.add_child(again)
-	var deck := UITheme.menu_button("DECK BUILDER", UITheme.BLUE)
+	var deck := UITheme.menu_button("CARDS & DECK", UITheme.BLUE)
 	deck.pressed.connect(func() -> void: Router.goto("deck_builder"))
 	buttons.add_child(deck)
 	var menu := UITheme.menu_button("MAIN MENU", UITheme.SCARLET)

@@ -104,6 +104,14 @@
   "crowd_cheer_2": -6.0,
   "crowd_groan": -6.0,
   "crowd_ooh": -6.0,
+  "pack_shake": -4.0,
+  "pack_tear": -3.0,
+  "card_whoosh": -5.0,
+  "card_flip": -4.0,
+  "reveal_common": -6.0,
+  "reveal_rare": -4.0,
+  "reveal_epic": -3.0,
+  "reveal_legendary": -2.0,
   "throw": -8.0,
   "ball_hit": -5.0,
   "glove_catch": -6.0,
@@ -816,6 +824,78 @@
    "loop": false,
    "volume_db": -6.0,
    "peak_dbfs": -3.0
+  },
+  {
+   "name": "pack_shake",
+   "path": "res://assets/audio/sfx/pack_shake.wav",
+   "category": "sfx",
+   "duration": 1.012,
+   "loop": false,
+   "volume_db": -4.0,
+   "peak_dbfs": -5.0
+  },
+  {
+   "name": "pack_tear",
+   "path": "res://assets/audio/sfx/pack_tear.wav",
+   "category": "sfx",
+   "duration": 1.6,
+   "loop": false,
+   "volume_db": -3.0,
+   "peak_dbfs": -3.0
+  },
+  {
+   "name": "card_whoosh",
+   "path": "res://assets/audio/sfx/card_whoosh.wav",
+   "category": "sfx",
+   "duration": 0.38,
+   "loop": false,
+   "volume_db": -5.0,
+   "peak_dbfs": -8.0
+  },
+  {
+   "name": "card_flip",
+   "path": "res://assets/audio/sfx/card_flip.wav",
+   "category": "sfx",
+   "duration": 0.193,
+   "loop": false,
+   "volume_db": -4.0,
+   "peak_dbfs": -6.0
+  },
+  {
+   "name": "reveal_common",
+   "path": "res://assets/audio/sfx/reveal_common.wav",
+   "category": "sfx",
+   "duration": 0.9,
+   "loop": false,
+   "volume_db": -6.0,
+   "peak_dbfs": -8.0
+  },
+  {
+   "name": "reveal_rare",
+   "path": "res://assets/audio/sfx/reveal_rare.wav",
+   "category": "sfx",
+   "duration": 1.5,
+   "loop": false,
+   "volume_db": -4.0,
+   "peak_dbfs": -5.0
+  },
+  {
+   "name": "reveal_epic",
+   "path": "res://assets/audio/sfx/reveal_epic.wav",
+   "category": "sfx",
+   "duration": 2.2,
+   "loop": false,
+   "volume_db": -3.0,
+   "peak_dbfs": -3.0
+  },
+  {
+   "name": "reveal_legendary",
+   "path": "res://assets/audio/sfx/reveal_legendary.wav",
+   "category": "sfx",
+   "duration": 3.4,
+   "loop": false,
+   "volume_db": -2.0,
+   "peak_dbfs": -2.0
   }
  ]
 }

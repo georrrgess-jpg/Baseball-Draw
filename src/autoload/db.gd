@@ -34,6 +34,8 @@ var uniform_order: Array[String] = []
 var divisions: Array = []
 var challenge_modifiers: Array = []
 var combos: Array = []
+var packs: Dictionary = {}
+var pack_order: Array[String] = []
 var _textures: Dictionary = {}   # path -> Texture2D (or null when missing)
 
 var card_growth_rate := 0.12
@@ -144,6 +146,10 @@ func _load_all() -> void:
 
 	combos = _read_json("combos.json").get("combos", [])
 
+	for x in _read_json("packs.json").get("packs", []):
+		packs[x.id] = x
+		pack_order.append(x.id)
+
 	var r := _read_json("ranks.json")
 	divisions = r.get("divisions", [])
 	challenge_modifiers = r.get("challenge_modifiers", [])
@@ -214,6 +220,14 @@ func division_index(id: String) -> int:
 		if divisions[i].id == id:
 			return i
 	return 0
+
+
+func pack(id: String) -> Dictionary:
+	return packs.get(id, packs.get("rookie", {}))
+
+
+func rarity_index(r: String) -> int:
+	return maxi(0, RARITY_ORDER.find(r))
 
 
 func rarity_color(r: String) -> Color:

@@ -161,13 +161,11 @@ func _build_ui() -> void:
 	var items := [
 		["PLAY", UITheme.SCARLET, func() -> void: Router.goto("play_menu")],
 		["CONTINUE RUN", UITheme.GREEN, func() -> void: Session.continue_saved_run()],
-		["DECK BUILDER", UITheme.BLUE, func() -> void:
+		["CARD PACKS", UITheme.GOLD, func() -> void: Router.goto("packs")],
+		["CARDS & DECK", UITheme.BLUE, func() -> void:
 			Session.menu_tab = "deck"
 			Router.goto("deck_builder")],
-		["ROSTER", UITheme.BLUE, func() -> void: Router.goto("roster")],
-		["COLLECTION", UITheme.BLUE, func() -> void:
-			Session.menu_tab = "collection"
-			Router.goto("deck_builder")],
+		["TEAM", UITheme.BLUE, func() -> void: Router.goto("roster")],
 		["PRACTICE", UITheme.PURPLE, func() -> void: Session.start(Session.new_run_config("practice"))],
 		["PROGRESSION", UITheme.GOLD, func() -> void: Router.goto("progression")],
 		["SETTINGS", UITheme.MUTED, func() -> void: Router.goto("settings")],
@@ -183,6 +181,13 @@ func _build_ui() -> void:
 		b.pressed.connect(it[2])
 		left.add_child(b)
 		_buttons.append(b)
+		if it[0] == "CARD PACKS" and Profile.pack_count() > 0:
+			b.text = "CARD PACKS  (%d)" % Profile.pack_count()
+			var pulse := b.create_tween().set_loops()
+			pulse.tween_property(b, "self_modulate", Color(1.25, 1.15, 0.8), 0.7).set_trans(Tween.TRANS_SINE)
+			pulse.tween_property(b, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
+		if it[0] == "CARDS & DECK" and Profile.fresh_card_count() > 0:
+			b.text = "CARDS & DECK  (%d NEW)" % Profile.fresh_card_count()
 		if it[0] == "CONTINUE RUN":
 			_continue_btn = b
 			b.disabled = not Profile.has_saved_run()
@@ -297,17 +302,18 @@ func _show_welcome() -> void:
 	vb.add_theme_constant_override("separation", 8)
 	p.add_child(vb)
 	vb.add_child(UITheme.header("WELCOME, MANAGER!", 34, UITheme.GOLD))
-	var txt := UITheme.label("Rival runners are storming the Steel Yard. Position your six defenders, draw ability cards and keep runners off home plate. Three runs and the game is over.\n\nStart with QUICK DEFENSE on Rookie or Standard — three innings, about ten minutes.", 19, UITheme.OFFWHITE)
+	var txt := UITheme.label("Rival runners are storming the Steel Yard. Your six defenders throw at them automatically — you position the team and play ability cards to stop runners before they reach home plate.\n\nYour first game is a short Quick Defense with step-by-step tips. Finish it to earn your first card pack!", 19, UITheme.OFFWHITE)
 	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	txt.custom_minimum_size = Vector2(520, 0)
 	vb.add_child(txt)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 10)
-	var go := UITheme.small_button("Play Quick Defense", UITheme.SCARLET, 22)
+	var go := UITheme.small_button("Play the first game", UITheme.SCARLET, 22)
 	go.pressed.connect(func() -> void:
 		Profile.data.flags.tutorial_done = true
 		Profile.save_soon()
 		var cfg := Session.new_run_config("quick")
+		cfg.difficulty = "rookie"
 		Session.start(cfg))
 	hb.add_child(go)
 	var later := UITheme.small_button("Look around first", UITheme.BLUE, 22)

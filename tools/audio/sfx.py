@@ -1057,6 +1057,104 @@ def _v(fn, v):
     return lambda rng: fn(rng, v)
 
 
+# ---------------------------------------------------------------- card packs
+
+def pack_shake(rng):
+    """Foil pack crinkling harder and harder while a riser builds."""
+    total = 1.1
+    times = []
+    t = 0.0
+    while t < 1.0:
+        times.append(t)
+        t += 0.06 * (1.0 - t * 0.75) + rng.uniform(0, 0.02)
+    amps = [0.35 + 0.65 * (x / 1.0) for x in times]
+    b = grains(rng, total, times, 2500, 9000, 0.01, 0.04, 2.0, 5.0, amps)
+    n = ns(1.0)
+    tt = tarr(n)
+    riser = tvfilt(colored(n, rng, -1.0), "bp", 600 * (6.0 ** (tt / 1.0)), 2.5) * (tt / 1.0) ** 2
+    at(b, riser, 0.0, 0.35)
+    at(b, sine(mtof(52) * (1 + tt), n) * (tt / 1.0) ** 3 * 0.25, 0.0, 1.0)
+    return finish(lp(b, 9500), -5.0, 0.001, 0.05)
+
+
+def pack_tear(rng):
+    """Foil rips open with a bright burst of sparkle."""
+    b = buf(1.6)
+    times = sorted(rng.uniform(0, 0.16, 70))
+    at(b, grains(rng, 0.3, times, 1800, 9000, 0.004, 0.02, 1.5, 4.0), 0, 0.9)
+    at(b, whoosh(rng, 0.3, 900, 6000, 0.2, q=1.2, body=0.3), 0.0, 0.6)
+    at(b, thump(0.25, 160, 55, 0.02, 0.08), 0.12, 0.5)
+    for i, m in enumerate([84, 88, 91, 96, 100]):
+        at(b, ins.bell(m, 0.8, 0.6, rng, "glock", 0.7), 0.14 + i * 0.035, 0.22)
+    sh = colored(ns(1.0), rng, -1) * np.exp(-tarr(ns(1.0)) / 0.35)
+    at(b, bp(sh, 6500, 2.0), 0.14, 0.08)
+    x = wet(b, HALL, 0.3)
+    return finish(lp(x, 9000), -3.0, 0.0005, 0.15, shave_db=1.0)
+
+
+def card_whoosh(rng):
+    b = buf(0.5)
+    at(b, whoosh(rng, 0.38, 500, 3200, 0.45, q=1.4, body=0.45), 0, 0.9)
+    return finish(lp(b, 8000), -8.0, 0.001, 0.05)
+
+
+def card_flip(rng):
+    b = buf(0.35)
+    at(b, whoosh(rng, 0.14, 1200, 5000, 0.5, q=1.6, body=0.2), 0, 0.6)
+    at(b, noise_hit(rng, 0.05, 3200, 1.4, 0.006), 0.11, 0.9)
+    at(b, thump(0.08, 300, 140, 0.01, 0.02), 0.11, 0.25)
+    return finish(lp(b, 9000), -6.0, 0.0005, 0.03, shave_db=0.5)
+
+
+def reveal_common(rng):
+    b = buf(0.9)
+    at(b, ins.bell(84, 0.7, 0.6, rng, "glock", 0.6), 0, 0.35)
+    at(b, ins.fm_bell(72, 0.8, 0.4, rng, 2.0, 1.2, 0.4), 0, 0.12)
+    return finish(wet(b, HALL, 0.2), -8.0, 0.0005, 0.1)
+
+
+def reveal_rare(rng):
+    b = buf(1.5)
+    for i, m in enumerate([79, 84, 88, 91]):
+        at(b, ins.bell(m, 0.9, 0.65, rng, "glock", 0.7), i * 0.05, 0.3)
+    at(b, ins.fm_bell(67, 1.2, 0.5, rng, 3.5, 2.0, 0.6), 0, 0.2)
+    sh = colored(ns(0.9), rng, -1) * np.exp(-tarr(ns(0.9)) / 0.3)
+    at(b, bp(sh, 6000, 2.0), 0.05, 0.05)
+    return finish(lp(wet(b, HALL, 0.3), 8500), -5.0, 0.0005, 0.15)
+
+
+def reveal_epic(rng):
+    b = buf(2.2)
+    at(b, thump(0.5, 110, 45, 0.03, 0.18), 0, 0.7)
+    at(b, whoosh(rng, 0.25, 400, 4000, 0.2, q=1.0, body=0.5), 0, 0.4)
+    for i, m in enumerate([74, 79, 83, 86, 91, 95]):
+        at(b, ins.fm_bell(m, 1.4, 0.7, rng, 3.5, 2.0, 0.8), 0.05 + i * 0.06, 0.24)
+    n = ns(1.6)
+    t = tarr(n)
+    pad = sum(sine(mtof(m), n) for m in (62, 66, 69, 74)) * np.sin(np.pi * t / 1.6) ** 2
+    at(b, pad, 0.1, 0.06)
+    return finish(lp(wet(b, HALL, 0.4), 8500), -3.0, 0.0005, 0.25, shave_db=1.5)
+
+
+def reveal_legendary(rng):
+    b = buf(3.4)
+    at(b, thump(0.9, 90, 32, 0.04, 0.35), 0, 0.9)
+    at(b, noise_hit(rng, 0.5, 400, 0.8, 0.12, "lp"), 0, 0.5)
+    at(b, whoosh(rng, 0.4, 300, 6000, 0.15, q=0.9, body=0.6), 0, 0.5)
+    chord = [72, 76, 79, 84, 88, 91, 96]
+    for i, m in enumerate(chord):
+        at(b, ins.fm_bell(m, 2.2, 0.75, rng, 3.5, 2.2, 1.0), 0.08 + i * 0.07, 0.22)
+        at(b, ins.bell(m + 12, 1.0, 0.5, rng, "glock", 0.8), 0.6 + i * 0.05, 0.12)
+    n = ns(2.8)
+    t = tarr(n)
+    pad = sum(sine(mtof(m), n) * (1 + 0.003 * np.sin(2 * np.pi * 5 * t)) for m in (60, 64, 67, 72, 76)) \
+        * np.sin(np.pi * np.minimum(t / 2.8, 1.0)) ** 1.5
+    at(b, pad, 0.15, 0.07)
+    sh = colored(ns(2.4), rng, -1) * np.exp(-tarr(ns(2.4)) / 0.9)
+    at(b, bp(sh, 7000, 1.5), 0.1, 0.07)
+    return finish(lp(wet(b, HALL, 0.45), 9000), -2.0, 0.0005, 0.4, shave_db=1.5)
+
+
 REGISTRY: dict = {}
 
 
@@ -1131,3 +1229,12 @@ for _i in range(2):
     _reg(f"crowd_cheer_{_i + 1}", _v(crowd_cheer, _i), -6.0, group="crowd_cheer")
 _reg("crowd_groan", crowd_groan, -6.0)
 _reg("crowd_ooh", crowd_ooh, -6.0)
+
+_reg("pack_shake", pack_shake, -4.0)
+_reg("pack_tear", pack_tear, -3.0)
+_reg("card_whoosh", card_whoosh, -5.0)
+_reg("card_flip", card_flip, -4.0)
+_reg("reveal_common", reveal_common, -6.0)
+_reg("reveal_rare", reveal_rare, -4.0)
+_reg("reveal_epic", reveal_epic, -3.0)
+_reg("reveal_legendary", reveal_legendary, -2.0)

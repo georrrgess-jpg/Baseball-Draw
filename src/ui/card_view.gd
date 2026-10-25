@@ -1,10 +1,15 @@
 class_name CardView
 extends Control
-## Visual ability card: illustration, rarity frame, energy cost, name, category,
-## level pips, cooldown sweep and playable/selected states.
+## Visual ability card: metallic rarity frame, category banner, energy gem, illustration,
+## type line, description, level pips, cooldown sweep and playable/selected states.
+## Rare and better cards get an animated foil finish; `face_down` draws the card back.
 
 signal clicked(card: CardView)
 signal hovered(card: CardView, on: bool)
+
+const FOIL_SHADER := preload("res://assets/shaders/card_foil.gdshader")
+const PANEL_TOP := Color("#1B2740")
+const PANEL_BOTTOM := Color("#0A0F1B")
 
 var card_id := ""
 var level := 1
@@ -12,13 +17,26 @@ var cooldown_frac := 0.0
 var cooldown_left := 0.0
 var playable := true
 var selected := false
-var owned := true
+var owned := true:
+	set(v):
+		owned = v
+		if is_inside_tree():
+			_update_foil()
+		queue_redraw()
 var show_level := true
 var hotkey := ""
 var count_badge := ""
+var face_down := false:
+	set(v):
+		face_down = v
+		if is_inside_tree():
+			_update_foil()
+		queue_redraw()
+var foil := true
 var _hover := false
 var _art: Texture2D
 var _lift := 0.0
+var _foil_mat: ShaderMaterial
 
 
 func _init(id: String = "", lvl: int = 1) -> void:
@@ -34,6 +52,7 @@ func _init(id: String = "", lvl: int = 1) -> void:
 		_hover = false
 		hovered.emit(self, false)
 		queue_redraw())
+	resized.connect(_update_foil)
 
 
 func set_card(id: String, lvl: int = 1) -> void:
@@ -41,12 +60,37 @@ func set_card(id: String, lvl: int = 1) -> void:
 	level = lvl
 	_art = DB.card_texture(id) if id != "" else null
 	tooltip_text = ""
+	_update_foil()
 	queue_redraw()
 
 
 func _ready() -> void:
 	if card_id != "" and _art == null:
 		_art = DB.card_texture(card_id)
+	_update_foil()
+
+
+## Foil only on owned, face-up Rare+ cards; one material per card so each sweeps on its own phase.
+func _update_foil() -> void:
+	var r := 0 if card_id == "" else DB.rarity_index(str(DB.card(card_id).get("rarity", "common")))
+	if not foil or face_down or not owned or r < 2:
+		material = null
+		return
+	if _foil_mat == null:
+		_foil_mat = ShaderMaterial.new()
+		_foil_mat.shader = FOIL_SHADER
+	var rar := str(DB.card(card_id).rarity)
+	_foil_mat.set_shader_parameter("tint", DB.rarity_color(rar))
+	_foil_mat.set_shader_parameter("sheen", [0.0, 0.0, 0.32, 0.42, 0.55][r])
+	_foil_mat.set_shader_parameter("holo", [0.0, 0.0, 0.0, 0.55, 0.85][r])
+	_foil_mat.set_shader_parameter("phase", float(absi(hash(card_id)) % 97) / 27.0)
+	_foil_mat.set_shader_parameter("card_size", size if size.x > 1.0 else custom_minimum_size)
+	material = _foil_mat
+
+
+func refresh() -> void:
+	_update_foil()
+	queue_redraw()
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -59,10 +103,17 @@ func _process(delta: float) -> void:
 	var target := 1.0 if (_hover or selected) else 0.0
 	if absf(_lift - target) > 0.01:
 		_lift = move_toward(_lift, target, delta * 8.0)
+		if _foil_mat:
+			_foil_mat.set_shader_parameter("hover", _lift)
 		queue_redraw()
 
 
+# ---------------------------------------------------------------- drawing
+
 func _draw() -> void:
+	if face_down:
+		_draw_back()
+		return
 	if card_id == "":
 		return
 	var c := DB.card(card_id)
@@ -71,88 +122,123 @@ func _draw() -> void:
 	var s := w / 150.0
 	var lift := -10.0 * _lift * s if selected or _hover else 0.0
 	var rect := Rect2(0, lift, w, h)
-	var rar_col := DB.rarity_color(c.rarity)
+	var rarity := str(c.rarity)
+	var r_idx := DB.rarity_index(rarity)
+	var rar_col := DB.rarity_color(rarity)
 	var cat_col := DB.category_color(c.category)
 	var dim := 1.0 if (playable and owned) else 0.45
+	var dc := Color(dim, dim, dim, 1)
 
-	# Shadow and glow
-	draw_rect(Rect2(rect.position + Vector2(4, 6) * s, rect.size), Color(0, 0, 0, 0.45))
+	# Shadow and selection glow
+	_rr_fill(Rect2(rect.position + Vector2(3, 6) * s, rect.size), 12 * s, Color(0, 0, 0, 0.45))
 	if selected:
-		_draw_round_rect(rect.grow(6 * s), Color(cat_col, 0.55), 12 * s)
+		_rr_fill(rect.grow(6 * s), 15 * s, Color(cat_col, 0.6))
 	elif _hover and playable:
-		_draw_round_rect(rect.grow(4 * s), Color(rar_col, 0.35), 12 * s)
-	# Frame
-	_draw_round_rect(rect, rar_col.darkened(0.35) * Color(dim, dim, dim, 1), 10 * s)
-	var inner := rect.grow(-4 * s)
-	_draw_round_rect(inner, Color(0.05, 0.07, 0.12) * Color(dim, dim, dim, 1), 8 * s)
-	# Art window
-	var art_rect := Rect2(inner.position + Vector2(4, 30) * s, Vector2(inner.size.x - 8 * s, inner.size.y * 0.5))
+		_rr_fill(rect.grow(4 * s), 14 * s, Color(rar_col, 0.4))
+
+	# Metallic rarity frame
+	var hi := 0.55 if r_idx >= 4 else 0.42
+	_rr_gradient(rect, 12 * s, rar_col.lightened(hi) * dc, rar_col.darkened(0.55) * dc)
+	_rr_outline(rect.grow(-1.4 * s), 11 * s, Color(1, 1, 1, 0.35 * dim), 1.2 * s)
+	var inner := rect.grow(-5 * s)
+	_rr_gradient(inner, 8 * s, PANEL_TOP * dc, PANEL_BOTTOM * dc)
+	if r_idx >= 3:
+		_draw_corner_ornaments(rect, s, rar_col.lightened(0.5), dim, r_idx >= 4)
+
+	# Category banner with the card name
+	var header := Rect2(inner.position, Vector2(inner.size.x, 27 * s))
+	_rr_gradient(header, 8 * s, cat_col.darkened(0.1) * dc, cat_col.darkened(0.55) * dc)
+	draw_rect(Rect2(header.position.x, header.position.y + 13 * s, header.size.x, 14 * s), cat_col.darkened(0.55) * dc)
+	draw_rect(Rect2(header.position.x, header.end.y - 1.5 * s, header.size.x, 1.5 * s), Color(0, 0, 0, 0.45))
+	var font := UITheme.font_header()
+	var name_size := int(21 * s)
+	var name_text: String = c.name
+	while font.get_string_size(name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x > inner.size.x - 42 * s and name_size > 11:
+		name_size -= 1
+	var name_pos := inner.position + Vector2(34 * s, 20 * s)
+	draw_string(font, name_pos + Vector2(1.2, 1.6) * s, name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(0, 0, 0, 0.6 * dim))
+	draw_string(font, name_pos, name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(1, 1, 1, dim))
+
+	# Illustration window
+	var art_rect := Rect2(inner.position + Vector2(5, 31) * s, Vector2(inner.size.x - 10 * s, inner.size.y * 0.41))
 	if _art:
 		draw_texture_rect(_art, art_rect, false, Color(dim, dim, dim))
 	else:
-		_draw_gradient_rect(art_rect, cat_col.darkened(0.5), cat_col.darkened(0.1), dim)
+		_draw_v_gradient(art_rect, cat_col.darkened(0.5) * dc, cat_col.darkened(0.1) * dc)
 		var ic := DB.icon(c.category)
 		if ic:
 			var isz := art_rect.size.y * 0.6
 			draw_texture_rect(ic, Rect2(art_rect.get_center() - Vector2(isz, isz) * 0.5, Vector2(isz, isz)), false, Color(1, 1, 1, 0.85 * dim))
-	draw_rect(art_rect, Color(rar_col, 0.6), false, 1.5 * s)
-	# Category stripe
-	draw_rect(Rect2(inner.position.x, art_rect.end.y + 2 * s, inner.size.x, 4 * s), Color(cat_col, dim))
-	# Name
-	var font := UITheme.font_header()
-	var name_size := int(22 * s)
-	var name_text: String = c.name
-	while font.get_string_size(name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x > inner.size.x - 46 * s and name_size > 12:
-		name_size -= 1
-	draw_string(font, inner.position + Vector2(36 * s, 24 * s), name_text, HORIZONTAL_ALIGNMENT_LEFT, inner.size.x - 40 * s, name_size, Color(1, 1, 1, dim))
-	# Cost gem
-	var gem_c := inner.position + Vector2(16, 15) * s
-	draw_circle(gem_c, 15 * s, Color(0.02, 0.05, 0.1))
-	draw_circle(gem_c, 13 * s, UITheme.ENERGY.darkened(0.25) * Color(dim, dim, dim, 1))
-	draw_arc(gem_c, 13 * s, 0, TAU, 24, Color(1, 1, 1, 0.5 * dim), 1.5 * s)
-	var cost := str(int(c.cost))
-	var df := UITheme.font_display()
-	var cs := df.get_string_size(cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(24 * s))
-	draw_string(df, gem_c + Vector2(-cs.x * 0.5, 8 * s), cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(24 * s), Color(1, 1, 1, dim))
-	# Description snippet
-	var body := UITheme.font_body()
-	var text_top := art_rect.end.y + 10 * s
-	var desc := DB.card_text(card_id, level)
-	draw_multiline_string(body, Vector2(inner.position.x + 6 * s, text_top + 13 * s), desc, HORIZONTAL_ALIGNMENT_LEFT,
-		inner.size.x - 12 * s, int(13 * s), 4, Color(0.85, 0.88, 0.95, dim))
-	# Category icon + rarity gem
+	_draw_v_gradient(Rect2(art_rect.position.x, art_rect.end.y - art_rect.size.y * 0.35, art_rect.size.x, art_rect.size.y * 0.35),
+		Color(0, 0, 0, 0.0), Color(0, 0, 0, 0.5))
+	draw_rect(art_rect, Color(rar_col.lightened(0.2), 0.95 * dim), false, 1.6 * s)
+	draw_rect(art_rect.grow(-1.6 * s), Color(1, 1, 1, 0.12 * dim), false, 1.0)
+
+	# Type line: category on the left, rarity on the right
+	var type_rect := Rect2(art_rect.position.x, art_rect.end.y + 3 * s, art_rect.size.x, 15 * s)
+	_rr_fill(type_rect, 4 * s, Color(cat_col.darkened(0.62), 0.95) * dc)
 	var cic := DB.icon(c.category)
 	if cic:
-		draw_texture_rect(cic, Rect2(inner.end - Vector2(24, 24) * s, Vector2(18, 18) * s), false, Color(cat_col, dim))
-	var gem := inner.position + Vector2(inner.size.x * 0.5, inner.size.y - 9 * s)
-	var pts := PackedVector2Array([gem + Vector2(0, -6) * s, gem + Vector2(6, 0) * s, gem + Vector2(0, 6) * s, gem + Vector2(-6, 0) * s])
-	draw_colored_polygon(pts, Color(rar_col, dim))
-	# Level pips
+		draw_texture_rect(cic, Rect2(type_rect.position + Vector2(3, 2) * s, Vector2(11, 11) * s), false, Color(cat_col.lightened(0.2), dim))
+	var small := UITheme.font_body_bold()
+	var tsize := int(10.5 * s)
+	draw_string(small, type_rect.position + Vector2(17 * s, 11.2 * s), str(c.category).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, tsize, Color(0.92, 0.94, 1.0, 0.9 * dim))
+	var rw := small.get_string_size(rarity.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x
+	draw_string(small, Vector2(type_rect.end.x - rw - 4 * s, type_rect.position.y + 11.2 * s), rarity.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, tsize, Color(rar_col.lightened(0.25), dim))
+
+	# Description
+	var body := UITheme.font_body()
+	var text_top := type_rect.end.y + 4 * s
+	draw_multiline_string(body, Vector2(inner.position.x + 6 * s, text_top + 11 * s), DB.card_text(card_id, level), HORIZONTAL_ALIGNMENT_LEFT,
+		inner.size.x - 12 * s, int(12 * s), 4, Color(0.86, 0.89, 0.96, dim))
+
+	# Energy cost gem
+	var gem_c := inner.position + Vector2(15, 14) * s
+	_circle_gradient(gem_c, 15.5 * s, Color(0.02, 0.04, 0.09), Color(0.02, 0.04, 0.09))
+	_circle_gradient(gem_c, 13.5 * s, UITheme.ENERGY.lightened(0.35) * dc, UITheme.ENERGY.darkened(0.55) * dc)
+	draw_arc(gem_c, 13.5 * s, 0, TAU, 28, Color(1, 1, 1, 0.55 * dim), 1.3 * s, true)
+	_ellipse(gem_c + Vector2(0, -6) * s, Vector2(8, 3.6) * s, Color(1, 1, 1, 0.28 * dim))
+	var cost := str(int(c.cost))
+	var df := UITheme.font_display()
+	var cs := df.get_string_size(cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(23 * s))
+	var cpos := gem_c + Vector2(-cs.x * 0.5, 8.5 * s)
+	draw_string_outline(df, cpos, cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(23 * s), int(4 * s), Color(0.02, 0.05, 0.12, 0.9))
+	draw_string(df, cpos, cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(23 * s), Color(1, 1, 1, dim))
+
+	# Rarity gem, set into the bottom of the frame
+	var gem := Vector2(rect.get_center().x, rect.end.y - 2.5 * s)
+	var gr := 6.5 * s
+	var diamond := PackedVector2Array([gem + Vector2(0, -gr), gem + Vector2(gr, 0), gem + Vector2(0, gr), gem + Vector2(-gr, 0)])
+	draw_colored_polygon(PackedVector2Array([gem + Vector2(0, -gr - 2 * s), gem + Vector2(gr + 2 * s, 0), gem + Vector2(0, gr + 2 * s), gem + Vector2(-gr - 2 * s, 0)]), Color(0, 0, 0, 0.6))
+	draw_polygon(diamond, PackedColorArray([rar_col.lightened(0.6) * dc, rar_col * dc, rar_col.darkened(0.4) * dc, rar_col * dc]))
+	# Level pips on the bottom frame edge
 	if show_level and owned:
 		for i in DB.card_max_level:
-			var pc := inner.position + Vector2(8 + i * 9, inner.size.y - 9) * s
-			draw_circle(pc, 3 * s, Color(UITheme.GOLD, dim) if i < level else Color(1, 1, 1, 0.15))
+			var pc := Vector2(rect.position.x + (14 + i * 9) * s, rect.end.y - 2.5 * s)
+			draw_circle(pc, 3.6 * s, Color(0.02, 0.03, 0.06, 0.85))
+			draw_circle(pc, 2.6 * s, Color(UITheme.GOLD, dim) if i < level else Color(1, 1, 1, 0.18))
 	# Linked defender badge
 	var linked: String = c.get("linked", "")
 	if linked != "":
 		var pt := DB.portrait(linked)
-		var bc := Vector2(art_rect.end.x - 16 * s, art_rect.position.y + 16 * s)
-		draw_circle(bc, 15 * s, DB.defender_accent(linked))
+		var bc := Vector2(art_rect.end.x - 15 * s, art_rect.position.y + 15 * s)
+		draw_circle(bc, 15 * s, Color(0.02, 0.04, 0.08, 0.9))
+		draw_circle(bc, 13.5 * s, DB.defender_accent(linked) * dc)
 		if pt:
-			draw_texture_rect(pt, Rect2(bc - Vector2(13, 13) * s, Vector2(26, 26) * s), false, Color(1, 1, 1, dim))
+			draw_texture_rect(pt, Rect2(bc - Vector2(12.5, 12.5) * s, Vector2(25, 25) * s), false, Color(1, 1, 1, dim))
 		else:
 			var ini: String = str(DB.defender(linked).name).substr(0, 1)
 			draw_string(df, bc + Vector2(-6, 7) * s, ini, HORIZONTAL_ALIGNMENT_LEFT, -1, int(20 * s), Color.WHITE)
 	# Cooldown sweep
 	if cooldown_frac > 0.0:
 		var cc := art_rect.get_center()
-		var r := art_rect.size.y * 0.42
+		var cr := minf(art_rect.size.x, art_rect.size.y) * 0.42
 		draw_rect(art_rect, Color(0, 0, 0, 0.55))
 		var pts2 := PackedVector2Array([cc])
 		var steps := 32
 		for i in steps + 1:
 			var a := -PI / 2 + TAU * cooldown_frac * float(i) / steps
-			pts2.append(cc + Vector2(cos(a), sin(a)) * r)
+			pts2.append(cc + Vector2(cos(a), sin(a)) * cr)
 		if pts2.size() >= 3:
 			draw_colored_polygon(pts2, Color(0.2, 0.25, 0.35, 0.75))
 		var t := "%.0f" % ceil(cooldown_left)
@@ -166,27 +252,116 @@ func _draw() -> void:
 	# Hotkey badge
 	if hotkey != "":
 		var hb := Rect2(rect.position + Vector2(w * 0.5 - 13 * s, -14 * s), Vector2(26, 22) * s)
-		_draw_round_rect(hb, Color(0.03, 0.05, 0.1, 0.95), 5 * s)
-		draw_rect(hb, Color(1, 1, 1, 0.3), false, 1.0)
-		var ks := body.get_string_size(hotkey, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s))
-		draw_string(UITheme.font_body_bold(), hb.position + Vector2(hb.size.x * 0.5 - ks.x * 0.5, 17 * s), hotkey, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s), Color.WHITE)
+		_rr_fill(hb, 5 * s, Color(0.03, 0.05, 0.1, 0.95))
+		_rr_outline(hb, 5 * s, Color(1, 1, 1, 0.35), 1.0)
+		var ks := small.get_string_size(hotkey, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s))
+		draw_string(small, hb.position + Vector2(hb.size.x * 0.5 - ks.x * 0.5, 17 * s), hotkey, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s), Color.WHITE)
 	if count_badge != "":
 		var cb := Rect2(Vector2(rect.end.x - 34 * s, rect.position.y - 8 * s), Vector2(38, 24) * s)
-		_draw_round_rect(cb, UITheme.SCARLET, 6 * s)
-		draw_string(UITheme.font_body_bold(), cb.position + Vector2(6, 18) * s, count_badge, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s), Color.WHITE)
+		_rr_fill(cb, 6 * s, UITheme.SCARLET)
+		draw_string(small, cb.position + Vector2(6, 18) * s, count_badge, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s), Color.WHITE)
 
 
-func _draw_round_rect(r: Rect2, col: Color, radius: float) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = col
-	sb.set_corner_radius_all(int(radius))
-	sb.anti_aliasing = true
-	draw_style_box(sb, r)
+## Card back: navy and gold with a diamond lattice and the game logo.
+func _draw_back() -> void:
+	var w := size.x
+	var h := size.y
+	var s := w / 150.0
+	var rect := Rect2(0, 0, w, h)
+	_rr_fill(Rect2(rect.position + Vector2(3, 6) * s, rect.size), 12 * s, Color(0, 0, 0, 0.45))
+	_rr_gradient(rect, 12 * s, Color("#F7D37A"), Color("#8A5A12"))
+	_rr_outline(rect.grow(-1.4 * s), 11 * s, Color(1, 1, 1, 0.4), 1.2 * s)
+	var inner := rect.grow(-6 * s)
+	_rr_gradient(inner, 8 * s, Color("#1C2F55"), Color("#081022"))
+	var step := 16.0 * s
+	var y := inner.position.y + step * 0.75
+	var row := 0
+	while y < inner.end.y - step * 0.5:
+		var x := inner.position.x + step * (0.75 if row % 2 == 0 else 1.25)
+		while x < inner.end.x - step * 0.5:
+			var d := step * 0.32
+			draw_colored_polygon(PackedVector2Array([Vector2(x, y - d), Vector2(x + d, y), Vector2(x, y + d), Vector2(x - d, y)]), Color(0.96, 0.75, 0.3, 0.13))
+			x += step
+		y += step * 0.5
+		row += 1
+	_rr_outline(inner.grow(-5 * s), 6 * s, Color(0.96, 0.75, 0.3, 0.55), 1.2 * s)
+	var cc := inner.get_center()
+	_circle_gradient(cc, 52 * s, Color(0.2, 0.35, 0.7, 0.9), Color(0.03, 0.06, 0.14, 0.95))
+	draw_arc(cc, 52 * s, 0, TAU, 48, Color(0.96, 0.75, 0.3, 0.9), 2.0 * s, true)
+	draw_arc(cc, 46 * s, 0, TAU, 48, Color(0.96, 0.75, 0.3, 0.35), 1.0 * s, true)
+	var logo: Texture2D = DB._texture("res://assets/textures/logo/logo_small.png")
+	if logo:
+		var lw := 92.0 * s
+		var lh := lw * float(logo.get_height()) / float(logo.get_width())
+		draw_texture_rect(logo, Rect2(cc - Vector2(lw, lh) * 0.5, Vector2(lw, lh)), false)
 
 
-func _draw_gradient_rect(r: Rect2, a: Color, b: Color, dim: float) -> void:
-	var steps := 12
-	for i in steps:
-		var t := float(i) / steps
-		var c := a.lerp(b, t) * Color(dim, dim, dim, 1)
-		draw_rect(Rect2(r.position.x, r.position.y + r.size.y * t, r.size.x, r.size.y / steps + 1), c)
+func _draw_corner_ornaments(rect: Rect2, s: float, col: Color, dim: float, legendary: bool) -> void:
+	var l := 16.0 * s
+	var o := 3.0 * s
+	var c := Color(col, 0.95 * dim)
+	var corners := [[rect.position + Vector2(o, o), Vector2(1, 0), Vector2(0, 1)],
+		[Vector2(rect.end.x - o, rect.position.y + o), Vector2(-1, 0), Vector2(0, 1)],
+		[Vector2(rect.position.x + o, rect.end.y - o), Vector2(1, 0), Vector2(0, -1)],
+		[rect.end - Vector2(o, o), Vector2(-1, 0), Vector2(0, -1)]]
+	for k in corners:
+		var p: Vector2 = k[0]
+		draw_polyline(PackedVector2Array([p + k[1] * l, p, p + k[2] * l]), c, 2.0 * s, true)
+		if legendary:
+			var q: Vector2 = p + (k[1] + k[2]) * 5.0 * s
+			var d := 2.6 * s
+			draw_colored_polygon(PackedVector2Array([q + Vector2(0, -d), q + Vector2(d, 0), q + Vector2(0, d), q + Vector2(-d, 0)]), Color(1, 1, 0.9, dim))
+
+
+func _rr_points(r: Rect2, rad: float, seg := 5) -> PackedVector2Array:
+	rad = minf(rad, minf(r.size.x, r.size.y) * 0.5)
+	var centers := [Vector2(r.end.x - rad, r.position.y + rad), Vector2(r.end.x - rad, r.end.y - rad),
+		Vector2(r.position.x + rad, r.end.y - rad), Vector2(r.position.x + rad, r.position.y + rad)]
+	var pts := PackedVector2Array()
+	for i in 4:
+		for k in seg + 1:
+			var a := -PI / 2 + PI / 2 * i + PI / 2 * float(k) / seg
+			pts.append(centers[i] + Vector2(cos(a), sin(a)) * rad)
+	return pts
+
+
+func _rr_fill(r: Rect2, rad: float, col: Color) -> void:
+	draw_colored_polygon(_rr_points(r, rad), col)
+
+
+func _rr_gradient(r: Rect2, rad: float, top: Color, bottom: Color) -> void:
+	var pts := _rr_points(r, rad)
+	var cols := PackedColorArray()
+	for p in pts:
+		cols.append(top.lerp(bottom, clampf((p.y - r.position.y) / maxf(r.size.y, 1.0), 0.0, 1.0)))
+	draw_polygon(pts, cols)
+
+
+func _rr_outline(r: Rect2, rad: float, col: Color, width: float) -> void:
+	var pts := _rr_points(r, rad)
+	pts.append(pts[0])
+	draw_polyline(pts, col, width, true)
+
+
+func _draw_v_gradient(r: Rect2, top: Color, bottom: Color) -> void:
+	draw_polygon(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]),
+		PackedColorArray([top, top, bottom, bottom]))
+
+
+func _circle_gradient(c: Vector2, rad: float, top: Color, bottom: Color) -> void:
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	for i in 32:
+		var a := TAU * i / 32.0
+		var p := c + Vector2(cos(a), sin(a)) * rad
+		pts.append(p)
+		cols.append(top.lerp(bottom, (p.y - (c.y - rad)) / (2.0 * rad)))
+	draw_polygon(pts, cols)
+
+
+func _ellipse(c: Vector2, radii: Vector2, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for i in 20:
+		var a := TAU * i / 20.0
+		pts.append(c + Vector2(cos(a) * radii.x, sin(a) * radii.y))
+	draw_colored_polygon(pts, col)

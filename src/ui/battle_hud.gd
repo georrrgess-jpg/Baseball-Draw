@@ -83,9 +83,9 @@ func _ready() -> void:
 	_on_state(battle.state)
 	Router.set_toast_top(270.0)
 	tree_exiting.connect(func() -> void: Router.set_toast_top(90.0))
-	if not battle.practice and not battle.auto_test and not bool(Profile.data.flags.get("battle_help", false)) \
+	if not battle.practice and not battle.auto_test and not bool(Profile.data.flags.get("battle_tutorial_done", false)) \
 			and not "--no-help" in OS.get_cmdline_user_args():
-		_show_help()
+		start_tutorial()
 
 
 # ---------------------------------------------------------------- builders
@@ -120,9 +120,11 @@ func _build_flash() -> void:
 func _build_top() -> void:
 	var p := _panel(Color(0.03, 0.05, 0.1, 0.9), Color(UITheme.SCARLET, 0.6), 8)
 	p.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	p.position = Vector2(-330, 10)
-	p.custom_minimum_size = Vector2(660, 0)
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	p.offset_left = -300
+	p.offset_right = 300
+	p.offset_top = 10
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	root.add_child(p)
 	var hb := HBoxContainer.new()
 	hb.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -134,6 +136,8 @@ func _build_top() -> void:
 	var runs_box := VBoxContainer.new()
 	runs_box.add_theme_constant_override("separation", 0)
 	runs_box.add_child(UITheme.label("RUNS ALLOWED", 15, UITheme.MUTED, UITheme.font_body_bold()))
+	runs_box.tooltip_text = "Runners who reach home plate score runs. Fill every circle and the game is over."
+	runs_box.mouse_filter = Control.MOUSE_FILTER_PASS
 	_top_runs = HBoxContainer.new()
 	_top_runs.add_theme_constant_override("separation", 5)
 	runs_box.add_child(_top_runs)
@@ -164,8 +168,6 @@ func _build_top() -> void:
 	cbox.add_child(_top_coins)
 	hb.add_child(cbox)
 	_top_score = UITheme.label("0", 18, UITheme.MUTED, UITheme.font_body_bold())
-	_top_score.tooltip_text = "Score"
-	hb.add_child(_top_score)
 
 
 func _vsep() -> ColorRect:
@@ -253,17 +255,17 @@ func _build_minimap() -> void:
 	p.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	p.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	p.offset_left = 14.0
-	p.offset_top = -232.0
+	p.offset_top = -190.0
 	p.offset_bottom = -12.0
 	root.add_child(p)
 	var vb := VBoxContainer.new()
 	p.add_child(vb)
 	var mm := Minimap.new()
 	mm.battle = battle
-	mm.custom_minimum_size = Vector2(320, 196)
+	mm.custom_minimum_size = Vector2(250, 154)
 	vb.add_child(mm)
 	_hint = UITheme.label("", 15, UITheme.MUTED, UITheme.font_body_bold())
-	_hint.custom_minimum_size = Vector2(320, 0)
+	_hint.custom_minimum_size = Vector2(250, 0)
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(_hint)
 
@@ -281,9 +283,11 @@ func _build_unit_panel() -> void:
 
 
 func _build_banner() -> void:
-	_banner = UITheme.title("", 76, Color.WHITE)
+	_banner = UITheme.title("", 60, Color.WHITE)
+	_banner.add_theme_constant_override("outline_size", 12)
+	_banner.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_banner.position = Vector2(-700, 190)
+	_banner.position = Vector2(-700, 120)
 	_banner.custom_minimum_size = Vector2(1400, 0)
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.modulate.a = 0.0
@@ -318,21 +322,24 @@ func _build_controls() -> void:
 	tl.position = Vector2(14, 14)
 	tl.add_theme_constant_override("separation", 8)
 	root.add_child(tl)
-	var pause := UITheme.small_button("II  Pause", UITheme.BLUE, 20)
+	var pause := UITheme.small_button("II", UITheme.BLUE, 18)
+	pause.custom_minimum_size = Vector2(46, 0)
 	pause.tooltip_text = "Pause (Esc)"
 	pause.pressed.connect(toggle_pause)
 	tl.add_child(pause)
-	_speed_btn = UITheme.small_button("1x", UITheme.GOLD, 20)
+	_speed_btn = UITheme.small_button("1x", UITheme.GOLD, 18)
 	_speed_btn.tooltip_text = "Fast-forward (Shift)"
 	_speed_btn.custom_minimum_size = Vector2(64, 0)
 	_speed_btn.pressed.connect(func() -> void:
 		battle.cycle_speed()
 		refresh())
 	tl.add_child(_speed_btn)
-	var map_btn := UITheme.small_button("Map (M)", UITheme.BLUE, 20)
+	var map_btn := UITheme.small_button("MAP", UITheme.BLUE, 18)
+	map_btn.tooltip_text = "Top-down tactical view (M)"
 	map_btn.pressed.connect(func() -> void: battle.cam.toggle_tactical())
 	tl.add_child(map_btn)
-	var range_btn := UITheme.small_button("Ranges (F)", UITheme.BLUE, 20)
+	var range_btn := UITheme.small_button("RANGES", UITheme.BLUE, 18)
+	range_btn.tooltip_text = "Show every defender's throwing range (F)"
 	range_btn.pressed.connect(func() -> void:
 		var show: bool = not battle.defenders[0].show_range
 		for df in battle.defenders:
@@ -352,12 +359,12 @@ func _build_setup_panel() -> void:
 	_setup_panel = _panel(Color(0.04, 0.07, 0.12, 0.92), Color(1, 1, 1, 0.12), 12)
 	_setup_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_setup_panel.position = Vector2(14, 64)
-	_setup_panel.custom_minimum_size = Vector2(350, 0)
+	_setup_panel.custom_minimum_size = Vector2(300, 0)
 	root.add_child(_setup_panel)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 8)
 	_setup_panel.add_child(vb)
-	vb.add_child(UITheme.header("FORMATION", 30, UITheme.GOLD))
+	vb.add_child(UITheme.header("FORMATION", 26, UITheme.GOLD))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 6)
@@ -365,8 +372,8 @@ func _build_setup_panel() -> void:
 	vb.add_child(grid)
 	for fid in DB.formation_order:
 		var f: Dictionary = DB.formations[fid]
-		var b := UITheme.small_button(f.name, UITheme.SCARLET, 21)
-		b.custom_minimum_size = Vector2(162, 38)
+		var b := UITheme.small_button(f.name, UITheme.SCARLET, 19)
+		b.custom_minimum_size = Vector2(138, 34)
 		b.tooltip_text = f.text
 		b.pressed.connect(func() -> void: battle.apply_formation(fid))
 		grid.add_child(b)
@@ -389,20 +396,11 @@ func _build_setup_panel() -> void:
 			Router.toast("No custom formation saved yet.", "warn"))
 	row.add_child(load_b)
 	vb.add_child(row)
-	vb.add_child(UITheme.label("Drag defenders to reposition. Rings show range; green = in position.", 16, UITheme.MUTED))
-	vb.get_child(vb.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(UITheme.hsep())
-	vb.add_child(UITheme.header("SYNERGIES", 26, UITheme.GOLD))
+	vb.add_child(UITheme.header("TEAM SYNERGIES", 22, UITheme.GOLD))
 	_synergy_box = VBoxContainer.new()
-	_synergy_box.add_theme_constant_override("separation", 3)
+	_synergy_box.add_theme_constant_override("separation", 2)
 	vb.add_child(_synergy_box)
-	vb.add_child(UITheme.hsep())
-	vb.add_child(UITheme.header("SCOUTING REPORT", 26, UITheme.GOLD))
-	_preview_box = HFlowContainer.new()
-	_preview_box.add_theme_constant_override("h_separation", 10)
-	_preview_box.custom_minimum_size = Vector2(326, 0)
-	vb.add_child(_preview_box)
-
 
 func _save_custom_formation() -> void:
 	var by_id := {}
@@ -657,7 +655,9 @@ func refresh() -> void:
 		if not md.is_empty():
 			mods.append("%s: %s" % [md.name, md.text])
 	var dname: String = DB.difficulty(run.difficulty_id).name
-	_mods_label.text = "%s · %s" % [dname, "\n".join(mods)] if mods.size() > 0 else dname
+	_mods_label.text = "\n".join(mods)
+	_mods_label.visible = mods.size() > 0
+	_threat_title.tooltip_text = "Difficulty: %s" % dname
 	# Energy & deck
 	var cs: CardSystem = battle.cards
 	_energy_label.text = str(int(cs.energy))
@@ -687,6 +687,7 @@ func refresh() -> void:
 		_boss_name.text = _boss_enemy.data.name.to_upper() + tag
 	# Hints
 	_hint.text = _context_hint()
+	_hint.visible = _hint.text != ""
 	if battle.selected and _unit_panel.visible:
 		_fill_unit_panel(battle.selected)
 	_fill_synergies()
@@ -707,7 +708,7 @@ func _context_hint() -> String:
 		"break":
 			return "Wave cleared! Reposition now, or call the next wave early for bonus coins (Space)."
 		"wave":
-			return "Play cards with 1-5 or by clicking. Shift: fast-forward. Tab: cycle defenders."
+			return ""
 	return ""
 
 
@@ -741,6 +742,8 @@ func _fill_threat_icons(by_type: Dictionary) -> void:
 
 
 func _fill_preview(preview: Dictionary) -> void:
+	if _preview_box == null:
+		return
 	var key := str(preview)
 	if _preview_box.get_meta("key", "") == key:
 		return
@@ -766,15 +769,21 @@ func _fill_synergies() -> void:
 	_synergy_box.set_meta("key", key)
 	for c in _synergy_box.get_children():
 		c.queue_free()
+	var any := false
 	for syn in DB.synergies:
 		var active := false
-		for s in battle.active_synergies:
-			if s.data.id == syn.id:
+		for sy in battle.active_synergies:
+			if sy.data.id == syn.id:
 				active = true
-		var l := UITheme.label(("● " if active else "○ ") + syn.name, 18, UITheme.GREEN if active else UITheme.MUTED, UITheme.font_body_bold())
+		if not active:
+			continue
+		any = true
+		var l := UITheme.label("● " + syn.name, 17, UITheme.GREEN, UITheme.font_body_bold())
 		l.tooltip_text = syn.text
 		l.mouse_filter = Control.MOUSE_FILTER_PASS
 		_synergy_box.add_child(l)
+	if not any:
+		_synergy_box.add_child(UITheme.label("None yet — pair defenders to unlock bonuses.", 15, UITheme.MUTED))
 
 
 # ---------------------------------------------------------------- unit panel
@@ -905,8 +914,8 @@ func banner(text: String, color: Color) -> void:
 	_banner_tween.set_parallel(true)
 	_banner_tween.tween_property(_banner, "modulate:a", 1.0, 0.12)
 	_banner_tween.tween_property(_banner, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_banner_tween.chain().tween_interval(1.2)
-	_banner_tween.chain().tween_property(_banner, "modulate:a", 0.0, 0.4)
+	_banner_tween.chain().tween_interval(0.9)
+	_banner_tween.chain().tween_property(_banner, "modulate:a", 0.0, 0.3)
 
 
 func flash(c: Color) -> void:
@@ -969,8 +978,6 @@ func on_card_played(id: String) -> void:
 	tw.tween_property(cv, "scale", Vector2(1.15, 1.15), 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(cv, "modulate:a", 0.0, 0.35).set_delay(0.45)
 	tw.chain().tween_callback(cv.queue_free)
-	var c := DB.card(id)
-	banner(str(c.name).to_upper(), DB.category_color(c.category).lightened(0.3))
 
 
 # ---------------------------------------------------------------- state & overlays
@@ -984,8 +991,23 @@ func _on_state(s: String) -> void:
 	refresh()
 
 
+func start_tutorial() -> void:
+	var tut: CanvasLayer = load("res://src/ui/battle_tutorial.gd").new()
+	tut.set("hud", self)
+	tut.set("battle", battle)
+	tut.name = "Tutorial"
+	add_child(tut)
+
+
+## Rules reference (pause menu → HOW TO PLAY). Pauses the game while open.
+func show_help() -> void:
+	_show_help()
+
+
 func _show_help() -> void:
 	var p := _panel(Color(0.04, 0.07, 0.12, 0.97), Color(UITheme.GOLD, 0.7), 20)
+	p.process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().paused = true
 	p.set_anchors_preset(Control.PRESET_CENTER)
 	p.position = Vector2(-380, -250)
 	p.custom_minimum_size = Vector2(760, 0)
@@ -1011,9 +1033,11 @@ func _show_help() -> void:
 		r.add_theme_font_size_override("bold_font_size", 21)
 		vb.add_child(r)
 	var b := UITheme.menu_button("GOT IT — PLAY BALL!", UITheme.SCARLET, 32)
+	b.text = "GOT IT"
 	b.pressed.connect(func() -> void:
 		Profile.data.flags["battle_help"] = true
 		Profile.save_soon()
+		get_tree().paused = false
 		p.queue_free())
 	vb.add_child(b)
 

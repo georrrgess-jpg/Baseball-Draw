@@ -41,6 +41,11 @@ func _ready() -> void:
 	var controls := UITheme.menu_button("CONTROLS", UITheme.BLUE)
 	controls.pressed.connect(_show_controls)
 	vb.add_child(controls)
+	var howto := UITheme.menu_button("HOW TO PLAY", UITheme.BLUE)
+	howto.pressed.connect(func() -> void:
+		_close()
+		battle.hud.show_help())
+	vb.add_child(howto)
 	if battle.practice:
 		var leave := UITheme.menu_button("LEAVE PRACTICE", UITheme.SCARLET)
 		leave.pressed.connect(func() -> void:

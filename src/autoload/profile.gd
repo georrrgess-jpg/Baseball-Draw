@@ -6,6 +6,7 @@ signal changed
 signal achievement_unlocked(id: String)
 signal level_up(new_level: int)
 signal notice(text: String)
+signal packs_changed
 
 var SAVE_PATH := "user://profile.json"
 var BACKUP_PATH := "user://profile.bak"
@@ -63,6 +64,8 @@ func default_profile() -> Dictionary:
 		"stats": {}, "achievements": {}, "records": {"best_endless_inning": 0, "best_endless_score": 0},
 		"history": [],
 		"current_run": null,
+		"packs": [],          # unopened packs: {"type", "source", "card" (signature packs)}
+		"packs_opened": 0,
 		"flags": {"tutorial_done": false},
 	}
 	for id in DB.defender_order:
@@ -166,6 +169,12 @@ func _sanitize() -> void:
 		data.arena = "steel_yard"
 	if data.current_run != null and typeof(data.current_run) != TYPE_DICTIONARY:
 		data.current_run = null
+	var packs: Array = []
+	for pk in data.packs:
+		if typeof(pk) == TYPE_DICTIONARY and DB.packs.has(str(pk.get("type", ""))):
+			packs.append(pk)
+	data.packs = packs
+	data.packs_opened = int(data.packs_opened)
 
 
 func save_now() -> void:
@@ -217,6 +226,7 @@ func add_xp(amount: int) -> int:
 		data.level += 1
 		levels += 1
 		data.coins += 100
+		add_pack("pro" if data.level % 5 == 0 else "rookie", "Level %d reward" % data.level)
 		level_up.emit(data.level)
 		_check_unlocks()
 	changed.emit()
@@ -292,8 +302,8 @@ func unlock_defender(id: String) -> void:
 		return
 	data.defenders[id].unlocked = true
 	var sig: String = DB.defender(id).get("signature", "")
-	if sig != "":
-		grant_card(sig, 0)
+	if sig != "" and not is_card_owned(sig):
+		add_pack("signature", "%s joined the team" % DB.defender(id).name, sig)
 	notice.emit("New defender unlocked: %s!" % DB.defender(id).name)
 	_update_collection_stats()
 	changed.emit()
@@ -387,11 +397,129 @@ func grant_card(id: String, copies: int = 1) -> bool:
 	var is_new: bool = not bool(c.owned)
 	if is_new:
 		c.owned = true
+		c["fresh"] = true   # shown as NEW in Cards & Deck until the player looks at it
 	else:
 		c.copies += copies
 	_update_collection_stats()
 	changed.emit()
 	return is_new
+
+
+# ------------------------------------------------------------------ packs
+
+func add_pack(type: String, source: String, card := "") -> void:
+	if not DB.packs.has(type):
+		return
+	var pk := {"type": type, "source": source}
+	if card != "":
+		pk["card"] = card
+	data.packs.append(pk)
+	packs_changed.emit()
+	changed.emit()
+
+
+func pack_count(type := "") -> int:
+	if type == "":
+		return data.packs.size()
+	return data.packs.filter(func(pk: Dictionary) -> bool: return pk.type == type).size()
+
+
+func can_buy_pack(type: String) -> bool:
+	var pd := DB.pack(type)
+	if not bool(pd.get("for_sale", false)):
+		return false
+	return data.coins >= int(pd.get("price_coins", 0)) and data.stars >= int(pd.get("price_stars", 0))
+
+
+func buy_pack(type: String) -> bool:
+	if not can_buy_pack(type):
+		return false
+	var pd := DB.pack(type)
+	data.coins -= int(pd.get("price_coins", 0))
+	data.stars -= int(pd.get("price_stars", 0))
+	add_pack(type, "Bought in the shop")
+	bump_stat("packs_bought")
+	save_soon()
+	return true
+
+
+## Opens the unopened pack at `index`: rolls its cards, adds them to the collection
+## and returns {"type", "source", "cards": [{"id", "rarity", "new", "copies"}]}.
+func open_pack(index: int) -> Dictionary:
+	if index < 0 or index >= data.packs.size():
+		return {}
+	var pk: Dictionary = data.packs[index]
+	data.packs.remove_at(index)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([data.created, int(data.packs_opened), pk.type])
+	var ids := roll_pack(str(pk.type), rng, str(pk.get("card", "")))
+	var cards: Array = []
+	for cid in ids:
+		var rarity: String = DB.card(cid).rarity
+		var copies := 2 if rarity == "common" else 1
+		var is_new := grant_card(cid, copies)
+		cards.append({"id": cid, "rarity": rarity, "new": is_new, "copies": 0 if is_new else copies})
+	data.packs_opened = int(data.packs_opened) + 1
+	bump_stat("packs_opened")
+	packs_changed.emit()
+	changed.emit()
+	save_soon()
+	return {"type": pk.type, "source": pk.get("source", ""), "cards": cards}
+
+
+## Card ids for one pack. Each slot rolls a rarity (raised to the slot minimum), then a card
+## of that rarity, preferring cards not yet owned and avoiding repeats inside the pack.
+func roll_pack(type: String, rng: RandomNumberGenerator, fixed_card := "") -> Array:
+	var pd := DB.pack(type)
+	if fixed_card != "" and DB.cards.has(fixed_card):
+		return [fixed_card]
+	var out: Array = []
+	var weights: Dictionary = pd.get("weights", {})
+	for slot in pd.get("slots", []):
+		var rarity := _roll_rarity(weights, rng)
+		var min_r := str(slot.get("min", "common"))
+		if DB.rarity_index(rarity) < DB.rarity_index(min_r):
+			rarity = min_r
+		var pool: Array = []
+		for cid in DB.card_order:
+			if DB.card(cid).rarity == rarity and not cid in out:
+				pool.append(cid)
+		if pool.is_empty():
+			for cid in DB.card_order:
+				if not cid in out:
+					pool.append(cid)
+		var unowned := pool.filter(func(c: String) -> bool: return not is_card_owned(c))
+		var choice_pool: Array = unowned if (not unowned.is_empty() and rng.randf() < 0.6) else pool
+		out.append(choice_pool[rng.randi() % choice_pool.size()])
+	return out
+
+
+func _roll_rarity(weights: Dictionary, rng: RandomNumberGenerator) -> String:
+	var total := 0.0
+	for r in DB.RARITY_ORDER:
+		total += float(weights.get(r, 0.0))
+	if total <= 0.0:
+		return "common"
+	var x := rng.randf() * total
+	for r in DB.RARITY_ORDER:
+		x -= float(weights.get(r, 0.0))
+		if x <= 0.0:
+			return r
+	return "common"
+
+
+func fresh_card_count() -> int:
+	var n := 0
+	for id in data.cards.keys():
+		if bool(data.cards[id].get("fresh", false)) and bool(data.cards[id].get("owned", false)):
+			n += 1
+	return n
+
+
+func mark_card_seen(id: String) -> void:
+	if data.cards.has(id) and bool(data.cards[id].get("fresh", false)):
+		data.cards[id].erase("fresh")
+		save_soon()
 
 
 func upgrade_cost(id: String) -> Dictionary:

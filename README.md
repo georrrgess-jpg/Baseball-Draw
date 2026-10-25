@@ -27,7 +27,16 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
   telegraphed attacks and counterplay.
 - **26 ability cards** in four categories (offense, control, defense, utility) and five rarities,
   with real combos (Curveball + Heat Wave, Magnet Glove + Grand Slam Barrage, Twin Play + relays...).
-  8-card decks, 5-card hand, 10 energy, cooldowns, draw/discard cycling.
+  8-card decks, 5-card hand, 10 energy, cooldowns, draw/discard cycling. Cards have metallic rarity
+  frames, and Rare, Epic and Legendary cards have an animated foil finish.
+- **Card packs** are how you collect cards: Rookie, Pro and Champion packs (with guaranteed rarities) and
+  Signature packs for new defenders. Earn them by finishing games and levelling up, or buy them in the
+  pack shop. Opening is a 3D sequence: the foil pack charges up and tears open, the cards fan out face
+  down with a glow in their rarity colour, and flip when clicked. Epic and Legendary pulls get an extra
+  build-up and celebration. Duplicates become upgrade copies.
+- **Guided first game**: pop-up tips walk new players through the field, outs and runs, moving defenders,
+  starting a wave and playing a card, with extra tips for the first run scored, the dugout and the first
+  boss.
 - **Positioning matters** — zone bonuses (pitcher on the mound, catcher behind the plate, infielders in the dirt,
   outfielders on the grass), team synergies, captain auras and four formation presets plus custom formations.
 - **Between-innings dugout** with run upgrades (Stronger Arm, Faster Relay, Wider Coverage, New Pitch Card,
@@ -47,7 +56,8 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
 
 ## How to play
 
-1. **PLAY → Quick Defense → Rookie or Standard** is the best first game (about ten minutes).
+1. On your first launch, press **Play the first game**: a short Quick Defense on Rookie with step-by-step
+   tips. (Later: **PLAY → Quick Defense** is the best ten-minute game.)
 2. Before the first pitch, **drag defenders** around the field or pick a formation. A green ring under a
    defender means they are in their best zone. Watch the glowing routes — runners follow them from the
    outfield gates to home plate.
@@ -57,7 +67,8 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
 5. Every runner you stop is an **out**; every runner that reaches home scores a **run** against you.
    Allow too many runs (3 on Standard) and the game is over. Base Shields stop one run each.
 6. Between innings, spend run coins in **the dugout**. At the end of a run you earn coins, XP, rank points
-   and a card pack.
+   and **card packs** — open them from the results screen or **CARD PACKS** in the main menu, then put new
+   cards into your deck in **CARDS & DECK** (new cards are marked NEW).
 
 ### Controls
 

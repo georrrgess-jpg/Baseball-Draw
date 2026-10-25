@@ -3,14 +3,6 @@ extends RefCounted
 ## Converts a finished run into permanent progression: coins, account XP,
 ## defender XP, card packs, rank points, records, stats and history.
 
-const PACK_WEIGHTS := {
-	"rookie": {"common": 55, "uncommon": 28, "rare": 13, "epic": 3.5, "legendary": 0.5},
-	"standard": {"common": 48, "uncommon": 29, "rare": 16, "epic": 5.5, "legendary": 1.5},
-	"veteran": {"common": 38, "uncommon": 30, "rare": 20, "epic": 9, "legendary": 3},
-	"legend": {"common": 28, "uncommon": 30, "rare": 24, "epic": 12, "legendary": 6},
-}
-
-
 static func innings_cleared(run: RunState, won: bool) -> int:
 	if won:
 		return run.inning
@@ -26,6 +18,7 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 	var unlocked_before: Dictionary = Profile.data.achievements.duplicate()
 	var level_before := int(Profile.data.level)
 	var division_before := int(Profile.data.division)
+	var packs_before := Profile.pack_count()
 
 	var coins := int(round((run.coins_earned * 0.55 + cleared * 22 + (160 if won else 0)) * mult))
 	var xp := maxi(15, int(round((run.outs_total * 2.0 + cleared * 30 + (220 if won else 0)) * mult)))
@@ -40,27 +33,24 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 		var gained := Profile.add_defender_xp(id, amount)
 		def_xp[id] = {"xp": amount, "levels": gained, "level": Profile.defender_level(id)}
 
-	# Card pack.
-	var picks := 1 + cleared / 3 + (1 if won else 0)
-	if run.mode_id == "quick":
-		picks = 1 + (1 if won else 0)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([run.run_seed, "pack", run.outs_total])
-	var pack: Array = []
-	var weights: Dictionary = PACK_WEIGHTS.get(run.difficulty_id, PACK_WEIGHTS.standard)
-	for i in picks:
-		var rarity := _roll_rarity(weights, rng)
-		var options: Array = []
-		for cid in DB.card_order:
-			if DB.card(cid).rarity == rarity:
-				options.append(cid)
-		# Prefer cards not yet owned half of the time to keep the collection growing.
-		var unowned := options.filter(func(c) -> bool: return not Profile.is_card_owned(c))
-		var pool: Array = unowned if (not unowned.is_empty() and rng.randf() < 0.5) else options
-		var pick: String = pool[rng.randi() % pool.size()]
-		var copies := 2 if rarity == "common" else 1
-		var is_new := Profile.grant_card(pick, copies)
-		pack.append({"id": pick, "new": is_new, "copies": 0 if is_new else copies})
+	# Card packs (opened from the Packs screen). Level-up and signature packs are added by Profile.
+	var src := "%s %s" % [mode.name, "win" if won else "reward"]
+	Profile.add_pack("rookie", src)
+	match run.mode_id:
+		"standard":
+			for i in cleared / 3:
+				Profile.add_pack("rookie", src)
+			if won:
+				Profile.add_pack("champion" if run.difficulty_id in ["veteran", "legend"] else "pro", src)
+		"quick":
+			if won:
+				Profile.add_pack("rookie", src)
+		"endless":
+			for i in mini(cleared / 3, 4):
+				Profile.add_pack("rookie", src)
+		"ranked":
+			if won:
+				Profile.add_pack("pro", src)
 
 	# Rank points.
 	var rp := 0
@@ -115,7 +105,7 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 		"won": won, "mode": run.mode_id, "difficulty": run.difficulty_id, "arena": run.arena_id,
 		"inning": run.inning, "innings_cleared": cleared, "outs": run.outs_total, "runs": run.runs, "run_limit": run.run_limit,
 		"score": run.score, "coins": coins, "xp": xp, "levels": levels, "level_before": level_before,
-		"defender_xp": def_xp, "mvp": mvp, "pack": pack, "rp": rp, "promoted": promoted,
+		"defender_xp": def_xp, "mvp": mvp, "packs": Profile.data.packs.slice(packs_before), "rp": rp, "promoted": promoted,
 		"division_before": division_before, "records": records, "achievements": new_achievements,
 		"stats": run.stats.duplicate(true), "date": Time.get_datetime_string_from_system(),
 	}
@@ -123,15 +113,3 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 		"inning": run.inning, "score": run.score, "outs": run.outs_total, "runs": run.runs, "date": result.date})
 	Profile.save_now()
 	return result
-
-
-static func _roll_rarity(weights: Dictionary, rng: RandomNumberGenerator) -> String:
-	var total := 0.0
-	for k in weights.keys():
-		total += float(weights[k])
-	var r := rng.randf() * total
-	for k in DB.RARITY_ORDER:
-		r -= float(weights.get(k, 0.0))
-		if r <= 0.0:
-			return k
-	return "common"

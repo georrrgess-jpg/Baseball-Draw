@@ -29,7 +29,7 @@ var _search: LineEdit
 func _ready() -> void:
 	collection_mode = Session.menu_tab == "collection"
 	setup_screen("COLLECTION" if collection_mode else "DECK BUILDER",
-		"Every ability card — upgrade them with copies from card packs" if collection_mode else "Build an 8-card deck. Hands hold up to 5 cards; energy caps at 10.")
+		"Every ability card — new cards and upgrade copies come from card packs" if collection_mode else "Build an 8-card deck. Hands hold up to 5 cards; energy caps at 10.")
 	deck = Profile.data.deck.duplicate()
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -217,7 +217,7 @@ func _fill_left() -> void:
 			_left.add_child(pb)
 		_left.add_child(UITheme.hsep())
 		_left.add_child(UITheme.label("%d of %d cards collected." % [total, DB.card_order.size()], 20, UITheme.OFFWHITE))
-		var how := UITheme.label("Earn card packs by finishing runs. Higher difficulties drop rarer cards. Duplicate copies upgrade cards (up to level 5). Unlocking a defender grants their signature card.", 18, UITheme.MUTED)
+		var how := UITheme.label("New cards come from card packs: earn them by finishing games and levelling up, or buy them in CARD PACKS. Duplicate copies upgrade cards (up to level 5). New defenders bring a Signature Pack with their card.", 18, UITheme.MUTED)
 		how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		how.custom_minimum_size = Vector2(270, 0)
 		_left.add_child(how)
@@ -324,6 +324,8 @@ func _refresh_grid() -> void:
 		cv.selected = cid == selected
 		if cid in deck and not collection_mode:
 			cv.count_badge = "IN"
+		elif bool(Profile.data.cards.get(cid, {}).get("fresh", false)) and cv.owned:
+			cv.count_badge = "NEW"
 		elif Profile.can_upgrade_card(cid):
 			cv.count_badge = "▲"
 		var id: String = cid
@@ -335,6 +337,7 @@ func _refresh_grid() -> void:
 			if selected == id and not collection_mode:
 				_toggle_in_deck(id)
 			selected = id
+			Profile.mark_card_seen(id)
 			Audio.ui("card_hover")
 			_refresh())
 		_grid.add_child(cv)
@@ -382,7 +385,7 @@ func _refresh_detail() -> void:
 	if linked != "":
 		_detail.add_child(UITheme.label("Signature card of %s — cast by them on the field." % DB.defender(linked).name, 18, DB.defender_accent(linked).lightened(0.3), UITheme.font_body_bold()))
 	if not owned:
-		_detail.add_child(UITheme.label("NOT YET COLLECTED — found in end-of-run card packs.", 19, UITheme.SCARLET, UITheme.font_body_bold()))
+		_detail.add_child(UITheme.label("NOT YET COLLECTED — find it in card packs.", 19, UITheme.SCARLET, UITheme.font_body_bold()))
 	# Upgrade path
 	_detail.add_child(UITheme.hsep())
 	_detail.add_child(UITheme.header("UPGRADE PATH", 26, UITheme.GOLD))

@@ -12,6 +12,7 @@ const SCENES := {
 	"progression": "res://scenes/progression.tscn",
 	"settings": "res://scenes/settings.tscn",
 	"play_menu": "res://scenes/play_menu.tscn",
+	"packs": "res://scenes/packs.tscn",
 }
 
 var current := ""

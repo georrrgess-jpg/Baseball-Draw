@@ -10,6 +10,10 @@ signal selection_changed(defender: Defender)
 signal wave_started(info: Dictionary)
 signal targeting_changed(card_index: int)
 signal banner_requested(text: String, color: Color)
+signal card_cast(id: String)
+signal defender_moved(defender: Defender)
+signal run_scored(runs: int)
+signal boss_spawned(enemy: Enemy)
 
 const COMBO_WINDOW := 1.35
 const BREAK_TIME := 12.0
@@ -667,6 +671,7 @@ func spawn_enemy(id: String, route: Route, start_d := 0.0, opts: Dictionary = {}
 		Audio.duck_music(8.0, 2.0)
 		if hud.has_method("show_boss"):
 			hud.show_boss(e)
+		boss_spawned.emit(e)
 		_boss_intro(route)
 	return e
 
@@ -715,8 +720,7 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 	run.coins_earned += coin
 	run.score += 10 + e.coins * 2
 	vfx.burst("out", e.center())
-	vfx.text_popup(e.center() + Vector3(0, 0.9, 0), "OUT!", Color(1.0, 1.0, 1.0), 1.15)
-	if coin >= 4:
+	if coin >= 12:
 		vfx.text_popup(e.center() + Vector3(0.7, 0.4, 0), "+%d" % coin, UITheme.GOLD, 0.75, 0.9)
 	Audio.play("enemy_out", -6.0, 0.06, 60)
 	Audio.play("coin", -14.0, 0.05, 90)
@@ -817,6 +821,7 @@ func on_enemy_reached_home(e: Enemy) -> void:
 		run.runs_inning += runs_scored
 	Audio.play("run_scored")
 	Audio.play("crowd_groan", -4.0)
+	run_scored.emit(runs_scored)
 	cam.shake(0.45)
 	hud_flash(Color(1.0, 0.1, 0.1, 0.25))
 	notify("RUN SCORED! (%d/%d)" % [run.runs, run.run_limit] if not practice else "RUN SCORED", Color(1.0, 0.3, 0.25))
@@ -881,7 +886,9 @@ func on_damage_dealt(source: Variant, e: Enemy, dealt: float, crit: bool) -> voi
 	if source is Defender and is_instance_valid(source):
 		(source as Defender).damage_dealt += dealt
 		run.add_damage((source as Defender).id, dealt)
-	vfx.damage_number(e.center() + Vector3(0, 0.4, 0), dealt, crit)
+	# Only crits and big hits get a number, so steady defender throws don't bury the field in text.
+	if crit or dealt >= maxf(90.0, e.max_hp * 0.2):
+		vfx.damage_number(e.center() + Vector3(0, 0.4, 0), dealt, crit)
 
 
 func on_curve_heat() -> void:
@@ -1358,6 +1365,7 @@ func try_cast_at_cursor() -> bool:
 	effects.execute(id, run.card_level(id), tgt)
 	if hud.has_method("on_card_played"):
 		hud.on_card_played(id)
+	card_cast.emit(id)
 	return true
 
 
@@ -1487,6 +1495,7 @@ func _end_drag() -> void:
 		vfx.dust(df.global_position, 0.6)
 		Audio.play("footstep_dirt", -2.0)
 		run.positions[df.id] = [df.post.x, df.post.z]
+		defender_moved.emit(df)
 	else:
 		df.global_position = df.post
 		Audio.ui("ui_error")

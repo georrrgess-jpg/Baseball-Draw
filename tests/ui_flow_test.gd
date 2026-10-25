@@ -91,7 +91,12 @@ func _button_center(b: Button) -> Vector2:
 
 
 func _run() -> void:
+	if "--ui-test-section=tutorial" in OS.get_cmdline_user_args():
+		await _test_tutorial()
+		_finish()
+		return
 	Profile.data.flags["battle_help"] = true
+	Profile.data.flags["battle_tutorial_done"] = true
 	var cfg := Session.new_run_config("quick")
 	cfg.difficulty = "rookie"
 	Session.start(cfg)
@@ -279,10 +284,10 @@ func _run() -> void:
 	await _wait_scene("main_menu")
 
 	# 12. Every main-menu destination opens and BACK returns.
-	for pair in [["PLAY", "play_menu"], ["DECK BUILDER", "deck_builder"], ["ROSTER", "roster"], ["COLLECTION", "deck_builder"],
+	for pair in [["PLAY", "play_menu"], ["CARD PACKS", "packs"], ["CARDS & DECK", "deck_builder"], ["TEAM", "roster"],
 			["PROGRESSION", "progression"], ["SETTINGS", "settings"]]:
 		await _wait(0.6)
-		var b := _find_button(get_tree().current_scene, pair[0])
+		var b := _find_button_prefix(get_tree().current_scene, pair[0])
 		_check(b != null, "main menu has %s" % pair[0])
 		if b == null:
 			continue
@@ -295,7 +300,163 @@ func _run() -> void:
 		if back:
 			await _click(_button_center(back))
 			_check(await _wait_scene("main_menu"), "BACK returns to the main menu from %s" % pair[1])
+	await _test_packs()
+	await _test_tutorial()
 	_finish()
+
+
+func _find_button_prefix(root: Node, text: String) -> Button:
+	for b in _all_buttons(root):
+		if b.text.strip_edges().begins_with(text) and b.is_visible_in_tree():
+			return b
+	return null
+
+
+## 13. Card packs: open a pack, flip a card by clicking it, reveal the rest, finish.
+func _test_packs() -> void:
+	Profile.add_pack("rookie", "UI test")
+	Profile.add_pack("rookie", "UI test")
+	Router.goto("packs")
+	_check(await _wait_scene("packs"), "packs screen opens")
+	await _wait(1.2)
+	var ps: Node = get_tree().current_scene
+	var packs_before := Profile.pack_count()
+	var open := _find_button(ps, "OPEN PACK")
+	_check(open != null and not open.disabled, "packs screen offers OPEN PACK")
+	if open == null:
+		return
+	await _click(_button_center(open))
+	for i in 80:
+		await _wait(0.1)
+		if ps.state == "reveal":
+			break
+	_check(ps.state == "reveal", "opening animation reaches the reveal (state %s)" % ps.state)
+	_check(Profile.pack_count() == packs_before - 1, "opening consumes one pack")
+	_check(ps._cards.size() == int(DB.pack("rookie").cards), "a Rookie Pack reveals %d cards" % int(DB.pack("rookie").cards))
+	if ps._cards.is_empty():
+		return
+	var first: Node3D = ps._cards[0].root
+	var sp: Vector2 = get_viewport().get_final_transform() * ps.camera.unproject_position(first.global_position)
+	await _click(sp)
+	await _wait(1.0)
+	_check(bool(ps._cards[0].revealed), "clicking a face-down card flips it")
+	var all := _find_button(ps, "REVEAL ALL")
+	_check(all != null, "REVEAL ALL button shown")
+	if all:
+		await _click(_button_center(all))
+	for i in 60:
+		await _wait(0.1)
+		if ps.state == "done":
+			break
+	_check(ps.state == "done", "every card revealed")
+	for c in ps._result.get("cards", []):
+		_check(Profile.is_card_owned(c.id), "pack card %s is in the collection" % c.id)
+	var next := _find_button_prefix(ps, "OPEN NEXT PACK")
+	_check(next != null, "OPEN NEXT PACK offered while packs remain")
+	if next:
+		await _click(_button_center(next))
+		for i in 30:
+			await _wait(0.1)
+			if ps.state == "idle":
+				break
+		_check(ps.state == "idle", "pack screen returns to the next pack")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+## 14. Guided first game: pop-ups advance on NEXT and on the player's actions.
+func _test_tutorial() -> void:
+	Profile.data.flags["battle_tutorial_done"] = false
+	var cfg := Session.new_run_config("quick")
+	cfg.difficulty = "rookie"
+	Session.start(cfg)
+	battle = null
+	for i in 200:
+		await _wait(0.1)
+		var scene := get_tree().current_scene
+		if scene is Battle and (scene as Battle).state == "setup":
+			battle = scene
+			break
+	if battle == null:
+		_check(false, "tutorial battle loaded")
+		return
+	await _wait(1.0)
+	var tut: Node = battle.hud.get_node_or_null("Tutorial")
+	_check(tut != null and tut._bubble.visible, "first game shows the tutorial pop-up")
+	if tut == null:
+		return
+	await _wait(0.5)
+	for i in 3:
+		var nb := _find_button(tut, "NEXT  ▶")
+		if nb:
+			await _click(_button_center(nb))
+			await _wait(0.6)
+	_check(tut._waiting == "moved", "tutorial asks the player to drag a defender")
+	var df: Defender = battle.defenders[battle.defenders.size() - 1]
+	var dest := df.post
+	for off in [Vector3(2.5, 0, 0), Vector3(-2.5, 0, 0), Vector3(0, 0, 2.5), Vector3(0, 0, -2.5), Vector3(2, 0, 2), Vector3(-2, 0, -2)]:
+		if battle.placement_error(df.post + off, df) == "":
+			dest = df.post + off
+			break
+	_check(dest != df.post, "found a valid spot to drag %s to" % df.id)
+	var from := _screen_of(df.global_position + Vector3(0, 1.0, 0))
+	var to := _screen_of(dest)
+	_mouse_move(from)
+	await _wait(0.2)
+	_mouse_button(from, true)
+	await _wait(0.1)
+	for k in 10:
+		_mouse_move(from.lerp(to, (k + 1) / 10.0))
+		await _wait(0.05)
+	_mouse_button(to, false)
+	await _wait(0.6)
+	_check(tut._step == 4, "moving a defender advances the tutorial (step %d)" % tut._step)
+	await _wait(0.5)
+	var nb2 := _find_button(tut, "NEXT  ▶")
+	if nb2:
+		await _click(_button_center(nb2))
+		await _wait(0.6)
+	_check(tut._waiting == "wave", "tutorial asks to start the wave")
+	await _key("start_wave")
+	for i in 80:
+		await _wait(0.1)
+		if tut._title.text == "HERE THEY COME!" and tut._bubble.visible:
+			break
+	_check(get_tree().paused and tut._title.text == "HERE THEY COME!", "wave tip pauses the game (state %s, step %d, waiting %s, paused %s, title %s)" % [
+		battle.state, tut._step, tut._waiting, get_tree().paused, tut._title.text])
+	await _wait(0.6)
+	var nb3 := _find_button(tut, "NEXT  ▶")
+	if nb3:
+		await _click(_button_center(nb3))
+		await _wait(0.6)
+	_check(not get_tree().paused and tut._waiting == "card", "card step lets the game run")
+	for i in 60:
+		await _wait(0.1)
+		if battle.cards.energy >= 3.0 and not battle.lead_runners(1).is_empty():
+			break
+	for idx in battle.cards.hand.size():
+		if battle.cards.check(idx) == "":
+			await _key("card_%d" % (idx + 1))
+			var id: String = battle.cards.hand[idx]
+			var tpos: Vector3 = battle.lead_runners(1)[0].global_position if not battle.lead_runners(1).is_empty() else Field.MOUND
+			if DB.card(id).target == "defender":
+				tpos = battle.defenders[0].global_position
+			var sp := _screen_of(tpos + Vector3(0, 1.0, 0))
+			_mouse_move(sp)
+			await _wait(0.2)
+			await _click(sp)
+			break
+	for i in 30:
+		await _wait(0.1)
+		if tut._step == 8:
+			break
+	_check(tut._step == 8 and get_tree().paused, "playing a card advances to the last step (step %d, paused %s, energy %.1f)" % [tut._step, get_tree().paused, battle.cards.energy])
+	await _wait(0.6)
+	var go := _find_button(tut, "LET'S GO!")
+	if go:
+		await _click(_button_center(go))
+		await _wait(0.6)
+	_check(bool(Profile.data.flags.get("battle_tutorial_done", false)) and not get_tree().paused, "tutorial completes and the game resumes")
 
 
 func _wait_scene(name: String) -> bool:

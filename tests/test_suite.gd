@@ -34,6 +34,7 @@ func _run() -> void:
 	test_run_state()
 	test_waves()
 	test_rewards_and_progression()
+	test_packs()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -142,7 +143,8 @@ func test_profile_and_saves() -> void:
 	ok(not Profile.is_defender_unlocked("nova"), "nova locked at start")
 	Profile.add_xp(5000)
 	ok(Profile.is_defender_unlocked("nova"), "nova unlocks at account level 4 (level %d)" % int(Profile.data.level))
-	ok(Profile.is_card_owned("thunderbolt"), "unlocking nova grants her signature card")
+	ok(Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "signature" and pk.get("card", "") == "thunderbolt"),
+		"unlocking nova brings a Signature Pack with her card")
 	ok("neon_diamond" in Profile.data.arenas_unlocked, "neon diamond unlocks at level 3")
 	# Achievements award stars once.
 	var stars := int(Profile.data.stars)
@@ -237,7 +239,9 @@ func test_rewards_and_progression() -> void:
 	var res := Rewards.apply(r, true)
 	ok(int(Profile.data.coins) >= coins + int(res.coins) and int(res.coins) > 0, "victory awards coins (%d, plus level-up bonuses)" % int(res.coins))
 	ok(int(res.xp) > 200, "victory awards XP (%d)" % int(res.xp))
-	ok(res.pack.size() >= 3, "victory card pack has picks (%d)" % res.pack.size())
+	ok(res.packs.size() >= 4, "standard victory awards packs (%d)" % res.packs.size())
+	ok(res.packs.any(func(pk: Dictionary) -> bool: return pk.type == "pro"), "standard victory includes a Pro Pack")
+	ok(Profile.pack_count() >= res.packs.size(), "earned packs wait unopened in the inventory")
 	ok(int(Profile.data.rp) == rp + int(res.rp) and int(res.rp) > 0, "victory awards rank points")
 	ok(Profile.stat("wins_standard") == wins + 1, "win recorded")
 	ok("iron_fortress" in Profile.data.arenas_unlocked, "standard win unlocks Iron Fortress")
@@ -252,6 +256,69 @@ func test_rewards_and_progression() -> void:
 
 
 # ---------------------------------------------------------------- battle
+
+func test_packs() -> void:
+	section("card packs")
+	Profile.reset_profile()
+	ok(Profile.pack_count() == 0, "fresh profile starts with no unopened packs")
+	var owned_before := Profile.stat("cards_owned")
+	for type in ["rookie", "pro", "champion"]:
+		Profile.add_pack(type, "test")
+		var idx: int = Profile.data.packs.size() - 1
+		var res := Profile.open_pack(idx)
+		var pd := DB.pack(type)
+		ok(res.cards.size() == int(pd.cards), "%s opens %d cards" % [type, int(pd.cards)])
+		var best := 0
+		var ids := {}
+		for c in res.cards:
+			best = maxi(best, DB.rarity_index(c.rarity))
+			ids[c.id] = true
+			ok(Profile.is_card_owned(c.id), "%s: %s is now owned" % [type, c.id])
+		var slots: Array = pd.slots
+		var need := DB.rarity_index(str(slots[slots.size() - 1].get("min", "common")))
+		ok(best >= need, "%s guarantees %s or better" % [type, str(slots[slots.size() - 1].get("min", "common"))])
+		ok(ids.size() == res.cards.size(), "%s has no repeats inside one pack" % type)
+	ok(Profile.pack_count() == 0, "opened packs leave the inventory")
+	ok(Profile.stat("cards_owned") >= owned_before, "collection grew")
+	# Duplicates become upgrade copies.
+	var cid: String = Profile.STARTER_CARDS[0]
+	var copies := Profile.card_copies(cid)
+	Profile.grant_card(cid, 2)
+	ok(Profile.card_copies(cid) == copies + 2, "duplicate cards add upgrade copies")
+	# Shop.
+	Profile.data.coins = 1000
+	Profile.data.stars = 0
+	ok(Profile.buy_pack("rookie") and Profile.pack_count("rookie") == 1, "buying a Rookie Pack adds it to the inventory")
+	ok(int(Profile.data.coins) == 1000 - int(DB.pack("rookie").price_coins), "the shop charges the pack price")
+	ok(not Profile.buy_pack("champion"), "Champion Packs need stars")
+	ok(not Profile.buy_pack("signature"), "Signature Packs are not for sale")
+	# Level-ups and new defenders give packs.
+	var n := Profile.pack_count()
+	Profile.add_xp(Profile.xp_to_next(int(Profile.data.level)))
+	ok(Profile.pack_count() == n + 1, "levelling up awards a pack")
+	var sig_def := ""
+	for id in DB.defender_order:
+		if not Profile.is_defender_unlocked(id) and str(DB.defender(id).get("signature", "")) != "":
+			sig_def = id
+			break
+	if sig_def != "":
+		var sig: String = DB.defender(sig_def).signature
+		Profile.unlock_defender(sig_def)
+		var has_sig: bool = Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "signature" and pk.get("card", "") == sig)
+		ok(has_sig and not Profile.is_card_owned(sig), "a new defender brings a Signature Pack")
+		for i in Profile.data.packs.size():
+			if Profile.data.packs[i].type == "signature":
+				var res := Profile.open_pack(i)
+				ok(res.cards.size() == 1 and res.cards[0].id == sig and Profile.is_card_owned(sig), "the Signature Pack contains the signature card")
+				break
+	# Save round trip keeps unopened packs.
+	Profile.add_pack("pro", "test")
+	Profile.save_now()
+	var count := Profile.pack_count()
+	Profile.load_profile()
+	ok(Profile.pack_count() == count, "unopened packs survive save and load")
+	Profile.reset_profile()
+
 
 func test_battle_systems() -> void:
 	section("battle systems")
