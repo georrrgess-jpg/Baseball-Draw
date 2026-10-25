@@ -165,6 +165,7 @@ func _build_ui() -> void:
 		["CARDS & DECK", UITheme.BLUE, func() -> void:
 			Session.menu_tab = "deck"
 			Router.goto("deck_builder")],
+		["UPGRADE CARDS", UITheme.BLUE, func() -> void: Router.goto("card_upgrades")],
 		["TEAM", UITheme.BLUE, func() -> void: Router.goto("roster")],
 		["PRACTICE", UITheme.PURPLE, func() -> void: Session.start(Session.new_run_config("practice"))],
 		["PROGRESSION", UITheme.GOLD, func() -> void: Router.goto("progression")],
@@ -176,7 +177,7 @@ func _build_ui() -> void:
 	var i := 0
 	for it in items:
 		var b := UITheme.menu_button(it[0], it[1], 38)
-		b.custom_minimum_size = Vector2(430, 58)
+		b.custom_minimum_size = Vector2(430, 52)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.pressed.connect(it[2])
 		left.add_child(b)
@@ -188,6 +189,13 @@ func _build_ui() -> void:
 			pulse.tween_property(b, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
 		if it[0] == "CARDS & DECK" and Profile.fresh_card_count() > 0:
 			b.text = "CARDS & DECK  (%d NEW)" % Profile.fresh_card_count()
+		if it[0] == "UPGRADE CARDS":
+			var ready := 0
+			for cid in DB.card_order:
+				if Profile.can_upgrade_card(cid):
+					ready += 1
+			if ready > 0:
+				b.text = "UPGRADE CARDS  (%d READY)" % ready
 		if it[0] == "CONTINUE RUN":
 			_continue_btn = b
 			b.disabled = not Profile.has_saved_run()
