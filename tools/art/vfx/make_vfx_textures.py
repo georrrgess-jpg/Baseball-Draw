@@ -140,6 +140,33 @@ def make_star():
     save("star", a)
 
 
+def make_impact():
+    """Comic hit burst: a jagged, filled starburst with a solid core and a soft halo.
+    Solid shapes read at gameplay distance where thin rays vanish."""
+    S = 128
+    rng = np.random.default_rng(11)
+    n = 9
+    radii = []
+    for i in range(n * 2):
+        radii.append(rng.uniform(0.78, 0.98) if i % 2 == 0 else rng.uniform(0.36, 0.46))
+
+    def draw(d: ImageDraw.ImageDraw, size: int):
+        c = size / 2
+        pts = []
+        for i, rr in enumerate(radii):
+            ang = math.pi * 2 * i / (n * 2) - math.pi / 2 + rng.uniform(-0.06, 0.06)
+            pts.append((c + math.cos(ang) * rr * c, c + math.sin(ang) * rr * c))
+        d.polygon(pts, fill=255)
+
+    shape = supersample_draw(S, 4, draw)
+    x, y = grid(S)
+    r = np.sqrt(x * x + y * y)
+    halo = np.exp(-r * r * 4.0) * 0.35
+    a = np.clip(shape * 0.92 + halo, 0, 1) * (1.0 - smoothstep(0.92, 1.0, r))
+    # Brighter core in RGB is not needed (white); slight inner falloff keeps the edge crisp.
+    save("impact", a)
+
+
 def make_smoke():
     size = 256
     cell = 128
@@ -528,9 +555,16 @@ def make_icons():
 
 
 def main():
+    import sys
     OUT.mkdir(parents=True, exist_ok=True)
+    only = set(sys.argv[1:])
+    if only:
+        # e.g. `make_vfx_textures.py impact` regenerates just that texture.
+        for name in only:
+            globals()["make_" + name]()
+        return
     for fn in (make_glow, make_spark, make_star, make_smoke, make_flame, make_noise, make_ring, make_scorch, make_cracks,
-               make_frost, make_runes, make_clock, make_web, make_chain, make_icons):
+               make_frost, make_runes, make_clock, make_web, make_chain, make_icons, make_impact):
         fn()
 
 

@@ -398,7 +398,7 @@ func _update_overlay() -> void:
 
 func _process(delta: float) -> void:
 	if _flash > 0.0:
-		_flash = maxf(0.0, _flash - delta * 6.0)
+		_flash = maxf(0.0, _flash - delta * 5.5)
 		_update_overlay()
 	if _fallback:
 		_animate_fallback(delta)

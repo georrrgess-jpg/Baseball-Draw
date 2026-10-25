@@ -80,6 +80,25 @@ var _fx_cage: MeshInstance3D
 var _fx_key := 0
 var _ice_k := 0.0
 var _cage_k := 0.0
+# Hit feedback (cosmetic): squash / flinch, health bar chip trail and pulse, death tumble.
+var _hit_k := 0.0
+var _hit_dir := Vector3.ZERO        # local space, direction the last hit pushed toward
+var _impact_gap := 0.0
+var _model_scale := Vector3.ONE
+var _bar_chip := 1.0
+var _bar_hold := 0.0
+var _bar_pulse := 0.0
+var _bar_anim := false
+var _death_vel := Vector3.ZERO
+
+## Health bar styles: world size of the quad, minimum on-screen width, accent trim, ticks.
+const BAR_STYLES := {
+	"runner": {"size": Vector2(1.3, 0.24), "min_px": 56.0, "trim": Color(0, 0, 0, 0), "ticks": 10.0, "lift": 0.3},
+	"elite": {"size": Vector2(1.6, 0.28), "min_px": 74.0, "trim": Color(1.0, 0.8, 0.3, 1.0), "ticks": 10.0, "lift": 0.35},
+	"boss": {"size": Vector2(3.4, 0.44), "min_px": 150.0, "trim": Color(1.0, 0.55, 0.15, 1.0), "ticks": 20.0, "lift": 0.5},
+}
+static var _bar_mats := {}
+static var _bar_meshes := {}
 
 
 func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, opts: Dictionary) -> void:
@@ -133,18 +152,18 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 			mcol = Color(1.0, 0.85, 0.1, 0.95) if not is_boss else Color(0.2, 0.65, 1.0, 1.0)
 		_marker = FieldBuilder.make_ring(0.62 * height / 1.8 * 1.15, mcol, 0.16, 0.18)
 		add_child(_marker)
+	_model_scale = model.scale
+	# Health bar: shared material per style, drawn on top, screen-size aware (see shader).
+	var style := "boss" if is_boss else ("elite" if affix != "" or id in ["captain", "slugger"] else "runner")
+	var bs: Dictionary = BAR_STYLES[style]
 	_hp_bar = MeshInstance3D.new()
-	var q := QuadMesh.new()
-	var bar_w := 1.2 if not is_boss else 2.8
-	q.size = Vector2(bar_w, bar_w / 7.0)
-	_hp_bar.mesh = q
-	var bm := ShaderMaterial.new()
-	bm.shader = load("res://assets/shaders/billboard_bar.gdshader")
-	_hp_bar.material_override = bm
+	_hp_bar.mesh = _bar_mesh(style)
+	_hp_bar.material_override = _bar_material(style)
 	_hp_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_hp_bar.position = Vector3(0, height + 0.35, 0)
-	_hp_bar.set_instance_shader_parameter("bar_color", Color(1.0, 0.25, 0.2) if not is_boss else Color(1.0, 0.55, 0.1))
-	_hp_bar.visible = is_boss or id in ["captain", "slugger"]
+	_hp_bar.extra_cull_margin = 3.0
+	_hp_bar.position = Vector3(0, height + float(bs.lift), 0)
+	# Plain runners only show a bar once hurt (less clutter); the first hit pops it in.
+	_hp_bar.visible = style != "runner"
 	add_child(_hp_bar)
 	_update_transform(0.0)
 	_set_anim(_move_anim())
@@ -152,6 +171,32 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 
 func _fallback_scale() -> float:
 	return {"swarmer": 0.65, "slugger": 1.35, "iron_slugger": 2.0, "phantom_captain": 1.8, "grand_slammer": 2.3, "captain": 1.1, "armored": 1.1}.get(id, 1.0)
+
+
+static func _bar_mesh(style: String) -> QuadMesh:
+	if not _bar_meshes.has(style):
+		var q := QuadMesh.new()
+		q.size = BAR_STYLES[style].size
+		_bar_meshes[style] = q
+	return _bar_meshes[style]
+
+
+static func _bar_material(style: String) -> ShaderMaterial:
+	var cb := bool(Settings.get_value("accessibility", "colorblind", false))
+	var key := style + ("_cb" if cb else "")
+	if not _bar_mats.has(key):
+		var bs: Dictionary = BAR_STYLES[style]
+		var m := ShaderMaterial.new()
+		m.shader = load("res://assets/shaders/billboard_bar.gdshader")
+		m.set_shader_parameter("bar_size", bs.size)
+		m.set_shader_parameter("min_px", bs.min_px)
+		m.set_shader_parameter("trim_color", bs.trim)
+		m.set_shader_parameter("ticks", bs.ticks)
+		m.set_shader_parameter("colorblind", cb)
+		# Above particles (5-7), below floating text (10).
+		m.render_priority = 8
+		_bar_mats[key] = m
+	return _bar_mats[key]
 
 
 static func _make_blob_shadow(radius: float) -> MeshInstance3D:
@@ -330,12 +375,12 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 		arm = 0.0
 	arm *= 1.0 - float(info.get("pierce", 0.0))
 	var dmg := amount * mult * (1.0 - arm) * (1.0 - aura_dr)
+	var before := clampf(hp / max_hp, 0.0, 1.0)
 	hp -= dmg
 	_last_hit_info = info
-	_hp_bar.visible = true
-	_hp_bar.set_instance_shader_parameter("fill", clampf(hp / max_hp, 0.0, 1.0))
+	_bar_hit(before, bool(info.get("dot", false)))
 	if dmg >= 1.0:
-		model.flash(0.8 if info.get("crit", false) else 0.5)
+		_hit_feedback(dmg, info)
 		if (dmg > max_hp * 0.18 or info.get("crit", false)) and model.action == "" and hp > 0.0 and not is_boss and not is_airborne():
 			model.play_action("hit", 1.3)
 	if hp <= 0.0:
@@ -345,6 +390,73 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 	return dmg
 
 
+## Cosmetic reaction to a hit: white-hot flash, squash / flinch away from the hit and an
+## impact starburst (rate-limited per runner so streams of throws stay readable).
+func _hit_feedback(dmg: float, info: Dictionary) -> void:
+	var vfx := battle.vfx
+	var calm := vfx.reduce_flashes
+	if info.get("dot", false):
+		model.flash(0.35 * (0.6 if calm else 1.0))
+		_hit_k = maxf(_hit_k, 0.25)
+		return
+	var crit: bool = info.get("crit", false)
+	var frac := dmg / maxf(max_hp, 1.0)
+	var big: bool = frac >= 0.2 or info.has("card")
+	var strength := 1.0 if crit or big else clampf(0.45 + frac * 3.0, 0.45, 1.0)
+	model.flash((1.0 if crit or big else 0.85) * (0.55 if calm else 1.0))
+	_hit_k = maxf(_hit_k, strength * (0.55 if is_boss else 1.0))
+	var dir: Vector3 = info.get("dir", Vector3.ZERO)
+	dir.y = 0.0
+	if dir.length_squared() < 0.0001:
+		dir = global_position - vfx.camera_pos()
+		dir.y = 0.0
+	dir = dir.normalized() if dir.length_squared() > 0.0001 else Vector3.FORWARD
+	_hit_dir = global_transform.basis.inverse() * dir
+	if _impact_gap <= 0.0 or crit or big:
+		_impact_gap = 0.08
+		vfx.hit_impact(info.get("at", center()), dir, info.get("color", Color(1.0, 0.9, 0.7)), strength, crit, big)
+
+
+func _bar_hit(before: float, dot: bool) -> void:
+	if not _hp_bar.visible:
+		_hp_bar.visible = true
+		_bar_pulse = 1.0
+		_bar_chip = before
+	_bar_chip = maxf(_bar_chip, before)
+	_bar_hold = 0.3
+	_bar_pulse = maxf(_bar_pulse, 0.35 if dot else 1.0)
+	_hp_bar.set_instance_shader_parameter("fill", clampf(hp / max_hp, 0.0, 1.0))
+	_bar_anim = true
+
+
+## Chip trail drains after a short hold; the pulse decays.
+func _tick_bar(delta: float) -> void:
+	if not _bar_anim:
+		return
+	var f := clampf(hp / max_hp, 0.0, 1.0)
+	_bar_pulse = maxf(0.0, _bar_pulse - delta * 4.5)
+	if _bar_hold > 0.0:
+		_bar_hold -= delta
+	else:
+		_bar_chip = move_toward(_bar_chip, f, delta * (0.5 + 2.0 * (_bar_chip - f)))
+	_hp_bar.set_instance_shader_parameter("chip", _bar_chip)
+	_hp_bar.set_instance_shader_parameter("pulse", _bar_pulse)
+	if _bar_pulse <= 0.0 and _bar_chip <= f:
+		_bar_anim = false
+
+
+## Squash and lean away from the last hit, springing back over ~0.2 s.
+func _tick_hit(delta: float) -> void:
+	_impact_gap -= delta
+	if _hit_k <= 0.0:
+		return
+	_hit_k = maxf(0.0, _hit_k - delta * 5.0)
+	var q := _hit_k * _hit_k
+	model.scale = _model_scale * Vector3(1.0 + 0.2 * q, 1.0 - 0.22 * q, 1.0 + 0.2 * q)
+	model.position = _hit_dir * 0.28 * q
+	model.rotation = Vector3(_hit_dir.z * 0.45 * q, 0.0, -_hit_dir.x * 0.45 * q)
+
+
 func die(info: Dictionary = {}) -> void:
 	if not alive:
 		return
@@ -352,6 +464,13 @@ func die(info: Dictionary = {}) -> void:
 	hp = 0.0
 	_clear_telegraph()
 	_hp_bar.visible = false
+	# Knocked back along the last hit, with a small hop (see _tick_death).
+	var kd := global_transform.basis * _hit_dir
+	if kd.length_squared() < 0.0001:
+		kd = global_position - battle.vfx.camera_pos()
+		kd.y = 0.0
+	_death_vel = kd.normalized() * (1.2 if is_boss else 4.0) if kd.length_squared() > 0.0001 else Vector3.ZERO
+	model.flash(0.6 if battle.vfx.reduce_flashes else 1.0)
 	if _marker:
 		_marker.visible = false
 	model.set_rim(Color(0, 0, 0, 0))
@@ -367,6 +486,8 @@ func die(info: Dictionary = {}) -> void:
 func tick(delta: float) -> void:
 	if not alive:
 		_death_t += delta
+		_tick_hit(delta)
+		_tick_death(delta)
 		if _death_t > 1.3:
 			position.y -= delta * 1.2
 			_shadow.visible = false
@@ -380,6 +501,22 @@ func tick(delta: float) -> void:
 	_move(delta)
 	_update_visuals()
 	_update_status_fx(delta)
+	_tick_hit(delta)
+	_tick_bar(delta)
+
+
+## Out: the runner is knocked back with a hop, falls (defeat animation), then shrinks away.
+func _tick_death(delta: float) -> void:
+	if _death_t < 0.45 and _death_vel != Vector3.ZERO:
+		global_position += _death_vel * delta
+		_death_vel *= maxf(0.0, 1.0 - delta * 6.0)
+		var hop := sin(clampf(_death_t / 0.45, 0.0, 1.0) * PI) * (0.15 if is_boss else 0.45)
+		model.position.y = hop
+	elif _death_t > 1.05 and hp <= 0.0:
+		var k := clampf((_death_t - 1.05) / 0.6, 0.0, 1.0)
+		model.scale = _model_scale * maxf(0.001, 1.0 - k * k)
+		if k >= 1.0:
+			model.visible = false
 
 
 func _tick_status(delta: float) -> void:
@@ -576,7 +713,8 @@ func _update_status_fx(delta: float) -> void:
 			_fx_head = vfx.make_status_head()
 			add_child(_fx_head)
 			var hs := clampf(height / 2.6, 0.8, 2.2)
-			_fx_head.position = Vector3(0, height + 0.75 * hs, 0)
+			# Above the health bar, which grows upward when the camera is far away.
+			_fx_head.position = Vector3(0, height + 1.0 * hs + 0.2, 0)
 			_fx_head.scale = Vector3(1.5 * hs, 0.75 * hs, 1.0)
 		if _fx_head:
 			_fx_head.visible = head
@@ -772,7 +910,7 @@ func _resolve_telegraph() -> void:
 func _stun_defenders(pos: Vector3, radius: float, time: float) -> void:
 	for df in battle.defenders:
 		if Field.v2(df.global_position).distance_to(Field.v2(pos)) <= radius:
-			df.stun(time)
+			df.stun(time, global_position)
 
 
 func _check_summons() -> void:
