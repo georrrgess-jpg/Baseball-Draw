@@ -2,6 +2,7 @@
 undershirt arms, hands, mitt, pants (mirrored cage + Catmull-Clark), belt,
 socks, cleats, jersey numbers and piping."""
 import math
+import json
 import numpy as np
 
 import geo
@@ -439,9 +440,14 @@ class BodyMixin:
         obj = self.add("Pants", verts, faces, self.m["Pants"], mirror=True, subsurf=1,
                        creases=creases,
                        bones=["hips", "spine", "thigh.L", "thigh.R", "shin.L", "shin.R"])
+        # lower legs (cuff + inner fold) get the same axial weights as the
+        # sock tucked under them (hero.axial_weights), so they cannot separate
+        obj["axial"] = json.dumps(dict(kind="pants", u_mask=self.sock_top_u(hem_z, knee_pants)))
         self.pants_obj = obj
         self.surf["pants"] = geo.Surface(obj)
         self.hem_z = hem_z
+        self.hem_r = rh * s
+        self.knee_pants = knee_pants
         return obj
 
     def build_pant_stripes(self):
@@ -531,7 +537,22 @@ class BodyMixin:
     # =====================================================================
     # socks / shoes
     # =====================================================================
-    def sock_rings(self, side, ts, grow=0.0, nseg=12):
+    def hem_t(self, side):
+        """Pant hem height as a fraction of the shin (knee 0 -> ankle 1)."""
+        K = self.j("shin." + side)
+        Ak = self.j("foot." + side)
+        return (K[2] - self.hem_z) / (K[2] - Ak[2])
+
+    def sock_top_u(self, hem_z, knee_pants):
+        """Sock top (fraction of the shin): tucked well under the cuff, but
+        below the knee crease for full-length pants."""
+        K = self.j("shin.L")
+        Ak = self.j("foot.L")
+        lz = K[2] - Ak[2]
+        t_hem = (K[2] - hem_z) / lz
+        return t_hem - (0.045 if knee_pants else 0.075) * self.s / lz
+
+    def sock_rings(self, side, ts, grow=0.0, nseg=12, cap=False):
         s = self.s
         p = self.p
         K = self.j("shin." + side)
@@ -541,9 +562,20 @@ class BodyMixin:
         kside = [cr * 1.0, cr * 1.02, cr * 1.04, cr * 0.92, cr * 0.76, ar * 1.30, ar * 1.40]
         kfr = [cr * 1.0, cr * 0.98, cr * 0.97, cr * 0.88, cr * 0.74, ar * 1.25, ar * 1.45]
         kbk = [cr * 1.02, cr * 1.10, cr * 1.24, cr * 1.04, cr * 0.82, ar * 1.35, ar * 1.50]
-        rsd = geo.interp(kt, kside, ts, mono=True) + grow
-        rfr = geo.interp(kt, kfr, ts, mono=True) + grow
-        rbk = geo.interp(kt, kbk, ts, mono=True) + grow
+        rsd = geo.interp(kt, kside, ts, mono=True)
+        rfr = geo.interp(kt, kfr, ts, mono=True)
+        rbk = geo.interp(kt, kbk, ts, mono=True)
+        if cap:
+            # under the cuff the sock stays inside the pant's inner fold (its
+            # radius after subdivision ~0.955 x the cage) with a 12 % margin;
+            # the calf bulge only starts below the hem
+            th = self.hem_t(side)
+            g = 1.0 - np.clip((A(ts) - (th - 0.05)) / 0.10, 0.0, 1.0)
+            g = g * g * (3 - 2 * g)
+            k = 0.955 * 0.88 * self.hem_r
+            for r, c in ((rsd, 0.80), (rfr, 0.78), (rbk, 0.82)):
+                r[:] = r * (1 - g) + np.minimum(r, c * k) * g
+        rsd, rfr, rbk = rsd + grow, rfr + grow, rbk + grow
         d = unit(Ak - K)
         fwd = A([0, -1.0, 0])
         U = unit(fwd - d * np.dot(fwd, d))
@@ -563,20 +595,23 @@ class BodyMixin:
         for side in "LR":
             K = self.j("shin." + side)
             Ak = self.j("foot." + side)
-            rings = self.sock_rings(side, np.linspace(0.08, 1.06, 13))
+            t_top = self.sock_top_u(self.hem_z, self.knee_pants)
+            rings = self.sock_rings(side, np.linspace(t_top, 1.06, 13), cap=True)
             v, f = geo.loft(rings, None, None)
             f = orient_outward(v, f, K + (Ak - K) * 0.5)
             sock = self.add("Sock." + side, v, f, self.m["Socks"],
                             bones=["thigh." + side, "shin." + side, "foot." + side])
+            sock["axial"] = json.dumps(dict(kind="sock", side=side,
+                                            shoe=self.shoe_top_table(side)))
             if not stripes:
                 continue
             L = np.linalg.norm(Ak - K)
             for t0 in (0.50, 0.585):
                 w = 0.024 * s / L
                 ts2 = [t0 - w / 2, t0 - w / 2 + 0.002, t0 + w / 2 - 0.002, t0 + w / 2]
-                rr = self.sock_rings(side, ts2, grow=0.0028 * s)
-                rr[0] = self.sock_rings(side, [ts2[0]], grow=-0.001 * s)[0]
-                rr[-1] = self.sock_rings(side, [ts2[-1]], grow=-0.001 * s)[0]
+                rr = self.sock_rings(side, ts2, grow=0.0028 * s, cap=True)
+                rr[0] = self.sock_rings(side, [ts2[0]], grow=-0.001 * s, cap=True)[0]
+                rr[-1] = self.sock_rings(side, [ts2[-1]], grow=-0.001 * s, cap=True)[0]
                 v, f = geo.loft(rr, None, None)
                 f = orient_outward(v, f, K + (Ak - K) * t0)
                 self.add("SockStripe." + side, v, f, self.m["JerseyTrim"], weights_from=sock)
@@ -593,6 +628,15 @@ class BodyMixin:
         (-0.232, 0.031, 0.046),
         (-0.247, 0.013, 0.040),
     ]
+
+    def shoe_top_table(self, side, chunky=1.0):
+        """[x0, fs, chunky, [(y, half width, top)...]] of the shoe upper (absolute
+        y), for the sock weights: the part of the sock inside the shoe follows
+        the foot exactly like the shoe."""
+        fs = self.s * self.p["foot_scale"]
+        Ak = self.j("foot." + side)
+        return [float(Ak[0]), float(Ak[1]), float(fs), chunky,
+                [[float(r[0]), float(r[1]), float(r[2])] for r in self.SHOE]]
 
     def shoe_outline(self, side, margin=0.006, n=40):
         fs = self.s * self.p["foot_scale"]
