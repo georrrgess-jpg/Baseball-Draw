@@ -13,5 +13,8 @@ void fragment() {
 	ROUGHNESS = v_rm.x;
 	METALLIC = v_rm.y;
 	SPECULAR = 0.45;
+	// Soft rim light so characters stand out from the field at gameplay distance.
+	RIM = 0.32;
+	RIM_TINT = 0.45;
 	EMISSION = COLOR.rgb * COLOR.a * 8.0;
 }

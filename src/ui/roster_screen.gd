@@ -21,7 +21,7 @@ func _ready() -> void:
 	add_child(layer)
 	_screen = MenuScreen.new()
 	layer.add_child(_screen)
-	_screen.setup_screen("ROSTER", "Your defenders, their growth, gear and the starting six")
+	_screen.setup_screen("TEAM", "Your defenders, their growth, gear and the starting six")
 	# Make the menu background transparent in the middle so the 3D stage shows through.
 	for i in 4:
 		var c := _screen.get_child(i)

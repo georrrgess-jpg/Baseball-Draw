@@ -74,7 +74,8 @@ func setup(p_battle: Battle, defender_id: String, uniform_colors: Dictionary) ->
 	add_child(model)
 	var colors := uniform_colors.duplicate()
 	colors["Undershirt"] = data.accent
-	model.setup(id, {"accent": Color(data.accent), "colors": colors, "cache_key": id, "base": "ready", "scale": Battle.UNIT_SCALE})
+	# Defenders are drawn a little larger than runners so the team reads clearly from the camera.
+	model.setup(id, {"accent": Color(data.accent), "colors": colors, "cache_key": id, "base": "ready", "scale": Battle.UNIT_SCALE * 1.12})
 
 	_shadow = Enemy._make_blob_shadow(0.5 * Battle.UNIT_SCALE)
 	add_child(_shadow)
