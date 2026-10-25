@@ -103,7 +103,16 @@ func upgrade_level(id: String) -> int:
 
 func upgrade_price(id: String) -> int:
 	var u: Dictionary = DB.upgrades[id]
-	return int(round(float(u.price) * pow(DB.upgrade_price_growth, upgrade_level(id))))
+	return round_price(float(u.price) * pow(DB.upgrade_price_growth, upgrade_level(id)))
+
+
+## Prices are shown as round numbers: 10s under 100, 25s up to 500, 50s above.
+static func round_price(v: float) -> int:
+	if v < 100.0:
+		return maxi(10, int(round(v / 10.0)) * 10)
+	if v < 500.0:
+		return int(round(v / 25.0)) * 25
+	return int(round(v / 50.0)) * 50
 
 
 ## Sum of a numeric key across bought upgrades, the arena modifier and active modifiers.

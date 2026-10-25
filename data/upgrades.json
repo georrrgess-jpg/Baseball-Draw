@@ -1,30 +1,40 @@
 {
- "_comment": "Between-innings (run-only) upgrades bought in the dugout with run coins. price grows by price_growth per purchase.",
- "price_growth": 1.7,
+ "_comment": "Between-innings (run-only) upgrades bought in the dugout with run coins. Prices grow by price_growth per purchase and are rounded (10s under 100, 25s above). 'fx' describes the total effect shown in the dugout: value = effect[key] * mult * level.",
+ "price_growth": 1.6,
  "upgrades": [
   {
    "id": "stronger_arm",
    "name": "Stronger Arm",
    "icon": "damage",
-   "price": 45,
+   "price": 50,
    "max": 5,
    "kind": "core",
    "text": "+10% damage for the whole team.",
    "effect": {
     "damage": 0.1
+   },
+   "fx": {
+    "key": "damage",
+    "text": "Team damage +%d%%",
+    "mult": 100
    }
   },
   {
    "id": "faster_relay",
    "name": "Faster Relay",
    "icon": "attack_speed",
-   "price": 45,
+   "price": 50,
    "max": 5,
    "kind": "core",
-   "text": "+8% attack speed and +10% throw speed for the whole team.",
+   "text": "+10% throw rate and throw speed for the whole team.",
    "effect": {
-    "attack_speed": 0.08,
+    "attack_speed": 0.1,
     "throw_speed": 0.1
+   },
+   "fx": {
+    "key": "attack_speed",
+    "text": "Team throw rate +%d%%",
+    "mult": 100
    }
   },
   {
@@ -34,33 +44,44 @@
    "price": 40,
    "max": 4,
    "kind": "core",
-   "text": "+7% range for the whole team.",
+   "text": "+5% throwing range for the whole team.",
    "effect": {
-    "range": 0.07
+    "range": 0.05
+   },
+   "fx": {
+    "key": "range",
+    "text": "Team range +%d%%",
+    "mult": 100
    }
   },
   {
    "id": "new_pitch_card",
    "name": "New Pitch Card",
    "icon": "deck",
-   "price": 55,
+   "price": 60,
    "max": 3,
    "kind": "core",
-   "text": "Choose one of three new ability cards to add to your deck for this run.",
+   "text": "Pick 1 of 3 new cards to add to your deck for this game.",
    "effect": {
     "card_pick": 3
+   },
+   "fx": {
+    "text": "Pick a new card for this game"
    }
   },
   {
    "id": "base_shield",
    "name": "Base Shield",
    "icon": "shield",
-   "price": 90,
+   "price": 100,
    "max": 3,
    "kind": "core",
-   "text": "+1 home plate shield. Each shield stops one run (bosses score 3).",
+   "text": "+1 shield at home plate. Each shield stops one run (bosses score 3).",
    "effect": {
     "shields": 1
+   },
+   "fx": {
+    "text": "+1 shield at home plate"
    }
   },
   {
@@ -70,10 +91,15 @@
    "price": 50,
    "max": 4,
    "kind": "core",
-   "text": "Your captain's aura grows: +8% damage to allies and +1.5m radius.",
+   "text": "Captain's aura: +10% damage to nearby allies and +2m radius.",
    "effect": {
-    "captain_damage": 0.08,
-    "captain_radius": 1.5
+    "captain_damage": 0.1,
+    "captain_radius": 2.0
+   },
+   "fx": {
+    "key": "captain_damage",
+    "text": "Captain aura +%d%% damage",
+    "mult": 100
    }
   },
   {
@@ -83,21 +109,31 @@
    "price": 40,
    "max": 3,
    "kind": "random",
-   "text": "+15% energy regeneration.",
+   "text": "+15% energy refill speed.",
    "effect": {
     "energy_regen": 0.15
+   },
+   "fx": {
+    "key": "energy_regen",
+    "text": "Energy refill +%d%%",
+    "mult": 100
    }
   },
   {
    "id": "lucky_bat",
    "name": "Lucky Bat",
    "icon": "star",
-   "price": 35,
+   "price": 40,
    "max": 3,
    "kind": "random",
-   "text": "+6% critical hit chance for the whole team.",
+   "text": "+5% critical hit chance for the whole team.",
    "effect": {
-    "crit": 0.06
+    "crit": 0.05
+   },
+   "fx": {
+    "key": "crit",
+    "text": "Team crit chance +%d%%",
+    "mult": 100
    }
   },
   {
@@ -107,9 +143,14 @@
    "price": 30,
    "max": 2,
    "kind": "random",
-   "text": "+20% coins from outs for the rest of the run.",
+   "text": "+20% coins from outs for the rest of this game.",
    "effect": {
     "coin_mult": 0.2
+   },
+   "fx": {
+    "key": "coin_mult",
+    "text": "Coins from outs +%d%%",
+    "mult": 100
    }
   },
   {
@@ -119,21 +160,29 @@
    "price": 40,
    "max": 3,
    "kind": "random",
-   "text": "A random card in your deck gains +1 level for this run.",
+   "text": "A random card in your deck gains +1 level for this game.",
    "effect": {
     "card_level": 1
+   },
+   "fx": {
+    "text": "Random deck card +1 level"
    }
   },
   {
    "id": "hot_streak",
    "name": "Hot Streak",
    "icon": "fire",
-   "price": 35,
+   "price": 40,
    "max": 3,
    "kind": "random_defender",
-   "text": "One defender gains +25% damage for the rest of the run.",
+   "text": "One defender gains +25% damage for the rest of this game.",
    "effect": {
     "defender_damage": 0.25
+   },
+   "fx": {
+    "key": "defender_damage",
+    "text": "+%d%% damage",
+    "mult": 100
    }
   },
   {
@@ -143,9 +192,14 @@
    "price": 30,
    "max": 2,
    "kind": "random",
-   "text": "Runners have 8% less health for the rest of the run.",
+   "text": "Runners have 10% less health for the rest of this game.",
    "effect": {
-    "enemy_hp": -0.08
+    "enemy_hp": -0.1
+   },
+   "fx": {
+    "key": "enemy_hp",
+    "text": "Runner health -%d%%",
+    "mult": -100
    }
   },
   {
@@ -155,10 +209,15 @@
    "price": 40,
    "max": 2,
    "kind": "random",
-   "text": "Cards are drawn 20% faster and card cooldowns are 10% shorter.",
+   "text": "Cards are drawn 20% faster and cool down 10% faster.",
    "effect": {
     "draw_speed": 0.2,
     "card_cooldown": -0.1
+   },
+   "fx": {
+    "key": "draw_speed",
+    "text": "Card draw +%d%% faster",
+    "mult": 100
    }
   }
  ]

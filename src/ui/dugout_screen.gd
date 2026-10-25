@@ -10,6 +10,7 @@ var _shop: GridContainer
 var _team_box: VBoxContainer
 var _offers: Array = []
 var _card_pick_layer: Control
+var _just_bought := ""
 
 
 func _ready() -> void:
@@ -168,7 +169,7 @@ func _build() -> void:
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.add_theme_constant_override("separation", 10)
 	body.add_child(mid)
-	mid.add_child(UITheme.header("UPGRADES", 38, UITheme.OFFWHITE))
+	mid.add_child(UITheme.label("Upgrades last for the rest of this game. Hover one for details.", 18, UITheme.MUTED))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -221,65 +222,130 @@ func _kv(k: String, v: String, vc := UITheme.OFFWHITE) -> HBoxContainer:
 
 
 func _price(offer: Dictionary) -> int:
-	return int(round(battle.run.upgrade_price(offer.id) * float(offer.get("discount", 1.0))))
+	var base := battle.run.upgrade_price(offer.id)
+	if float(offer.get("discount", 1.0)) >= 1.0:
+		return base
+	return RunState.round_price(base * float(offer.discount))
+
+
+## "Team damage +20%" for an upgrade at `level` (uses the upgrade's fx description).
+func _fx_text(u: Dictionary, level: int, offer: Dictionary) -> String:
+	var fx: Dictionary = u.get("fx", {})
+	var t := str(fx.get("text", u.text))
+	if fx.has("key"):
+		var v := int(round(float(u.effect.get(fx.key, 0.0)) * float(fx.get("mult", 100)) * level))
+		t = t % absi(v)
+	if offer.has("defender"):
+		t = "%s %s" % [DB.defender(offer.defender).name, t]
+	return t
 
 
 func _fill_shop() -> void:
 	for c in _shop.get_children():
 		c.queue_free()
 	var run: RunState = battle.run
-	for offer in _offers:
-		var u: Dictionary = DB.upgrades[offer.id]
-		var lvl := run.upgrade_level(offer.id)
-		var maxed := lvl >= int(u.max)
-		if offer.id == "base_shield" and run.shields >= 3:
-			maxed = true
-		var price := _price(offer)
-		var p := PanelContainer.new()
-		var accent: Color = UITheme.GOLD if offer.get("special", false) else UITheme.BLUE
-		p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.08, 0.14, 0.95), Color(accent, 0.5), 2, 10, 14))
-		p.custom_minimum_size = Vector2(440, 150)
-		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", 12)
-		p.add_child(hb)
-		var icon_panel := PanelContainer.new()
-		icon_panel.add_theme_stylebox_override("panel", UITheme.panel_style(Color(accent, 0.18), Color(accent, 0.6), 1, 10, 10))
-		icon_panel.add_child(UITheme.icon_rect(u.get("icon", "upgrade"), 54, accent))
-		hb.add_child(icon_panel)
-		var vb := VBoxContainer.new()
-		vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		vb.add_theme_constant_override("separation", 2)
-		var name: String = u.name
-		if offer.has("defender"):
-			name += ": " + DB.defender(offer.defender).name
-		var title_row := HBoxContainer.new()
-		var nl := UITheme.label(name, 26, UITheme.OFFWHITE, UITheme.font_header())
-		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title_row.add_child(nl)
-		if offer.get("special", false):
-			title_row.add_child(UITheme.label("SPECIAL -20%", 16, UITheme.GOLD, UITheme.font_body_bold()))
-		vb.add_child(title_row)
-		var desc := UITheme.label(u.text, 18, Color(0.82, 0.86, 0.94))
-		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vb.add_child(desc)
-		var pips := HBoxContainer.new()
-		for i in int(u.max):
-			var dot := Panel.new()
-			dot.custom_minimum_size = Vector2(16, 8)
-			dot.add_theme_stylebox_override("panel", UITheme.panel_style(accent if i < lvl else Color(1, 1, 1, 0.12), Color(0, 0, 0, 0), 0, 3, 0))
-			pips.add_child(dot)
-		vb.add_child(pips)
-		hb.add_child(vb)
-		var buy := UITheme.small_button("MAX" if maxed else "%d" % price, UITheme.GOLD, 24)
-		buy.icon = null if maxed else DB.icon("coin")
-		buy.add_theme_color_override("icon_normal_color", UITheme.GOLD)
-		buy.expand_icon = false
-		buy.custom_minimum_size = Vector2(110, 54)
-		buy.disabled = maxed or run.coins < price
-		buy.pressed.connect(func() -> void: _buy(offer))
-		hb.add_child(buy)
-		_shop.add_child(p)
+	var sections := [["TEAM UPGRADES", false], ["TODAY'S SPECIALS  ·  20% OFF", true]]
+	for sec in sections:
+		var header := UITheme.header(sec[0], 24, UITheme.GOLD if sec[1] else UITheme.OFFWHITE)
+		_shop.add_child(header)
+		_shop.add_child(Control.new())
+		for offer in _offers:
+			if bool(offer.get("special", false)) == sec[1]:
+				_shop.add_child(_offer_card(offer, run))
+	_just_bought = ""
+
+
+func _offer_card(offer: Dictionary, run: RunState) -> Control:
+	var u: Dictionary = DB.upgrades[offer.id]
+	var lvl := run.upgrade_level(offer.id)
+	var maxed := lvl >= int(u.max)
+	if offer.id == "base_shield" and run.shields >= 3:
+		maxed = true
+	var price := _price(offer)
+	var can_buy := not maxed and run.coins >= price
+	var accent: Color = UITheme.GOLD if offer.get("special", false) else UITheme.BLUE
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.08, 0.14, 0.95), Color(accent, 0.75 if can_buy else 0.3), 2, 12, 14))
+	p.custom_minimum_size = Vector2(440, 0)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 14)
+	p.add_child(hb)
+	var icon_panel := PanelContainer.new()
+	icon_panel.add_theme_stylebox_override("panel", UITheme.panel_style(Color(accent, 0.18), Color(accent, 0.6), 1, 10, 10))
+	icon_panel.add_child(UITheme.icon_rect(u.get("icon", "upgrade"), 54, accent))
+	icon_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(icon_panel)
+	var vb := VBoxContainer.new()
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_theme_constant_override("separation", 4)
+	hb.add_child(vb)
+	var title_row := HBoxContainer.new()
+	var nl := UITheme.label(u.name, 26, UITheme.OFFWHITE, UITheme.font_header())
+	nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(nl)
+	var pips := HBoxContainer.new()
+	pips.add_theme_constant_override("separation", 3)
+	for i in int(u.max):
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(14, 14)
+		dot.add_theme_stylebox_override("panel", UITheme.panel_style(accent if i < lvl else Color(1, 1, 1, 0.1), Color(accent, 0.5), 1, 7, 0))
+		pips.add_child(dot)
+	title_row.add_child(pips)
+	vb.add_child(title_row)
+	# What you have now and what the next level gives.
+	var fx: Dictionary = u.get("fx", {})
+	if fx.has("key"):
+		var now_row := HBoxContainer.new()
+		now_row.add_theme_constant_override("separation", 10)
+		now_row.add_child(UITheme.label("NOW", 15, UITheme.MUTED, UITheme.font_body_bold()))
+		now_row.add_child(UITheme.label(_fx_text(u, lvl, offer) if lvl > 0 else "—", 18, Color(0.82, 0.86, 0.94), UITheme.font_body_bold()))
+		vb.add_child(now_row)
+		if not maxed:
+			var next_row := HBoxContainer.new()
+			next_row.add_theme_constant_override("separation", 10)
+			next_row.add_child(UITheme.label("NEXT", 15, UITheme.GREEN, UITheme.font_body_bold()))
+			next_row.add_child(UITheme.label(_fx_text(u, lvl + 1, offer), 20, UITheme.GREEN, UITheme.font_body_bold()))
+			vb.add_child(next_row)
+	else:
+		var d := UITheme.label(_fx_text(u, 1, offer), 19, Color(0.86, 0.9, 0.97), UITheme.font_body_bold())
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vb.add_child(d)
+	var buy := UITheme.small_button("MAXED" if maxed else ("BUY  %d" % price if can_buy else "NEED %d MORE" % (price - run.coins)), UITheme.GOLD if can_buy else UITheme.MUTED, 22)
+	buy.icon = DB.icon("coin") if not maxed else null
+	buy.expand_icon = false
+	buy.custom_minimum_size = Vector2(170, 56)
+	buy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	buy.disabled = not can_buy
+	buy.tooltip_text = str(u.text)
+	buy.pressed.connect(func() -> void: _buy(offer))
+	hb.add_child(buy)
+	p.tooltip_text = str(u.text)
+	if _just_bought == str(offer.id) + str(offer.get("defender", "")):
+		_celebrate.call_deferred(p, accent, _fx_text(u, 1, offer) if not fx.has("key") else "LEVEL %d" % lvl)
+	return p
+
+
+## Purchase feedback: the upgrade pops and flashes, and a label floats up from it.
+func _celebrate(p: Control, col: Color, text: String) -> void:
+	if not is_instance_valid(p):
+		return
+	p.pivot_offset = p.size * 0.5
+	p.scale = Vector2(1.06, 1.06)
+	p.modulate = Color(1.6, 1.5, 1.2)
+	var tw := p.create_tween().set_parallel(true)
+	tw.tween_property(p, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(p, "modulate", Color.WHITE, 0.45)
+	var l := UITheme.label(text, 28, col.lightened(0.3), UITheme.font_display())
+	l.add_theme_constant_override("outline_size", 8)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(l)
+	l.global_position = p.get_global_rect().get_center() - Vector2(60, 20)
+	var lt := l.create_tween()
+	lt.tween_property(l, "global_position:y", l.global_position.y - 70, 0.8).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	lt.parallel().tween_property(l, "modulate:a", 0.0, 0.3).set_delay(0.5)
+	lt.tween_callback(l.queue_free)
 
 
 func _buy(offer: Dictionary) -> void:
@@ -309,6 +375,7 @@ func _buy(offer: Dictionary) -> void:
 	Audio.play("purchase")
 	_coins_label.text = str(run.coins)
 	battle._refresh_team_stats()
+	_just_bought = str(offer.id) + str(offer.get("defender", ""))
 	_fill_shop()
 	_fill_team()
 
