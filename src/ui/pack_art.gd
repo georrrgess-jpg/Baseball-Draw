@@ -28,13 +28,20 @@ func _draw() -> void:
 	var tex: Texture2D = DB._texture("res://assets/textures/packs/%s.png" % pack_type)
 	if tex:
 		draw_texture_rect(tex, Rect2(Vector2.ZERO, size), false)
-		if pack_type == "signature" and signature_card != "":
-			var linked := str(DB.card(signature_card).get("linked", ""))
+		if pack_type == "signature":
+			var linked := str(DB.card(signature_card).get("linked", "")) if signature_card != "" else ""
 			var pt := DB.portrait(linked) if linked != "" else null
+			var k := size.x / 512.0
+			var r := 80.0 * k
+			var mc := Vector2(256, 370) * k
 			if pt:
-				var k := size.x / 512.0
-				var r := 80.0 * k
-				draw_texture_rect(pt, Rect2(Vector2(256, 370) * k - Vector2(r, r), Vector2(r, r) * 2.0), false)
+				draw_texture_rect(pt, Rect2(mc - Vector2(r, r), Vector2(r, r) * 2.0), false)
+			else:   # no defender attached: a gold star instead of an empty window
+				var pts := PackedVector2Array()
+				for i in 10:
+					var ang := -PI * 0.5 + PI * i / 5.0
+					pts.append(mc + Vector2(cos(ang), sin(ang)) * r * (0.75 if i % 2 == 0 else 0.32))
+				draw_colored_polygon(pts, Color("#FFD34D"))
 		return
 	var pd := DB.pack(pack_type)
 	var w := size.x

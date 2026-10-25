@@ -245,7 +245,8 @@ Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
   is knocked back, falls and shrinks away. Defenders hit by sluggers and bosses flinch and flash.
 * **Health bars** (`assets/shaders/billboard_bar.gdshader`): thicker, outlined, coloured by health
   (green → yellow → red, or the colour-blind palette), with a white chip that drains after each hit. They draw on
-  top of models and the crowd and keep a minimum on-screen size when the camera is far. Elites and the captain
+  top of models and the crowd and stay within a fixed on-screen size range, so they are readable from
+  far away and don't swamp the runners up close. Elites and the captain
   get a larger gold-trimmed bar; bosses a large bar with ticks.
 * **Every card shows something** (`src/battle/card_effects.gd`, `src/vfx/card_fx.gd`): cards cast with no valid
   target still throw or strike and show a small fizzle ("NO TARGET", "NO RUNNERS", "NO EFFECT", "IMMUNE",

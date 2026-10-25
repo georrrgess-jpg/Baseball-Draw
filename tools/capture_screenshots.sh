@@ -34,7 +34,7 @@ shot arena_frostpark 16 --test-battle=quick --auto --profile=shots --arena=frost
 shot arena_champions_citadel 16 --test-battle=quick --auto --profile=shots --arena=champions_citadel --cam-view=0,-4,20,-30,62
 shot packs 2.5 --scene=packs --profile=shots_packs --fresh-profile --pack-demo=champion
 shot packs_reveal 9.5 --scene=packs --profile=shots_packs2 --fresh-profile --pack-demo=pro
-shot packs_signature 3.2 --scene=packs --profile=shots_packs3 --fresh-profile --pack-demo=signature
+shot packs_signature 1.9 --scene=packs --profile=shots_packs3 --fresh-profile --pack-demo=signature
 # Card ability effects, captured on the Practice Field at a fixed time after the cast.
 vfx() { # card seconds_after_cast
 	local card="$1" t="$2"

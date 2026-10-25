@@ -84,8 +84,13 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--pack-demo="):
 			var t := a.split("=")[1]
-			Profile.add_pack(t, "Demo")
-			_show_pack(t)
+			var sig := ""
+			if t == "signature":   # show a defender in the medallion
+				for cid in DB.card_order:
+					if str(DB.card(cid).get("linked", "")) == "nova":
+						sig = cid
+			Profile.add_pack(t, "Demo", sig)
+			_show_pack(t, sig)
 			_refresh_panels()
 			get_tree().create_timer(1.2).timeout.connect(_open_selected)
 			get_tree().create_timer(4.6).timeout.connect(_reveal_all)

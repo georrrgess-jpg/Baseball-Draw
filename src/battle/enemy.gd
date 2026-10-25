@@ -93,9 +93,9 @@ var _death_vel := Vector3.ZERO
 
 ## Health bar styles: world size of the quad, minimum on-screen width, accent trim, ticks.
 const BAR_STYLES := {
-	"runner": {"size": Vector2(1.3, 0.24), "min_px": 56.0, "trim": Color(0, 0, 0, 0), "ticks": 10.0, "lift": 0.3},
-	"elite": {"size": Vector2(1.6, 0.28), "min_px": 74.0, "trim": Color(1.0, 0.8, 0.3, 1.0), "ticks": 10.0, "lift": 0.35},
-	"boss": {"size": Vector2(3.4, 0.44), "min_px": 150.0, "trim": Color(1.0, 0.55, 0.15, 1.0), "ticks": 20.0, "lift": 0.5},
+	"runner": {"size": Vector2(1.3, 0.24), "min_px": 72.0, "trim": Color(0, 0, 0, 0), "ticks": 10.0, "lift": 0.3},
+	"elite": {"size": Vector2(1.6, 0.28), "min_px": 90.0, "trim": Color(1.0, 0.8, 0.3, 1.0), "ticks": 10.0, "lift": 0.35},
+	"boss": {"size": Vector2(3.4, 0.44), "min_px": 180.0, "trim": Color(1.0, 0.55, 0.15, 1.0), "ticks": 20.0, "lift": 0.5},
 }
 static var _bar_mats := {}
 static var _bar_meshes := {}

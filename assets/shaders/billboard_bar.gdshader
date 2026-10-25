@@ -25,9 +25,10 @@ void vertex() {
 	vec3 origin = (VIEW_MATRIX * vec4(MODEL_MATRIX[3].xyz, 1.0)).xyz;
 	float dist = max(-origin.z, 0.1);
 	// Pixels covered by one metre at this depth (vertical FOV based; works for both projections).
-	float px_per_m = PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y * 0.5 / dist;
+	// abs(): the projection's Y axis can be flipped for the rendering backend.
+	float px_per_m = abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y * 0.5 / dist;
 	if (PROJECTION_MATRIX[3][3] > 0.5) {
-		px_per_m = PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y * 0.5;
+		px_per_m = abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y * 0.5;
 	}
 	float want_px = min_px * clamp(VIEWPORT_SIZE.y / 1000.0, 0.8, 2.2);
 	float bar_px = max(bar_size.x * px_per_m, 0.001);
