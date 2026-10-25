@@ -46,9 +46,9 @@ vfx() { # card seconds_after_cast
 		echo "FAILED vfx_$card"
 	fi
 }
-vfx heat_wave 0.6
+vfx heat_wave 1.0
 vfx grand_slam_barrage 1.1
-vfx thunderbolt 0.3
+vfx thunderbolt 0.8
 vfx frost_field 1.0
 vfx lockdown 0.8
 vfx base_shield 1.0

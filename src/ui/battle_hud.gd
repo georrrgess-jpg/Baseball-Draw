@@ -287,7 +287,7 @@ func _build_banner() -> void:
 	_banner.add_theme_constant_override("outline_size", 12)
 	_banner.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_banner.position = Vector2(-700, 120)
+	_banner.position = Vector2(-700, 175)
 	_banner.custom_minimum_size = Vector2(1400, 0)
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.modulate.a = 0.0
