@@ -28,20 +28,25 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
   telegraphed attacks and counterplay.
 - **26 ability cards** in four categories (offense, control, defense, utility) and five rarities,
   with real combos (Curveball + Heat Wave, Magnet Glove + Grand Slam Barrage, Twin Play + relays...).
-  8-card decks, 5-card hand, 10 energy, cooldowns, draw/discard cycling. Cards have metallic rarity
-  frames, and Rare, Epic and Legendary cards have an animated foil finish.
+  8-card decks, 5-card hand, 10 energy, cooldowns, draw/discard cycling. Every card has a one-line rule,
+  bold painted art and a metallic frame with a glow in its rarity colour; Rare, Epic and Legendary cards
+  have an animated foil finish. A card that can't be played shakes and says why.
 - **Card packs** are how you collect cards: Rookie, Pro and Champion packs (with guaranteed rarities) and
   Signature packs for new defenders. Earn them by finishing games and levelling up, or buy them in the
-  pack shop. Opening is a 3D sequence: the foil pack charges up and tears open, the cards fan out face
-  down with a glow in their rarity colour, and flip when clicked. Epic and Legendary pulls get an extra
-  build-up and celebration. Duplicates become upgrade copies.
+  pack shop. Each pack has its own design and opening: the foil pack charges up and tears open, the cards
+  fan out face down with a glow in their rarity colour, and flip when clicked. Pro, Champion and Signature
+  packs add light rays, lightning arcs, particle spirals and confetti, and Epic and Legendary pulls get an
+  extra build-up. Duplicates become upgrade copies, spent in the **Upgrade Cards** screen.
 - **Guided first game**: pop-up tips walk new players through the field, outs and runs, moving defenders,
   starting a wave and playing a card, with extra tips for the first run scored, the dugout and the first
   boss.
 - **Positioning matters** — zone bonuses (pitcher on the mound, catcher behind the plate, infielders in the dirt,
   outfielders on the grass), team synergies, captain auras and four formation presets plus custom formations.
 - **Between-innings dugout** with run upgrades (Stronger Arm, Faster Relay, Wider Coverage, New Pitch Card,
-  Base Shield, Captain's Rally) and randomized specials.
+  Base Shield, Captain's Rally...) in round steps and round prices, each showing what it does now and next,
+  plus discounted specials.
+- **Defender level road**: defenders earn XP from every game (more for outs and for the MVP), and every level
+  up to 10 pays out coins, a new trait or a card pack. The results screen shows each XP bar filling.
 - **Modes**: Standard Siege (9 innings, 3 bosses), Quick Defense (3 innings), The Endless Ninth
   (survival with modifiers and milestones), Practice Field (sandbox) and Promotion Challenges for the
   offline rank ladder (Rookie → Bronze → Silver → Gold → Platinum → Diamond → Champion → Legend).
@@ -69,7 +74,8 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
    Allow too many runs (3 on Standard) and the game is over. Base Shields stop one run each.
 6. Between innings, spend run coins in **the dugout**. At the end of a run you earn coins, XP, rank points
    and **card packs** — open them from the results screen or **CARD PACKS** in the main menu, then put new
-   cards into your deck in **CARDS & DECK** (new cards are marked NEW).
+   cards into your deck in **CARDS & DECK** (new cards are marked NEW). Duplicates level cards up in
+   **UPGRADE CARDS**.
 
 ### Controls
 
@@ -79,7 +85,7 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
 | Mouse wheel | Zoom |
 | Left click | Select defender / drag to reposition / cast card |
 | Right click | Cancel targeting or drag, deselect |
-| 1–5 | Select ability card (press again to cast at the cursor) |
+| 1–5 | Select ability card (press again to cast at the cursor when it is over the field) |
 | Q / E | Previous / next playable card |
 | Space | Begin next wave (early calls earn bonus coins) |
 | Shift | Fast-forward (1x → 2x → 3x) |

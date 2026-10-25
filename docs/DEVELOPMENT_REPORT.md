@@ -173,7 +173,8 @@ Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
 | ![Pack reveal](screenshots/packs_reveal.jpg) Pack reveal | ![Heat Wave](screenshots/vfx_heat_wave.jpg) Heat Wave |
 | ![Grand Slam Barrage](screenshots/vfx_grand_slam_barrage.jpg) Grand Slam Barrage | ![Thunderbolt](screenshots/vfx_thunderbolt.jpg) Thunderbolt |
 | ![Frost Field](screenshots/vfx_frost_field.jpg) Frost Field | ![Lockdown](screenshots/vfx_lockdown.jpg) Lockdown |
-| ![Base Shield](screenshots/vfx_base_shield.jpg) Base Shield | |
+| ![Base Shield](screenshots/vfx_base_shield.jpg) Base Shield | ![Upgrade Cards](screenshots/card_upgrades.jpg) Upgrade Cards |
+| ![Signature pack](screenshots/packs_signature.jpg) Signature pack opening | |
 
 ## 8. Update 2: team models, card effects, packs, tutorial, cleaner HUD
 
@@ -216,3 +217,53 @@ Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
   * Hint text appears only in setup or while aiming, and the minimap is smaller.
   * No per-runner OUT! or coin popups; damage numbers only for crits and big hits; no burn-tick numbers.
   * Shorter, smaller banners, and no screen-centre banner on every card cast.
+
+## 9. Update 3: clearer cards, field view, dugout, packs, deck screens, levelling
+
+* **Short card text** (`data/cards.json`): every card has a one-line rule ("Hit one runner for 160 and knock it
+  back."). The old long text is kept as `details` and shown in the deck inspector and upgrade screen.
+* **Card art redrawn** (`tools/art/cards_v2.py`): 26 new illustrations with one bold subject, a strong
+  silhouette and a rarity-tinted backdrop. Cards draw the art with a centred crop instead of stretching it.
+* **Rarity is easier to read** (`src/ui/card_view.gd`): Uncommon and better cards have an outer glow in their
+  rarity colour, the rarity tag is a filled pill and the rarity gem grows with rarity.
+* **Hand feel** (`src/ui/card_view.gd`, `src/ui/battle_hud.gd`, `src/battle/battle.gd`):
+  * Hover and selection ease in and out; the selected card rises, grows and pulses.
+  * The click area follows the raised card, the hand is larger (146 × 204), and hover survives hand rebuilds,
+    so a card under the cursor is always the one that reacts.
+  * Clicking a selected card again only casts cards that need no target; aimed cards are deselected instead.
+    A hotkey pressed twice casts at the cursor only when the cursor is over the field.
+  * A card that cannot be played shakes, flashes red and shows why ("Need 2 more energy", "Ready in 3s",
+    "Click a runner").
+  * Every cast flies a glow from the card to the target and bursts there, so each card visibly does
+    something even when its effect is quiet.
+* **Field view** (`src/battle/camera_rig.gd`, `src/ui/battle_hud.gd`): the default camera shows all three gates,
+  including the middle one, and home plate above the hand. The scoreboard moved to a compact top-right panel.
+* **Dugout** (`src/ui/dugout_screen.gd`, `data/upgrades.json`, `src/core/run_state.gd`): upgrades are cards with
+  level pips, a NOW → NEXT line in plain words ("Team damage +10 % → +20 %") and one buy button
+  ("BUY 80", "NEED 30 MORE", "MAXED"). Effects are round steps (+10 %, +5 %, 0.1 s) and prices are rounded
+  (to 10 below 100, 25 below 500, 50 above). Specials are a separate row at 20 % off. Buying pops the card.
+* **Packs** (`tools/art/packs.py`, `src/ui/packs_screen.gd`): each pack type has its own painted front and back.
+  The opening grows with the pack: Rookie is a short charge and tear; Pro adds a dimmed stage, light rays and a
+  ground pulse; Champion adds crackling arcs, a particle spiral, stronger shake and confetti; Signature
+  shows the defender in the pack medallion and opens with a gold spiral.
+* **Cards & Deck and Upgrade Cards** (`src/ui/deck_builder.gd`, `src/ui/card_upgrades_screen.gd`):
+  * The deck screen has the 8 deck slots on top (the next free slot glows, with "Add 2 more cards" or
+    "Ready to play!"), the collection below with category tabs, rarity chips, search and sort, and a large
+    card inspector on the right.
+  * Click a card to fly it into the deck, click a deck card to remove it, or drag cards to place, swap and
+    reorder them. The deck saves itself when all 8 slots are full.
+  * Cards you don't own yet are in their own "Find these in card packs" section.
+  * Upgrading is a separate screen (main menu → UPGRADE CARDS, with the number of cards ready). It lists
+    every card with its copies and coin cost, shows what gets better at the next level ("Damage 90 ▶ 101"),
+    and upgrades with one button and a level-up animation.
+* **Defender levelling** (`data/defenders.json`, `src/autoload/profile.gd`, `src/core/rewards.gd`,
+  `src/ui/results_screen.gd`, `src/ui/roster_screen.gd`):
+  * Every level from 2 to 10 gives something: coins, a new trait choice (levels 3, 6, 9) or a pack (Rookie at 4,
+    Pro at 7, Champion at 10).
+  * Defender XP now also counts outs made, and the game's MVP earns 50 % more.
+  * The results screen fills each defender's XP bar, with a LEVEL UP! burst and the reward.
+  * The Team screen shows a level badge, the XP bar with what is left to the next level, a 10-step level road
+    with the reward icons, the next reward, and a ★ NEW TRAIT marker when a trait is waiting.
+* **Sock fix** (`tools/blender/characters/hero_body.py`, `hero.py`): the sock top sits lower and narrower under
+  the trouser cuff and shares the leg's skin weights, so it no longer pokes through the trousers when the
+  defenders run. All nine models were rebuilt.
