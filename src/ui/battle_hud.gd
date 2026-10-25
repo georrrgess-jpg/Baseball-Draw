@@ -53,6 +53,7 @@ var _preview_cache: Dictionary = {}
 var _hint: Label
 var _banner_tween: Tween
 var _hand_snapshot := []
+var _selected_card_rect := Rect2()
 
 
 func _ready() -> void:
@@ -76,12 +77,13 @@ func _ready() -> void:
 	battle.state_changed.connect(_on_state)
 	battle.banner_requested.connect(banner)
 	battle.selection_changed.connect(_on_selection)
-	battle.targeting_changed.connect(func(_i: int) -> void: _rebuild_hand())
+	battle.targeting_changed.connect(func(_i: int) -> void: _update_cards())
+	battle.card_denied.connect(_on_card_denied)
 	battle.cards.hand_changed.connect(_rebuild_hand)
 	battle.wave_started.connect(func(_w: Dictionary) -> void: refresh())
 	_rebuild_hand()
 	_on_state(battle.state)
-	Router.set_toast_top(270.0)
+	Router.set_toast_top(380.0)
 	tree_exiting.connect(func() -> void: Router.set_toast_top(90.0))
 	if not battle.practice and not battle.auto_test and not bool(Profile.data.flags.get("battle_tutorial_done", false)) \
 			and not "--no-help" in OS.get_cmdline_user_args():
@@ -117,56 +119,57 @@ func _build_flash() -> void:
 		root.add_child(v)
 
 
+## Scoreboard in the top-right corner (the top centre stays clear so the far gates are visible).
 func _build_top() -> void:
-	var p := _panel(Color(0.03, 0.05, 0.1, 0.9), Color(UITheme.SCARLET, 0.6), 8)
-	p.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	p.offset_left = -300
-	p.offset_right = 300
+	var p := _panel(Color(0.03, 0.05, 0.1, 0.9), Color(UITheme.SCARLET, 0.6), 10)
+	p.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	p.offset_right = -14
+	p.offset_left = -330
 	p.offset_top = 10
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	root.add_child(p)
-	var hb := HBoxContainer.new()
-	hb.alignment = BoxContainer.ALIGNMENT_CENTER
-	hb.add_theme_constant_override("separation", 22)
-	p.add_child(hb)
-	_top_inning = UITheme.label("INNING 1", 34, UITheme.GOLD, UITheme.font_display())
-	hb.add_child(_top_inning)
-	hb.add_child(_vsep())
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	p.add_child(vb)
+	var row1 := HBoxContainer.new()
+	vb.add_child(row1)
+	_top_inning = UITheme.label("INNING 1", 30, UITheme.GOLD, UITheme.font_display())
+	_top_inning.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row1.add_child(_top_inning)
+	row1.add_child(UITheme.label("WAVE ", 15, UITheme.MUTED, UITheme.font_body_bold()))
+	_top_wave = UITheme.label("1/3", 24, UITheme.OFFWHITE, UITheme.font_header())
+	row1.add_child(_top_wave)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 14)
+	vb.add_child(row2)
 	var runs_box := VBoxContainer.new()
 	runs_box.add_theme_constant_override("separation", 0)
-	runs_box.add_child(UITheme.label("RUNS ALLOWED", 15, UITheme.MUTED, UITheme.font_body_bold()))
+	runs_box.add_child(UITheme.label("RUNS ALLOWED", 13, UITheme.MUTED, UITheme.font_body_bold()))
 	runs_box.tooltip_text = "Runners who reach home plate score runs. Fill every circle and the game is over."
 	runs_box.mouse_filter = Control.MOUSE_FILTER_PASS
 	_top_runs = HBoxContainer.new()
 	_top_runs.add_theme_constant_override("separation", 5)
 	runs_box.add_child(_top_runs)
-	hb.add_child(runs_box)
+	row2.add_child(runs_box)
 	var sbox := VBoxContainer.new()
 	sbox.add_theme_constant_override("separation", 0)
-	sbox.add_child(UITheme.label("SHIELDS", 15, UITheme.MUTED, UITheme.font_body_bold()))
-	_shield_label = UITheme.label("0", 26, Color(0.5, 0.9, 1.0), UITheme.font_header())
+	sbox.add_child(UITheme.label("SHIELDS", 13, UITheme.MUTED, UITheme.font_body_bold()))
+	_shield_label = UITheme.label("0", 22, Color(0.5, 0.9, 1.0), UITheme.font_header())
 	sbox.add_child(_shield_label)
-	hb.add_child(sbox)
-	hb.add_child(_vsep())
+	row2.add_child(sbox)
 	var obox := VBoxContainer.new()
 	obox.add_theme_constant_override("separation", 0)
-	obox.add_child(UITheme.label("OUTS", 15, UITheme.MUTED, UITheme.font_body_bold()))
-	_top_outs = UITheme.label("0", 28, UITheme.GREEN, UITheme.font_header())
+	obox.add_child(UITheme.label("OUTS", 13, UITheme.MUTED, UITheme.font_body_bold()))
+	_top_outs = UITheme.label("0", 22, UITheme.GREEN, UITheme.font_header())
 	obox.add_child(_top_outs)
-	hb.add_child(obox)
-	var wbox := VBoxContainer.new()
-	wbox.add_theme_constant_override("separation", 0)
-	wbox.add_child(UITheme.label("WAVE", 15, UITheme.MUTED, UITheme.font_body_bold()))
-	_top_wave = UITheme.label("1/3", 28, UITheme.OFFWHITE, UITheme.font_header())
-	wbox.add_child(_top_wave)
-	hb.add_child(wbox)
-	hb.add_child(_vsep())
+	row2.add_child(obox)
 	var cbox := HBoxContainer.new()
-	cbox.add_child(UITheme.icon_rect("coin", 26, UITheme.GOLD))
-	_top_coins = UITheme.label("0", 28, UITheme.GOLD, UITheme.font_header())
+	cbox.size_flags_vertical = Control.SIZE_SHRINK_END
+	cbox.add_child(UITheme.icon_rect("coin", 22, UITheme.GOLD))
+	_top_coins = UITheme.label("0", 22, UITheme.GOLD, UITheme.font_header())
 	cbox.add_child(_top_coins)
-	hb.add_child(cbox)
+	row2.add_child(cbox)
 	_top_score = UITheme.label("0", 18, UITheme.MUTED, UITheme.font_body_bold())
 
 
@@ -181,7 +184,7 @@ func _vsep() -> ColorRect:
 func _build_threats() -> void:
 	var p := _panel()
 	p.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	p.position = Vector2(-330, 10)
+	p.position = Vector2(-330, 128)
 	p.custom_minimum_size = Vector2(316, 0)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(p)
@@ -536,7 +539,8 @@ func _rebuild_hand() -> void:
 		var id: String = cs.hand[i]
 		var cv := CardView.new(id, battle.run.card_level(id))
 		cv.set_card(id, battle.run.card_level(id))
-		cv.custom_minimum_size = Vector2(134, 188)
+		cv.custom_minimum_size = Vector2(146, 204)
+		cv.lift_px = 14.0
 		cv.hotkey = str(i + 1)
 		cv.selected = i == battle.targeting_index
 		var idx := i
@@ -545,6 +549,37 @@ func _rebuild_hand() -> void:
 		_hand_box.add_child(cv)
 		_card_views.append(cv)
 	_update_cards()
+	_restore_hover.call_deferred()
+
+
+## A rebuilt hand starts un-hovered; re-hover the card that is under the mouse right now.
+func _restore_hover() -> void:
+	var mp := root.get_global_mouse_position()
+	for cv in _card_views:
+		if is_instance_valid(cv) and cv.get_global_rect().has_point(mp):
+			cv._hover = true
+			cv.queue_redraw()
+
+
+## A card was clicked but can't be played: shake it and say why, right above it.
+func _on_card_denied(index: int, reason: String) -> void:
+	if index < 0 or index >= _card_views.size():
+		banner(reason.to_upper(), Color(1.0, 0.55, 0.45))
+		return
+	var cv := _card_views[index]
+	cv.deny()
+	var l := UITheme.label(reason, 22, Color(1.0, 0.82, 0.75), UITheme.font_body_bold())
+	l.add_theme_constant_override("outline_size", 8)
+	l.add_theme_color_override("font_outline_color", Color(0.15, 0.02, 0.02, 0.95))
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(l)
+	l.reset_size()
+	var r := cv.get_global_rect()
+	l.global_position = Vector2(r.get_center().x - l.size.x * 0.5, r.position.y - 64)
+	var tw := l.create_tween()
+	tw.tween_property(l, "global_position:y", l.global_position.y - 26, 0.9).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.35).set_delay(0.6)
+	tw.tween_callback(l.queue_free)
 
 
 func _on_card_hover(cv: CardView, on: bool) -> void:
@@ -588,6 +623,8 @@ func _update_cards() -> void:
 		cv.cooldown_frac = clampf(cd / maxf(total, 0.01), 0.0, 1.0) if cd > 0 else 0.0
 		cv.playable = cs.check(i) == "" and (battle.state == "wave" or battle.practice)
 		cv.selected = i == battle.targeting_index
+		if cv.selected:
+			_selected_card_rect = cv.get_global_rect()
 		cv.queue_redraw()
 
 
@@ -962,22 +999,59 @@ func drag_info(df: Defender, p: Vector3, err: String) -> void:
 
 func on_card_played(id: String) -> void:
 	_card_tip.visible = false
-	# Brief flourish: the played card pops up above the hand and fades away.
+	# Flourish: the played card rises from its slot in the hand, then swoops to its target
+	# and bursts into a ring there.
 	var cv := CardView.new(id, battle.run.card_level(id))
 	cv.set_card(id, battle.run.card_level(id))
-	cv.custom_minimum_size = Vector2(170, 238)
-	cv.size = Vector2(170, 238)
+	var sz := Vector2(146, 204)
+	cv.custom_minimum_size = sz
+	cv.size = sz
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cv.position = Vector2(root.size.x * 0.5 - 85, root.size.y - 330)
-	cv.pivot_offset = Vector2(85, 119)
-	cv.scale = Vector2(0.8, 0.8)
+	cv.selected = true
+	var from := _selected_card_rect.position if _selected_card_rect.size.x > 0.0 else Vector2(root.size.x * 0.5 - sz.x * 0.5, root.size.y - 250)
+	cv.position = from
+	cv.pivot_offset = sz * 0.5
 	root.add_child(cv)
+	_selected_card_rect = Rect2()
+	var to := from + Vector2(0, -260)
+	var cam := battle.get_viewport().get_camera_3d()
+	if battle.last_cast_point is Vector3 and cam and not cam.is_position_behind(battle.last_cast_point):
+		to = cam.unproject_position(battle.last_cast_point) - sz * 0.5
+	var col := DB.category_color(DB.card(id).category)
 	var tw := cv.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(cv, "position:y", cv.position.y - 160, 0.6).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(cv, "scale", Vector2(1.15, 1.15), 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(cv, "modulate:a", 0.0, 0.35).set_delay(0.45)
-	tw.chain().tween_callback(cv.queue_free)
+	tw.tween_property(cv, "position", from + Vector2(0, -70), 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(cv, "scale", Vector2(1.12, 1.12), 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(cv, "position", to, 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(cv, "scale", Vector2(0.22, 0.22), 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(cv, "rotation", deg_to_rad(8.0), 0.3)
+	tw.tween_callback(func() -> void:
+		_ring_burst(cv.position + sz * 0.5, col)
+		cv.queue_free())
+
+
+func _ring_burst(at: Vector2, col: Color) -> void:
+	var fx := RingBurst.new()
+	fx.color = col
+	fx.position = at
+	fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(fx)
+	var tw := fx.create_tween()
+	tw.tween_property(fx, "t", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(fx.queue_free)
+
+
+class RingBurst:
+	extends Control
+	var color := Color.WHITE
+	var t := 0.0:
+		set(v):
+			t = v
+			queue_redraw()
+
+	func _draw() -> void:
+		var r := 20.0 + 70.0 * t
+		draw_arc(Vector2.ZERO, r, 0, TAU, 40, Color(color.lightened(0.4), 1.0 - t), 6.0 * (1.0 - t) + 1.0, true)
+		draw_circle(Vector2.ZERO, 26.0 * (1.0 - t), Color(1, 1, 1, 0.8 * (1.0 - t)))
 
 
 # ---------------------------------------------------------------- state & overlays

@@ -33,9 +33,13 @@ var face_down := false:
 			_update_foil()
 		queue_redraw()
 var foil := true
+var lift_px := 12.0          # how far the card rises on hover (selected cards rise further)
 var _hover := false
 var _art: Texture2D
-var _lift := 0.0
+var _lift := 0.0             # eased hover amount 0..1
+var _sel := 0.0              # eased selection amount 0..1
+var _shake := 0.0            # refusal shake 0..1
+var _t := 0.0
 var _foil_mat: ShaderMaterial
 
 
@@ -99,12 +103,30 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
+## The clickable area follows the card as it rises, plus a few forgiving pixels around it.
+func _has_point(point: Vector2) -> bool:
+	var up := lift_px * 2.2 * (size.x / 150.0) * maxf(_lift, _sel) + 6.0
+	return Rect2(Vector2(-4, -up), size + Vector2(8, up + 4)).has_point(point)
+
+
+## Shake and flash red: the card was clicked but can't be played right now.
+func deny() -> void:
+	_shake = 1.0
+	queue_redraw()
+
+
 func _process(delta: float) -> void:
-	var target := 1.0 if (_hover or selected) else 0.0
-	if absf(_lift - target) > 0.01:
-		_lift = move_toward(_lift, target, delta * 8.0)
+	_t += delta
+	var k := 1.0 - exp(-delta * 16.0)
+	var hover_t := 1.0 if (_hover and playable) or (_hover and not selected) else 0.0
+	var sel_t := 1.0 if selected else 0.0
+	var moving := absf(_lift - hover_t) > 0.002 or absf(_sel - sel_t) > 0.002 or _shake > 0.0 or selected
+	if moving:
+		_lift = lerpf(_lift, hover_t, k)
+		_sel = lerpf(_sel, sel_t, k)
+		_shake = maxf(0.0, _shake - delta * 2.6)
 		if _foil_mat:
-			_foil_mat.set_shader_parameter("hover", _lift)
+			_foil_mat.set_shader_parameter("hover", maxf(_lift, _sel))
 		queue_redraw()
 
 
@@ -120,8 +142,12 @@ func _draw() -> void:
 	var w := size.x
 	var h := size.y
 	var s := w / 150.0
-	var lift := -10.0 * _lift * s if selected or _hover else 0.0
-	var rect := Rect2(0, lift, w, h)
+	# Hover/selection: rise and grow from the bottom centre; refusal: shake sideways.
+	var rise := -s * (lift_px * _lift + lift_px * 1.2 * _sel)
+	var grow := 1.0 + 0.035 * _lift + 0.06 * _sel
+	var sx := sin(_t * 70.0) * 7.0 * s * _shake * _shake
+	draw_set_transform(Vector2(w * 0.5 + sx, h + rise), 0.0, Vector2(grow, grow))
+	var rect := Rect2(-w * 0.5, -h, w, h)
 	var rarity := str(c.rarity)
 	var r_idx := DB.rarity_index(rarity)
 	var rar_col := DB.rarity_color(rarity)
@@ -129,12 +155,18 @@ func _draw() -> void:
 	var dim := 1.0 if (playable and owned) else 0.45
 	var dc := Color(dim, dim, dim, 1)
 
-	# Shadow and selection glow
-	_rr_fill(Rect2(rect.position + Vector2(3, 6) * s, rect.size), 12 * s, Color(0, 0, 0, 0.45))
-	if selected:
-		_rr_fill(rect.grow(6 * s), 15 * s, Color(cat_col, 0.6))
-	elif _hover and playable:
-		_rr_fill(rect.grow(4 * s), 14 * s, Color(rar_col, 0.4))
+	# Shadow, rarity glow and selection glow
+	_rr_fill(Rect2(rect.position + Vector2(3, 6 + 10 * (_lift + _sel)) * s, rect.size), 12 * s, Color(0, 0, 0, 0.45 - 0.15 * (_lift + _sel) * 0.5))
+	if r_idx >= 1 and owned:
+		var ga: float = [0.0, 0.22, 0.3, 0.38, 0.5][r_idx] * dim
+		_rr_fill(rect.grow(4.5 * s), 15 * s, Color(rar_col, ga * 0.5))
+		_rr_fill(rect.grow(2.2 * s), 13 * s, Color(rar_col, ga))
+	if _sel > 0.01:
+		var pulse := 0.75 + 0.25 * sin(_t * 6.0)
+		_rr_fill(rect.grow(9 * s), 18 * s, Color(cat_col.lightened(0.2), 0.28 * _sel * pulse))
+		_rr_fill(rect.grow(5 * s), 15 * s, Color(cat_col.lightened(0.35), 0.6 * _sel))
+	elif _lift > 0.01 and playable:
+		_rr_fill(rect.grow(4 * s), 14 * s, Color(rar_col.lightened(0.2), 0.45 * _lift))
 
 	# Metallic rarity frame
 	var hi := 0.55 if r_idx >= 4 else 0.42
@@ -181,16 +213,19 @@ func _draw() -> void:
 	if cic:
 		draw_texture_rect(cic, Rect2(type_rect.position + Vector2(3, 2) * s, Vector2(11, 11) * s), false, Color(cat_col.lightened(0.2), dim))
 	var small := UITheme.font_body_bold()
-	var tsize := int(10.5 * s)
+	var tsize := int(11 * s)
 	draw_string(small, type_rect.position + Vector2(17 * s, 11.2 * s), str(c.category).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, tsize, Color(0.92, 0.94, 1.0, 0.9 * dim))
 	var rw := small.get_string_size(rarity.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x
-	draw_string(small, Vector2(type_rect.end.x - rw - 4 * s, type_rect.position.y + 11.2 * s), rarity.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, tsize, Color(rar_col.lightened(0.25), dim))
+	# Rarity tag: a filled pill in the rarity colour so it reads at a glance.
+	var tag := Rect2(Vector2(type_rect.end.x - rw - 9 * s, type_rect.position.y + 1.5 * s), Vector2(rw + 7 * s, type_rect.size.y - 3 * s))
+	_rr_fill(tag, 3 * s, Color(rar_col.darkened(0.25), 0.95 * dim))
+	draw_string(small, Vector2(tag.position.x + 3.5 * s, type_rect.position.y + 11.4 * s), rarity.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, tsize, Color(1, 1, 1, dim))
 
 	# Description
 	var body := UITheme.font_body()
 	var text_top := type_rect.end.y + 4 * s
-	draw_multiline_string(body, Vector2(inner.position.x + 6 * s, text_top + 11 * s), DB.card_text(card_id, level), HORIZONTAL_ALIGNMENT_LEFT,
-		inner.size.x - 12 * s, int(12 * s), 4, Color(0.86, 0.89, 0.96, dim))
+	draw_multiline_string(body, Vector2(inner.position.x + 6 * s, text_top + 13 * s), DB.card_text(card_id, level), HORIZONTAL_ALIGNMENT_LEFT,
+		inner.size.x - 12 * s, int(13.5 * s), 3, Color(0.9, 0.93, 0.98, dim))
 
 	# Energy cost gem
 	var gem_c := inner.position + Vector2(15, 14) * s
@@ -207,7 +242,7 @@ func _draw() -> void:
 
 	# Rarity gem, set into the bottom of the frame
 	var gem := Vector2(rect.get_center().x, rect.end.y - 2.5 * s)
-	var gr := 6.5 * s
+	var gr := (6.5 + 1.2 * r_idx) * s
 	var diamond := PackedVector2Array([gem + Vector2(0, -gr), gem + Vector2(gr, 0), gem + Vector2(0, gr), gem + Vector2(-gr, 0)])
 	draw_colored_polygon(PackedVector2Array([gem + Vector2(0, -gr - 2 * s), gem + Vector2(gr + 2 * s, 0), gem + Vector2(0, gr + 2 * s), gem + Vector2(-gr - 2 * s, 0)]), Color(0, 0, 0, 0.6))
 	draw_polygon(diamond, PackedColorArray([rar_col.lightened(0.6) * dc, rar_col * dc, rar_col.darkened(0.4) * dc, rar_col * dc]))
@@ -260,6 +295,8 @@ func _draw() -> void:
 		var cb := Rect2(Vector2(rect.end.x - 34 * s, rect.position.y - 8 * s), Vector2(38, 24) * s)
 		_rr_fill(cb, 6 * s, UITheme.SCARLET)
 		draw_string(small, cb.position + Vector2(6, 18) * s, count_badge, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s), Color.WHITE)
+	if _shake > 0.0:
+		_rr_fill(rect, 12 * s, Color(1.0, 0.15, 0.1, 0.4 * _shake))
 
 
 ## Card back: navy and gold with a diamond lattice and the game logo.

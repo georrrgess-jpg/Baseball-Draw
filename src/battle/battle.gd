@@ -11,6 +11,7 @@ signal wave_started(info: Dictionary)
 signal targeting_changed(card_index: int)
 signal banner_requested(text: String, color: Color)
 signal card_cast(id: String)
+signal card_denied(index: int, reason: String)
 signal defender_moved(defender: Defender)
 signal run_scored(runs: int)
 signal boss_spawned(enemy: Enemy)
@@ -60,6 +61,7 @@ var hover_defender: Defender = null
 var hover_enemy: Enemy = null
 var targeting_index := -1
 var target_preview: Dictionary = {}
+var last_cast_point: Variant = null   # world point of the last cast (HUD flourish target)
 var practice := false
 var practice_invulnerable := true
 var spawn_counter := 0
@@ -1167,29 +1169,42 @@ func cycle_speed() -> void:
 
 # ---------------------------------------------------------------- cards
 
-func select_card(index: int) -> void:
+## Selects a hand card for targeting. Clicking the selected card again plays it only if it
+## needs no target (otherwise it is put back); pressing its hotkey again plays it at the cursor.
+func select_card(index: int, from_key := false) -> void:
 	if state in ["dugout", "results", "loading"]:
 		return
-	if index == targeting_index:
-		# Pressing the same card again casts it at the cursor (or cancels non-castable).
-		if not try_cast_at_cursor():
+	if index == targeting_index and index >= 0:
+		var t := str(DB.card(targeting_card()).get("target", "none"))
+		if t == "none" or (from_key and not _mouse_over_ui()):
+			if not try_cast_at_cursor() and t != "none":
+				card_denied.emit(index, "Pick a target first")
+		else:
+			Audio.ui("ui_back")
 			_cancel_targeting()
 		return
 	if index < 0 or index >= cards.hand.size():
 		return
 	var reason := cards.check(index)
+	if reason == "" and not (state == "wave" or practice):
+		reason = "Play cards during waves"
+	if reason == "Not enough energy":
+		reason = "Need %d more energy" % maxi(1, int(ceil(float(cards.cost_of(cards.hand[index])) - cards.energy)))
+	elif reason == "Cooling down":
+		reason = "Ready in %ds" % int(ceil(cards.cooldown_left(cards.hand[index])))
 	if reason != "":
 		Audio.ui("card_denied")
-		notify(reason.to_upper(), Color(1.0, 0.5, 0.4))
-		return
-	if not (state == "wave" or practice):
-		notify("CARDS CAN BE PLAYED DURING WAVES", Color(1.0, 0.7, 0.4))
-		Audio.ui("card_denied")
+		card_denied.emit(index, reason)
 		return
 	_cancel_drag()
 	targeting_index = index
 	Audio.ui("card_hover")
 	targeting_changed.emit(index)
+
+
+func _mouse_over_ui() -> bool:
+	var c := get_viewport().gui_get_hovered_control()
+	return c != null and c.mouse_filter != Control.MOUSE_FILTER_IGNORE
 
 
 func _cancel_targeting() -> void:
@@ -1212,7 +1227,7 @@ func _update_target_preview() -> void:
 		_cancel_targeting()
 		return
 	var c := DB.card(id)
-	var gp: Variant = cam.ground_point(_mouse_pos)
+	var gp: Variant = cam.ground_point(_mouse_pos) if not _mouse_over_ui() else null
 	target_preview = {}
 	_target_ring.visible = false
 	_target_line.visible = false
@@ -1347,6 +1362,8 @@ func try_cast_at_cursor() -> bool:
 	_update_target_preview()
 	if not target_preview.get("valid", false):
 		Audio.ui("card_denied")
+		var want := {"enemy": "Click a runner", "defender": "Click a defender", "path": "Click on a basepath", "area": "Click on the field"}
+		card_denied.emit(targeting_index, str(want.get(str(DB.card(id).get("target", "")), "Pick a target")))
 		return false
 	var idx := targeting_index
 	var reason := cards.check(idx)
@@ -1361,6 +1378,7 @@ func try_cast_at_cursor() -> bool:
 	if not practice:
 		Profile.bump_stat("cards_played")
 	var tgt := target_preview.duplicate()
+	last_cast_point = tgt.get("point", null)
 	_cancel_targeting()
 	effects.execute(id, run.card_level(id), tgt)
 	if hud.has_method("on_card_played"):
@@ -1373,8 +1391,10 @@ func try_cast_at_cursor() -> bool:
 
 func _update_hover() -> void:
 	_mouse_pos = get_viewport().get_mouse_position()
-	hover_defender = _pick_defender(_mouse_pos)
-	hover_enemy = _pick_enemy(_mouse_pos)
+	# Nothing in the world is "under the cursor" while it is over a HUD panel or the hand.
+	var over_ui := _mouse_over_ui() and dragging == null
+	hover_defender = null if over_ui else _pick_defender(_mouse_pos)
+	hover_enemy = null if over_ui else _pick_enemy(_mouse_pos)
 	if targeting_index >= 0:
 		_update_target_preview()
 	if dragging:
@@ -1543,7 +1563,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	for i in 5:
 		if event.is_action_pressed("card_%d" % (i + 1)):
-			select_card(i)
+			select_card(i, true)
 			return
 	if event.is_action_pressed("card_next"):
 		_cycle_card(1)

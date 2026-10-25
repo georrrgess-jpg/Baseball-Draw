@@ -49,7 +49,8 @@ func set_view(p_focus: Vector3, p_yaw: float, p_pitch: float, p_distance: float,
 
 func default_view(instant := false) -> void:
 	tactical = false
-	set_view(Vector3(0, 0, 1.2), _t_yaw, -57.0, 44.0, instant)
+	# Frames all three gates (the centre one included) at the top and home plate above the hand.
+	set_view(Vector3(0, 0, -1.5), _t_yaw, -58.0, 50.0, instant)
 
 
 func toggle_tactical() -> void:
