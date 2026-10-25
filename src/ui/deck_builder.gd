@@ -1,533 +1,444 @@
 extends MenuScreen
-## Deck builder and card collection.
-## Left: team roster / collection progress. Centre: filterable, sortable card grid.
-## Right: selected card details, upgrade path, combos and comparison.
-## Bottom (deck mode): the 8 equipped cards, deck statistics and deck actions.
+## Cards & Deck.
+## Top: YOUR DECK, eight slots. Click a deck card to remove it, drag cards to reorder;
+## the next free slot glows. Deck changes save automatically once all 8 slots are full.
+## Bottom left: the collection with category tabs, rarity chips, search and sort. Owned
+## cards first; cards not collected yet sit in their own section with a link to card packs.
+## Bottom right: the inspector for the hovered card. Upgrading lives in CardUpgradesScreen.
+
+const SLOT_SIZE := Vector2(136, 190)
+const SLOT_GAP := 10
+const GRID_CARD := Vector2(150, 210)
+const CLICK_SLOP := 9.0
+const TARGET_TEXT := {"enemy": "One runner", "area": "An area you aim", "path": "A basepath",
+	"defender": "One of your defenders", "none": "Instant, no aiming"}
+const TABS := [["", "ALL", "collection"], ["offense", "OFFENSE", "offense"], ["control", "CONTROL", "control"],
+	["defense", "DEFENSE", "defense"], ["utility", "UTILITY", "utility"], ["signature", "SIGNATURE", "star"]]
+const SORTS := ["Sort: Rarity", "Sort: Cost", "Sort: Name", "Sort: Level"]
 
 var collection_mode := false
 var deck: Array = []
 var selected := ""
-var compare_with := ""
 var filter_rarity := ""
-var filter_category := ""
-var filter_defender := ""
+var filter_tab := ""
 var search := ""
 var sort_mode := 0
-var owned_only := false
-
-var _grid: GridContainer
-var _detail: VBoxContainer
-var _deck_row: HBoxContainer
-var _deck_stats: Label
-var _left: VBoxContainer
-var _rarity_btns := {}
-var _cat_btns := {}
 var _dirty := false
+
+var _deck_panel: PanelContainer
+var _slots: Array[Control] = []
+var _slot_cards: Array = []          # CardView or null for each slot
+var _glow_tween: Tween
+var _count_label: Label
+var _need_label: Label
+var _stats_label: Label
+var _saved_box: HBoxContainer
+var _saved_tween: Tween
+var _upgrade_badge: Label
+var _col_views := {}                 # card id -> CardView in the collection
+var _pills := {}                     # card id -> "IN DECK" label
+var _owned_grid: GridContainer
+var _locked_grid: GridContainer
+var _owned_title: Label
+var _locked_box: Control
+var _locked_title: Label
+var _empty_label: Label
+var _new_label: Label
+var _detail: VBoxContainer
+var _tab_btns := {}
+var _rarity_btns := {}
 var _search: LineEdit
+var _press_id := ""
+var _press_pos := Vector2.ZERO
+var _press_from := -1
 
 
 func _ready() -> void:
+	CardUpgradesScreen.apply_debug_args()
 	collection_mode = Session.menu_tab == "collection"
-	setup_screen("COLLECTION" if collection_mode else "DECK BUILDER",
-		"Every ability card — new cards and upgrade copies come from card packs" if collection_mode else "Build an 8-card deck. Hands hold up to 5 cards; energy caps at 10.")
+	setup_screen("COLLECTION" if collection_mode else "CARDS & DECK",
+		"Every ability card. New cards and upgrade copies come from card packs." if collection_mode
+		else "Choose the 8 cards you take into every game.")
 	deck = Profile.data.deck.duplicate()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--demo-remove="):   # screenshot helper: show a partly filled deck
+			deck = deck.slice(0, maxi(0, deck.size() - int(a.split("=")[1])))
+	content.add_theme_constant_override("separation", 12)
+	if not collection_mode:
+		content.add_child(_build_deck_panel())
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 16)
 	content.add_child(body)
-
-	var lp := panel()
-	lp.custom_minimum_size = Vector2(300, 0)
-	body.add_child(lp)
-	_left = VBoxContainer.new()
-	_left.add_theme_constant_override("separation", 8)
-	lp.add_child(_left)
-
-	var center := VBoxContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.add_theme_constant_override("separation", 8)
-	body.add_child(center)
-	center.add_child(_build_filters())
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	center.add_child(scroll)
-	_grid = GridContainer.new()
-	_grid.columns = 5
-	_grid.add_theme_constant_override("h_separation", 14)
-	_grid.add_theme_constant_override("v_separation", 18)
-	scroll.add_child(_grid)
-
-	var rp := panel()
-	rp.custom_minimum_size = Vector2(430, 0)
-	body.add_child(rp)
-	var rscroll := ScrollContainer.new()
-	rscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	rp.add_child(rscroll)
-	_detail = VBoxContainer.new()
-	_detail.custom_minimum_size = Vector2(396, 0)
-	_detail.add_theme_constant_override("separation", 8)
-	rscroll.add_child(_detail)
-
+	body.add_child(_build_collection())
+	body.add_child(_build_inspector())
+	selected = deck[0] if not deck.is_empty() else DB.card_order[0]
 	if not collection_mode:
-		content.add_child(_build_deck_bar())
-	_fill_left()
-	selected = deck[0] if deck.size() > 0 else DB.card_order[0]
-	_refresh()
-
-
-func _build_filters() -> Control:
-	var p := panel(Color(0.04, 0.07, 0.12, 0.85), Color(1, 1, 1, 0.08), 10)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 6)
-	p.add_child(vb)
-	var row1 := HBoxContainer.new()
-	row1.add_theme_constant_override("separation", 8)
-	vb.add_child(row1)
-	row1.add_child(UITheme.icon_rect("search", 26, UITheme.MUTED))
-	var le := LineEdit.new()
-	_search = le
-	le.placeholder_text = "Search cards... (F)"
-	le.custom_minimum_size = Vector2(260, 0)
-	le.text_changed.connect(func(t: String) -> void:
-		search = t.to_lower()
-		_refresh_grid())
-	row1.add_child(le)
-	row1.add_child(UITheme.icon_rect("sort", 26, UITheme.MUTED))
-	var sort := OptionButton.new()
-	for s in ["Sort: Rarity", "Sort: Cost", "Sort: Name", "Sort: Category", "Sort: Level"]:
-		sort.add_item(s)
-	sort.item_selected.connect(func(i: int) -> void:
-		sort_mode = i
-		_refresh_grid())
-	row1.add_child(sort)
-	var own := CheckBox.new()
-	own.text = "Owned only"
-	own.toggled.connect(func(v: bool) -> void:
-		owned_only = v
-		_refresh_grid())
-	row1.add_child(own)
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 6)
-	vb.add_child(row2)
-	row2.add_child(UITheme.icon_rect("filter", 24, UITheme.MUTED))
-	for r in DB.RARITY_ORDER:
-		var b := UITheme.small_button(r.capitalize(), DB.rarity_color(r), 18)
-		b.toggle_mode = true
-		b.add_theme_color_override("font_color", DB.rarity_color(r))
-		b.pressed.connect(func() -> void:
-			filter_rarity = "" if filter_rarity == r else r
-			for k in _rarity_btns.keys():
-				_rarity_btns[k].button_pressed = k == filter_rarity
-			_refresh_grid())
-		row2.add_child(b)
-		_rarity_btns[r] = b
-	var sep := Control.new()
-	sep.custom_minimum_size = Vector2(14, 0)
-	row2.add_child(sep)
-	for c in DB.CATEGORY_ORDER:
-		var b := UITheme.small_button(c.capitalize(), DB.category_color(c), 18)
-		b.toggle_mode = true
-		b.icon = DB.icon(c)
-		b.expand_icon = false
-		b.add_theme_color_override("icon_normal_color", DB.category_color(c))
-		b.add_theme_constant_override("icon_max_width", 20)
-		b.pressed.connect(func() -> void:
-			filter_category = "" if filter_category == c else c
-			for k in _cat_btns.keys():
-				_cat_btns[k].button_pressed = k == filter_category
-			_refresh_grid())
-		row2.add_child(b)
-		_cat_btns[c] = b
-	return p
-
-
-func _build_deck_bar() -> Control:
-	var p := panel(Color(0.03, 0.05, 0.09, 0.95), Color(UITheme.SCARLET, 0.5), 12)
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 16)
-	p.add_child(hb)
-	var info := VBoxContainer.new()
-	info.custom_minimum_size = Vector2(260, 0)
-	info.add_child(UITheme.header("EQUIPPED DECK", 28, UITheme.GOLD))
-	_deck_stats = UITheme.label("", 18, UITheme.MUTED)
-	_deck_stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_deck_stats.custom_minimum_size = Vector2(260, 0)
-	info.add_child(_deck_stats)
-	hb.add_child(info)
-	_deck_row = HBoxContainer.new()
-	_deck_row.add_theme_constant_override("separation", 8)
-	_deck_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(_deck_row)
-	var actions := GridContainer.new()
-	actions.columns = 2
-	actions.add_theme_constant_override("h_separation", 8)
-	actions.add_theme_constant_override("v_separation", 8)
-	hb.add_child(actions)
-	var save := UITheme.small_button("Save Deck", UITheme.GREEN, 22)
-	save.pressed.connect(_save_deck)
-	actions.add_child(save)
-	var auto := UITheme.small_button("Auto Build", UITheme.GOLD, 22)
-	auto.pressed.connect(_auto_build)
-	actions.add_child(auto)
-	var clear := UITheme.small_button("Clear Deck", UITheme.SCARLET, 22)
-	clear.pressed.connect(func() -> void:
-		deck.clear()
-		_dirty = true
-		_refresh())
-	actions.add_child(clear)
-	var test := UITheme.small_button("Test Deck", UITheme.BLUE, 22)
-	test.tooltip_text = "Try this deck on the Practice Field"
-	test.pressed.connect(_test_deck)
-	actions.add_child(test)
-	for b in actions.get_children():
-		(b as Button).custom_minimum_size = Vector2(150, 44)
-	return p
-
-
-# ---------------------------------------------------------------- left column
-
-func _fill_left() -> void:
-	for c in _left.get_children():
-		c.queue_free()
-	if collection_mode:
-		_left.add_child(UITheme.header("COLLECTION", 30, UITheme.GOLD))
-		var total := 0
-		for r in DB.RARITY_ORDER:
-			var have := 0
-			var all := 0
-			for cid in DB.card_order:
-				if DB.card(cid).rarity == r:
-					all += 1
-					if Profile.is_card_owned(cid):
-						have += 1
-			total += have
-			var row := HBoxContainer.new()
-			var l := UITheme.label(r.capitalize(), 22, DB.rarity_color(r), UITheme.font_body_bold())
-			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(l)
-			row.add_child(UITheme.label("%d / %d" % [have, all], 22, UITheme.OFFWHITE, UITheme.font_body_bold()))
-			_left.add_child(row)
-			var pb := ProgressBar.new()
-			pb.max_value = all
-			pb.value = have
-			pb.show_percentage = false
-			pb.custom_minimum_size = Vector2(0, 8)
-			pb.add_theme_stylebox_override("fill", UITheme.panel_style(DB.rarity_color(r), Color(0, 0, 0, 0), 0, 3, 0))
-			_left.add_child(pb)
-		_left.add_child(UITheme.hsep())
-		_left.add_child(UITheme.label("%d of %d cards collected." % [total, DB.card_order.size()], 20, UITheme.OFFWHITE))
-		var how := UITheme.label("New cards come from card packs: earn them by finishing games and levelling up, or buy them in CARD PACKS. Duplicate copies upgrade cards (up to level 5). New defenders bring a Signature Pack with their card.", 18, UITheme.MUTED)
-		how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		how.custom_minimum_size = Vector2(270, 0)
-		_left.add_child(how)
-		return
-	_left.add_child(UITheme.header("ROSTER", 30, UITheme.GOLD))
-	var hint := UITheme.label("Click a defender to show their signature card. Signature cards are cast by that defender with their power.", 16, UITheme.MUTED)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size = Vector2(270, 0)
-	_left.add_child(hint)
-	for id in DB.defender_order:
-		var d := DB.defender(id)
-		var unlocked := Profile.is_defender_unlocked(id)
-		var b := Button.new()
-		b.toggle_mode = true
-		b.button_pressed = filter_defender == id
-		b.custom_minimum_size = Vector2(0, 58)
-		b.disabled = not unlocked
-		var accent := Color(d.accent)
-		b.add_theme_stylebox_override("normal", UITheme.panel_style(Color(0.06, 0.09, 0.15, 0.9), Color(accent, 0.3), 1, 8, 6))
-		b.add_theme_stylebox_override("hover", UITheme.panel_style(Color(0.1, 0.14, 0.22, 0.95), accent, 2, 8, 6))
-		b.add_theme_stylebox_override("pressed", UITheme.panel_style(accent.darkened(0.55), accent, 2, 8, 6))
-		b.add_theme_stylebox_override("disabled", UITheme.panel_style(Color(0.04, 0.05, 0.08, 0.7), Color(1, 1, 1, 0.04), 1, 8, 6))
-		var hb := HBoxContainer.new()
-		hb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		hb.offset_left = 6
-		hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hb.add_theme_constant_override("separation", 10)
-		var pr := portrait_rect(id, 44, accent)
-		pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hb.add_child(pr)
-		var vb := VBoxContainer.new()
-		vb.add_theme_constant_override("separation", -4)
-		vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.alignment = BoxContainer.ALIGNMENT_CENTER
-		var n := UITheme.label(d.name + ("  ★" if id in Profile.data.team else ""), 22, accent.lightened(0.3) if unlocked else UITheme.MUTED, UITheme.font_header())
-		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(n)
-		var sub := "%s · Lv %d" % [DB.roles[d.role].name, Profile.defender_level(id)] if unlocked else Profile.defender_unlock_text(id)
-		var sl := UITheme.label(sub, 15, UITheme.MUTED, UITheme.font_body_bold())
-		sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(sl)
-		hb.add_child(vb)
-		b.add_child(hb)
-		b.pressed.connect(func() -> void:
-			filter_defender = "" if filter_defender == id else id
-			if filter_defender != "":
-				selected = d.signature
-			_fill_left()
-			_refresh())
-		_left.add_child(b)
-
-
-# ---------------------------------------------------------------- grid & details
-
-func _sorted_cards() -> Array:
-	var ids: Array = []
-	for cid in DB.card_order:
-		var c := DB.card(cid)
-		if filter_rarity != "" and c.rarity != filter_rarity:
-			continue
-		if filter_category != "" and c.category != filter_category:
-			continue
-		if owned_only and not Profile.is_card_owned(cid):
-			continue
-		if search != "" and not (search in str(c.name).to_lower() or search in str(c.text).to_lower()):
-			continue
-		if filter_defender != "" and c.get("linked", "") != filter_defender and DB.defender(filter_defender).signature != cid:
-			continue
-		ids.append(cid)
-	ids.sort_custom(func(a, b) -> bool:
-		var ca := DB.card(a)
-		var cb := DB.card(b)
-		match sort_mode:
-			1:
-				return int(ca.cost) < int(cb.cost) if int(ca.cost) != int(cb.cost) else str(ca.name) < str(cb.name)
-			2:
-				return str(ca.name) < str(cb.name)
-			3:
-				var ia := DB.CATEGORY_ORDER.find(ca.category)
-				var ib := DB.CATEGORY_ORDER.find(cb.category)
-				return ia < ib if ia != ib else str(ca.name) < str(cb.name)
-			4:
-				return Profile.card_level(a) > Profile.card_level(b)
-		var ra := DB.RARITY_ORDER.find(ca.rarity)
-		var rb := DB.RARITY_ORDER.find(cb.rarity)
-		return ra > rb if ra != rb else str(ca.name) < str(cb.name))
-	return ids
-
-
-func _refresh() -> void:
-	_refresh_grid()
+		_rebuild_deck()
+		_update_deck_info()
+	_refresh_collection()
 	_refresh_detail()
-	_refresh_deck()
 
 
-func _refresh_grid() -> void:
-	for c in _grid.get_children():
-		c.queue_free()
-	for cid in _sorted_cards():
+# ================================================================ deck panel
+
+func _build_deck_panel() -> Control:
+	_deck_panel = panel(Color(0.03, 0.05, 0.1, 0.94), Color(UITheme.GOLD, 0.35), 14)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 22)
+	_deck_panel.add_child(hb)
+
+	var info := VBoxContainer.new()
+	info.custom_minimum_size = Vector2(250, 0)
+	info.alignment = BoxContainer.ALIGNMENT_CENTER
+	info.add_theme_constant_override("separation", 0)
+	hb.add_child(info)
+	info.add_child(UITheme.title("YOUR DECK", 50, UITheme.GOLD))
+	var cnt := HBoxContainer.new()
+	cnt.add_theme_constant_override("separation", 14)
+	_count_label = UITheme.label("", 46, UITheme.OFFWHITE, UITheme.font_header())
+	cnt.add_child(_count_label)
+	_saved_box = HBoxContainer.new()
+	_saved_box.add_theme_constant_override("separation", 4)
+	_saved_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_saved_box.add_child(UITheme.icon_rect("check", 24, UITheme.GREEN))
+	_saved_box.add_child(UITheme.label("SAVED", 22, UITheme.GREEN, UITheme.font_body_bold()))
+	_saved_box.modulate.a = 0.0
+	cnt.add_child(_saved_box)
+	info.add_child(cnt)
+	_need_label = UITheme.label("", 22, UITheme.GOLD, UITheme.font_body_bold())
+	_need_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_need_label.custom_minimum_size = Vector2(250, 0)
+	info.add_child(_need_label)
+	_stats_label = UITheme.label("", 18, UITheme.MUTED, UITheme.font_body_bold())
+	_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stats_label.custom_minimum_size = Vector2(250, 0)
+	info.add_child(_stats_label)
+
+	var slots := HBoxContainer.new()
+	slots.add_theme_constant_override("separation", SLOT_GAP)
+	slots.alignment = BoxContainer.ALIGNMENT_CENTER
+	slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(slots)
+	for i in Profile.DECK_SIZE:
+		var s := _make_slot(i)
+		slots.add_child(s)
+		_slots.append(s)
+		_slot_cards.append(null)
+
+	var act := VBoxContainer.new()
+	act.custom_minimum_size = Vector2(270, 0)
+	act.alignment = BoxContainer.ALIGNMENT_CENTER
+	act.add_theme_constant_override("separation", 8)
+	hb.add_child(act)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	act.add_child(row)
+	var auto := UITheme.small_button("Auto Build", UITheme.GOLD, 22)
+	auto.tooltip_text = "Fill the deck with a balanced pick of your best cards"
+	auto.icon = DB.icon("special")
+	auto.add_theme_constant_override("icon_max_width", 20)
+	auto.pressed.connect(_auto_build)
+	row.add_child(auto)
+	var clear := UITheme.small_button("Clear", UITheme.SCARLET, 22)
+	clear.tooltip_text = "Empty all 8 slots"
+	clear.pressed.connect(_clear_deck)
+	row.add_child(clear)
+	for b in row.get_children():
+		(b as Button).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		(b as Button).custom_minimum_size = Vector2(0, 44)
+	var test := UITheme.small_button("Test Deck on the Practice Field", UITheme.BLUE, 21)
+	test.custom_minimum_size = Vector2(0, 44)
+	test.pressed.connect(_test_deck)
+	act.add_child(test)
+	var up := UITheme.menu_button("UPGRADE CARDS  ▶", UITheme.GOLD, 28, -0.12)
+	up.custom_minimum_size = Vector2(0, 58)
+	up.tooltip_text = "Level up your cards with copies and coins"
+	up.pressed.connect(_open_upgrades)
+	act.add_child(up)
+	_upgrade_badge = UITheme.label("", 19, Color.WHITE, UITheme.font_body_bold())
+	_upgrade_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_upgrade_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var bs := UITheme.panel_style(UITheme.SCARLET, Color.WHITE, 2, 14, 0)
+	bs.content_margin_left = 7
+	bs.content_margin_right = 7
+	_upgrade_badge.add_theme_stylebox_override("normal", bs)
+	_upgrade_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_upgrade_badge.position = Vector2(-26, -12)
+	_upgrade_badge.custom_minimum_size = Vector2(30, 28)
+	_upgrade_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	up.add_child(_upgrade_badge)
+	_update_upgrade_badge()
+	return _deck_panel
+
+
+func _make_slot(i: int) -> Control:
+	var slot := Control.new()
+	slot.custom_minimum_size = SLOT_SIZE
+	slot.mouse_filter = Control.MOUSE_FILTER_STOP
+	var bg := Panel.new()
+	bg.name = "Bg"
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_theme_stylebox_override("panel", _slot_style(false))
+	slot.add_child(bg)
+	var empty := VBoxContainer.new()
+	empty.name = "Empty"
+	empty.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	empty.alignment = BoxContainer.ALIGNMENT_CENTER
+	empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	empty.add_theme_constant_override("separation", 6)
+	var plus := UITheme.icon_rect("plus", 50, Color(1, 1, 1, 0.55))
+	plus.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	empty.add_child(plus)
+	var num := UITheme.label("EMPTY", 18, Color(1, 1, 1, 0.4), UITheme.font_body_bold())
+	num.name = "Text"
+	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty.add_child(num)
+	slot.add_child(empty)
+	slot.set_drag_forwarding(func(_p: Vector2) -> Variant: return null, _can_drop_slot.bind(i), _drop_slot.bind(i))
+	return slot
+
+
+func _slot_style(next: bool) -> StyleBoxFlat:
+	var s := UITheme.panel_style(Color(0.0, 0.02, 0.05, 0.55) if not next else Color(0.2, 0.15, 0.02, 0.55),
+		Color(UITheme.GOLD, 0.95) if next else Color(1, 1, 1, 0.16), 3 if next else 2, 12, 0)
+	return s
+
+
+## Rebuilds the cards in the slots. `hidden` stays invisible (a card is flying to it);
+## cards from `slide_from` on slide in from the right (a card before them was removed).
+func _rebuild_deck(hidden := -1, slide_from := -1) -> void:
+	if _deck_panel == null:
+		return
+	if _glow_tween:
+		_glow_tween.kill()
+	for i in Profile.DECK_SIZE:
+		var slot := _slots[i]
+		var old: Variant = _slot_cards[i]
+		if old != null and is_instance_valid(old):
+			(old as Node).queue_free()
+		_slot_cards[i] = null
+		var empty := slot.get_node("Empty") as Control
+		var bg := slot.get_node("Bg") as Panel
+		empty.modulate.a = 1.0
+		var is_next := i == deck.size()
+		bg.add_theme_stylebox_override("panel", _slot_style(is_next))
+		var txt := empty.get_node("Text") as Label
+		txt.text = "ADD A CARD" if is_next else "EMPTY"
+		txt.add_theme_color_override("font_color", Color(UITheme.GOLD, 0.95) if is_next else Color(1, 1, 1, 0.4))
+		(empty.get_child(0) as TextureRect).modulate = Color(UITheme.GOLD, 0.95) if is_next else Color(1, 1, 1, 0.45)
+		if i >= deck.size():
+			empty.visible = true
+			if is_next:
+				_glow_tween = empty.create_tween().set_loops()
+				_glow_tween.tween_property(empty, "modulate:a", 0.45, 0.7).set_trans(Tween.TRANS_SINE)
+				_glow_tween.tween_property(empty, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
+			continue
+		empty.visible = false
+		var cid: String = deck[i]
 		var cv := CardView.new(cid, Profile.card_level(cid))
 		cv.set_card(cid, Profile.card_level(cid))
-		cv.custom_minimum_size = Vector2(160, 224)
-		cv.owned = Profile.is_card_owned(cid)
-		cv.selected = cid == selected
-		if cid in deck and not collection_mode:
-			cv.count_badge = "IN"
-		elif bool(Profile.data.cards.get(cid, {}).get("fresh", false)) and cv.owned:
-			cv.count_badge = "NEW"
-		elif Profile.can_upgrade_card(cid):
-			cv.count_badge = "▲"
-		var id: String = cid
-		cv.clicked.connect(func(_c: CardView) -> void:
-			if Input.is_key_pressed(KEY_SHIFT) and selected != "" and selected != id:
-				compare_with = selected
-			else:
-				compare_with = ""
-			if selected == id and not collection_mode:
-				_toggle_in_deck(id)
-			selected = id
-			Profile.mark_card_seen(id)
-			Audio.ui("card_hover")
-			_refresh())
-		_grid.add_child(cv)
+		cv.custom_minimum_size = SLOT_SIZE
+		cv.size = SLOT_SIZE
+		cv.tooltip_text = "Click to remove · drag to reorder"
+		var idx := i
+		cv.gui_input.connect(func(e: InputEvent) -> void: _card_input(e, cid, cv, idx))
+		cv.hovered.connect(func(_c: CardView, on: bool) -> void:
+			if on:
+				_inspect(cid))
+		cv.set_drag_forwarding(_drag_card.bind(cid, idx), _can_drop_slot.bind(i), _drop_slot.bind(i))
+		slot.add_child(cv)
+		_slot_cards[i] = cv
+		if i == hidden:
+			cv.modulate.a = 0.0
+		if slide_from >= 0 and i >= slide_from:
+			cv.position.x = SLOT_SIZE.x + SLOT_GAP
+			cv.create_tween().tween_property(cv, "position:x", 0.0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-func _refresh_detail() -> void:
-	for c in _detail.get_children():
-		c.queue_free()
-	if selected == "":
+func _update_deck_info() -> void:
+	if _deck_panel == null:
 		return
-	var c := DB.card(selected)
-	var lvl := Profile.card_level(selected)
-	var owned := Profile.is_card_owned(selected)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 12)
-	var big := CardView.new(selected, lvl)
-	big.set_card(selected, lvl)
-	big.custom_minimum_size = Vector2(190, 266)
-	big.owned = owned
-	top.add_child(big)
-	if compare_with != "":
-		var other := CardView.new(compare_with, Profile.card_level(compare_with))
-		other.set_card(compare_with, Profile.card_level(compare_with))
-		other.custom_minimum_size = Vector2(190, 266)
-		other.owned = Profile.is_card_owned(compare_with)
-		top.add_child(other)
-	_detail.add_child(top)
-	if compare_with != "":
-		_detail.add_child(_compare_table(selected, compare_with))
-		var clear := UITheme.small_button("Stop comparing", UITheme.BLUE, 18)
-		clear.pressed.connect(func() -> void:
-			compare_with = ""
-			_refresh_detail())
-		_detail.add_child(clear)
-		return
-	_detail.add_child(UITheme.label(c.name.to_upper(), 40, UITheme.OFFWHITE, UITheme.font_display()))
-	var meta := UITheme.label("%s · %s · Cost %d · Cooldown %ss · Target: %s" % [c.rarity.capitalize(), c.category.capitalize(), int(c.cost),
-		str(int(c.cooldown)) if float(c.cooldown) > 0 else "none", c.target], 18, DB.rarity_color(c.rarity), UITheme.font_body_bold())
-	meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_detail.add_child(meta)
-	var desc := UITheme.label(DB.card_text(selected, lvl), 20, UITheme.OFFWHITE)
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_detail.add_child(desc)
-	var linked: String = c.get("linked", "")
-	if linked != "":
-		_detail.add_child(UITheme.label("Signature card of %s — cast by them on the field." % DB.defender(linked).name, 18, DB.defender_accent(linked).lightened(0.3), UITheme.font_body_bold()))
-	if not owned:
-		_detail.add_child(UITheme.label("NOT YET COLLECTED — find it in card packs.", 19, UITheme.SCARLET, UITheme.font_body_bold()))
-	# Upgrade path
-	_detail.add_child(UITheme.hsep())
-	_detail.add_child(UITheme.header("UPGRADE PATH", 26, UITheme.GOLD))
-	var growth: Array = c.get("growth", [])
-	if growth.is_empty():
-		_detail.add_child(UITheme.label("This card's effect is fixed; upgrades are cosmetic.", 17, UITheme.MUTED))
+	var n := deck.size()
+	_count_label.text = "%d / %d" % [n, Profile.DECK_SIZE]
+	_count_label.add_theme_color_override("font_color", UITheme.GREEN if n == Profile.DECK_SIZE else UITheme.OFFWHITE)
+	if n == Profile.DECK_SIZE:
+		_need_label.text = "Ready to play!"
+		_need_label.add_theme_color_override("font_color", UITheme.GREEN)
 	else:
-		var grid := GridContainer.new()
-		grid.columns = DB.card_max_level + 1
-		grid.add_theme_constant_override("h_separation", 12)
-		grid.add_child(UITheme.label("", 16))
-		for l in DB.card_max_level:
-			grid.add_child(UITheme.label("L%d" % (l + 1), 17, UITheme.GOLD if l + 1 == lvl else UITheme.MUTED, UITheme.font_body_bold()))
-		for g in growth:
-			grid.add_child(UITheme.label(str(g).replace("_", " "), 16, UITheme.MUTED))
-			for l in DB.card_max_level:
-				var v := DB.card_param(selected, g, l + 1)
-				grid.add_child(UITheme.label(("%d" % int(round(v))) if v >= 10 else ("%.2f" % v), 17, UITheme.OFFWHITE if l + 1 == lvl else UITheme.MUTED, UITheme.font_body_bold()))
-		_detail.add_child(grid)
-	if owned:
-		var cost := Profile.upgrade_cost(selected)
-		if cost.is_empty():
-			_detail.add_child(UITheme.label("MAX LEVEL", 22, UITheme.GOLD, UITheme.font_display()))
-		else:
-			var row := HBoxContainer.new()
-			row.add_theme_constant_override("separation", 10)
-			row.add_child(UITheme.label("Copies %d / %d" % [Profile.card_copies(selected), int(cost.copies)], 19,
-				UITheme.GREEN if Profile.card_copies(selected) >= int(cost.copies) else UITheme.MUTED, UITheme.font_body_bold()))
-			var up := UITheme.small_button("Upgrade  %d" % int(cost.coins), UITheme.GOLD, 21)
-			up.icon = DB.icon("coin")
-			up.expand_icon = false
-			up.add_theme_constant_override("icon_max_width", 22)
-			up.disabled = not Profile.can_upgrade_card(selected)
-			up.pressed.connect(func() -> void:
-				if Profile.upgrade_card(selected):
-					Audio.play("level_up")
-					Router.toast("%s upgraded to level %d!" % [c.name, Profile.card_level(selected)], "level")
-					_refresh())
-			row.add_child(up)
-			_detail.add_child(row)
-	# Combos
-	var combos := DB.combos_for(selected)
-	if not combos.is_empty():
-		_detail.add_child(UITheme.hsep())
-		_detail.add_child(UITheme.header("SYNERGIES", 26, UITheme.GOLD))
-		for cb in combos:
-			var other := DB.card(cb.card)
-			var l := UITheme.label("+ %s: %s" % [other.name, cb.text], 17, UITheme.GREEN if cb.card in deck else UITheme.OFFWHITE)
-			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			_detail.add_child(l)
-	if not collection_mode and owned:
-		var eq := UITheme.small_button("Remove from deck" if selected in deck else "Add to deck", UITheme.SCARLET if selected in deck else UITheme.GREEN, 22)
-		eq.disabled = not selected in deck and deck.size() >= Profile.DECK_SIZE
-		eq.pressed.connect(func() -> void: _toggle_in_deck(selected))
-		_detail.add_child(eq)
-	_detail.add_child(UITheme.label("Tip: Shift-click another card to compare.", 15, UITheme.MUTED))
-
-
-func _compare_table(a: String, b: String) -> GridContainer:
-	var g := GridContainer.new()
-	g.columns = 3
-	g.add_theme_constant_override("h_separation", 16)
-	var ca := DB.card(a)
-	var cb := DB.card(b)
-	var rows := [["Cost", str(int(ca.cost)), str(int(cb.cost))], ["Cooldown", str(int(ca.cooldown)), str(int(cb.cooldown))],
-		["Rarity", ca.rarity.capitalize(), cb.rarity.capitalize()], ["Category", ca.category.capitalize(), cb.category.capitalize()],
-		["Level", str(Profile.card_level(a)), str(Profile.card_level(b))], ["Target", ca.target, cb.target]]
-	for r in rows:
-		g.add_child(UITheme.label(r[0], 17, UITheme.MUTED))
-		g.add_child(UITheme.label(r[1], 18, UITheme.OFFWHITE, UITheme.font_body_bold()))
-		g.add_child(UITheme.label(r[2], 18, UITheme.OFFWHITE, UITheme.font_body_bold()))
-	return g
-
-
-func _toggle_in_deck(id: String) -> void:
-	if collection_mode or not Profile.is_card_owned(id):
-		return
-	if id in deck:
-		deck.erase(id)
-		Audio.ui("ui_back")
-	elif deck.size() < Profile.DECK_SIZE:
-		deck.append(id)
-		Audio.play("card_draw", -4.0)
-	else:
-		Router.toast("Your deck is full (8 cards). Remove one first.", "warn")
-		Audio.ui("ui_error")
-		return
-	_dirty = true
-	_refresh()
-
-
-func _refresh_deck() -> void:
-	if collection_mode or _deck_row == null:
-		return
-	for c in _deck_row.get_children():
-		c.queue_free()
-	for i in Profile.DECK_SIZE:
-		if i < deck.size():
-			var cid: String = deck[i]
-			var cv := CardView.new(cid, Profile.card_level(cid))
-			cv.set_card(cid, Profile.card_level(cid))
-			cv.custom_minimum_size = Vector2(104, 146)
-			cv.show_level = false
-			cv.tooltip_text = "Click to remove"
-			cv.clicked.connect(func(_c: CardView) -> void: _toggle_in_deck(cid))
-			_deck_row.add_child(cv)
-		else:
-			var slot := Panel.new()
-			slot.custom_minimum_size = Vector2(104, 146)
-			slot.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0, 0, 0, 0.3), Color(1, 1, 1, 0.15), 2, 8, 0))
-			_deck_row.add_child(slot)
-	var cats := {}
-	var total_cost := 0
+		var miss := Profile.DECK_SIZE - n
+		_need_label.text = "Add %d more card%s" % [miss, "" if miss == 1 else "s"]
+		_need_label.add_theme_color_override("font_color", UITheme.GOLD)
+	var total := 0
 	for cid in deck:
-		var c := DB.card(cid)
-		cats[c.category] = int(cats.get(c.category, 0)) + 1
-		total_cost += int(c.cost)
-	var avg := float(total_cost) / maxf(deck.size(), 1)
-	var txt := "%d / %d cards · avg cost %.1f\n" % [deck.size(), Profile.DECK_SIZE, avg]
-	for k in DB.CATEGORY_ORDER:
-		txt += "%s %d  " % [k.capitalize(), int(cats.get(k, 0))]
+		total += int(DB.card(cid).cost)
 	var combos := 0
 	for cb in DB.combos:
 		if cb.cards[0] in deck and cb.cards[1] in deck:
 			combos += 1
-	txt += "\nCombos in deck: %d" % combos
-	if _dirty:
-		txt += "\n(unsaved changes)"
-	_deck_stats.text = txt
+	if n == 0:
+		_stats_label.text = "Click cards below to add them."
+	else:
+		_stats_label.text = "Avg cost %.1f  ·  %d combo%s" % [float(total) / n, combos, "" if combos == 1 else "s"]
 
 
-func _save_deck() -> bool:
-	if deck.size() != Profile.DECK_SIZE:
-		Router.toast("A deck needs exactly 8 cards (now %d)." % deck.size(), "warn")
+func _update_upgrade_badge() -> void:
+	if _upgrade_badge == null:
+		return
+	var n := 0
+	for cid in DB.card_order:
+		if Profile.can_upgrade_card(cid):
+			n += 1
+	_upgrade_badge.text = str(n)
+	_upgrade_badge.visible = n > 0
+	_upgrade_badge.tooltip_text = "%d card%s ready to upgrade" % [n, "" if n == 1 else "s"]
+
+
+func _flash_saved() -> void:
+	if _saved_tween:
+		_saved_tween.kill()
+	_saved_box.modulate.a = 1.0
+	_saved_box.scale = Vector2(1.15, 1.15)
+	_saved_tween = _saved_box.create_tween()
+	_saved_tween.tween_property(_saved_box, "scale", Vector2.ONE, 0.2)
+	_saved_tween.tween_interval(1.4)
+	_saved_tween.tween_property(_saved_box, "modulate:a", 0.0, 0.5)
+
+
+## Called after every deck edit: saves a complete deck and refreshes the marks.
+func _after_change() -> void:
+	_dirty = true
+	if deck.size() == Profile.DECK_SIZE and Profile.set_deck(deck):
+		_dirty = false
+		_flash_saved()
+	_update_deck_info()
+	_update_marks()
+	_refresh_detail()
+
+
+# ================================================================ deck edits
+
+func _add_card(id: String, from: Control) -> void:
+	if collection_mode:
+		return
+	if not Profile.is_card_owned(id):
 		Audio.ui("ui_error")
-		return false
-	Profile.set_deck(deck)
-	_dirty = false
-	Router.toast("Deck saved.", "info")
-	Audio.ui("ui_confirm")
-	_refresh_deck()
-	return true
+		return
+	if id in deck:
+		_remove_at(deck.find(id))
+		return
+	if deck.size() >= Profile.DECK_SIZE:
+		_deck_full()
+		return
+	var idx := deck.size()
+	deck.append(id)
+	Audio.play("card_whoosh", -6.0)
+	_rebuild_deck(idx)
+	_fly(id, from.get_global_rect(), idx)
+	_after_change()
+
+
+func _remove_at(i: int) -> void:
+	if i < 0 or i >= deck.size():
+		return
+	var cv: Variant = _slot_cards[i]
+	deck.remove_at(i)
+	_slot_cards[i] = null
+	Audio.ui("ui_back")
+	if cv != null and is_instance_valid(cv):
+		var ghost := cv as CardView
+		ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ghost.reparent(self)
+		ghost.pivot_offset = ghost.size * 0.5
+		var tw := ghost.create_tween().set_parallel()
+		tw.tween_property(ghost, "scale", Vector2(0.55, 0.55), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+		tw.tween_property(ghost, "position:y", ghost.position.y + 70.0, 0.22).set_ease(Tween.EASE_IN)
+		tw.tween_property(ghost, "modulate:a", 0.0, 0.22)
+		tw.chain().tween_callback(ghost.queue_free)
+	_rebuild_deck(-1, i)
+	_after_change()
+
+
+## A copy of the card flies from the collection into its slot.
+func _fly(id: String, src: Rect2, idx: int) -> void:
+	var fc := CardView.new(id, Profile.card_level(id))
+	fc.set_card(id, Profile.card_level(id))
+	fc.custom_minimum_size = Vector2.ZERO
+	fc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fc.show_level = false
+	add_child(fc)
+	fc.position = src.position - global_position
+	fc.size = src.size
+	fc.z_index = 20
+	var dst := _slots[idx].get_global_rect()
+	var mid := (src.position + dst.position) * 0.5 - global_position + Vector2(0, -60)
+	var tw := fc.create_tween()
+	tw.set_parallel()
+	tw.tween_method(func(t: float) -> void:
+		var a := (src.position - global_position).lerp(mid, t)
+		var b := mid.lerp(dst.position - global_position, t)
+		fc.position = a.lerp(b, t)
+		fc.size = src.size.lerp(dst.size, t)
+		fc.pivot_offset = fc.size * 0.5
+		fc.rotation = sin(t * PI) * -0.12, 0.0, 1.0, 0.36).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tw.chain().tween_callback(func() -> void:
+		fc.queue_free()
+		_land(idx, id))
+
+
+func _land(idx: int, id: String) -> void:
+	if idx >= _slot_cards.size():
+		return
+	var cv: Variant = _slot_cards[idx]
+	if cv == null or not is_instance_valid(cv) or (cv as CardView).card_id != id:
+		return
+	_pop(cv as CardView)
+	Audio.play("card_draw", -5.0)
+
+
+func _pop(cv: CardView, delay := 0.0) -> void:
+	cv.pivot_offset = SLOT_SIZE * 0.5
+	var tw := cv.create_tween()
+	if delay > 0.0:
+		cv.modulate.a = 0.0
+		tw.tween_interval(delay)
+	tw.tween_callback(func() -> void:
+		cv.modulate.a = 1.0
+		cv.scale = Vector2(1.18, 1.18))
+	tw.tween_property(cv, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _deck_full() -> void:
+	Audio.ui("ui_error")
+	_need_label.text = "Deck is full! Click a deck card to remove it first."
+	_need_label.add_theme_color_override("font_color", UITheme.SCARLET)
+	var x := _deck_panel.position.x
+	var tw := _deck_panel.create_tween()
+	for k in 4:
+		tw.tween_property(_deck_panel, "position:x", x + (9.0 if k % 2 == 0 else -9.0), 0.04)
+	tw.tween_property(_deck_panel, "position:x", x, 0.04)
+	tw.tween_interval(1.8)
+	tw.tween_callback(_update_deck_info)
+
+
+func _clear_deck() -> void:
+	if deck.is_empty():
+		return
+	for i in range(deck.size() - 1, -1, -1):
+		var cv: Variant = _slot_cards[i]
+		if cv != null and is_instance_valid(cv):
+			var c := cv as CardView
+			c.pivot_offset = c.size * 0.5
+			var tw := c.create_tween().set_parallel()
+			tw.tween_property(c, "scale", Vector2(0.6, 0.6), 0.18).set_delay(0.025 * i)
+			tw.tween_property(c, "modulate:a", 0.0, 0.18).set_delay(0.025 * i)
+	deck.clear()
+	Audio.ui("ui_back")
+	_after_change()
+	await get_tree().create_timer(0.4).timeout
+	if is_inside_tree() and deck.is_empty():
+		_rebuild_deck()
 
 
 ## Builds a balanced deck: team signatures first, then the best owned cards per category.
@@ -565,9 +476,12 @@ func _auto_build() -> void:
 			break
 		picks.append(cid)
 	deck = picks
-	_dirty = true
-	Audio.ui("ui_confirm")
-	_refresh()
+	Audio.play("card_whoosh", -4.0)
+	_rebuild_deck()
+	for i in deck.size():
+		if _slot_cards[i] != null:
+			_pop(_slot_cards[i] as CardView, 0.05 * i)
+	_after_change()
 
 
 func _test_deck() -> void:
@@ -577,6 +491,534 @@ func _test_deck() -> void:
 	var cfg := Session.new_run_config("practice")
 	cfg.deck = deck.duplicate()
 	Session.start(cfg)
+
+
+func _open_upgrades() -> void:
+	if deck.size() == Profile.DECK_SIZE:
+		Profile.set_deck(deck)
+		_dirty = false
+	CardUpgradesScreen.return_to = "deck_builder"
+	Router.goto("card_upgrades")
+
+
+# ================================================================ input, drag & drop
+
+## Click = press and release without moving (so dragging never adds a card by accident).
+func _card_input(e: InputEvent, id: String, cv: CardView, deck_index: int) -> void:
+	if not e is InputEventMouseButton:
+		return
+	var mb := e as InputEventMouseButton
+	if mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
+		_inspect(id)
+		return
+	if mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if mb.pressed:
+		_press_id = id
+		_press_from = deck_index
+		_press_pos = mb.position
+		_inspect(id)
+	elif _press_id == id and _press_from == deck_index and mb.position.distance_to(_press_pos) < CLICK_SLOP:
+		_press_id = ""
+		if deck_index >= 0:
+			_remove_at(deck_index)
+		else:
+			_add_card(id, cv)
+
+
+func _drag_card(_pos: Vector2, id: String, from_index: int) -> Variant:
+	if collection_mode or not Profile.is_card_owned(id):
+		return null
+	_press_id = ""
+	var wrap := Control.new()
+	var pv := CardView.new(id, Profile.card_level(id))
+	pv.set_card(id, Profile.card_level(id))
+	pv.custom_minimum_size = SLOT_SIZE * 0.9
+	pv.size = SLOT_SIZE * 0.9
+	pv.position = -SLOT_SIZE * 0.45
+	pv.rotation = -0.06
+	pv.modulate.a = 0.92
+	wrap.add_child(pv)
+	set_drag_preview(wrap)
+	Audio.play("card_hover", -6.0)
+	return {"deck_card": id, "from": from_index}
+
+
+func _can_drop_slot(_pos: Vector2, data: Variant, _i: int) -> bool:
+	return not collection_mode and data is Dictionary and (data as Dictionary).has("deck_card")
+
+
+func _drop_slot(_pos: Vector2, data: Variant, i: int) -> void:
+	var id: String = data.deck_card
+	var from: int = data.from
+	var target := i
+	if from >= 0:
+		target = mini(i, deck.size() - 1)
+		if target == from:
+			return
+		var tmp: String = deck[target]
+		deck[target] = deck[from]
+		deck[from] = tmp
+	elif id in deck:
+		var k := deck.find(id)
+		target = mini(i, deck.size() - 1)
+		var tmp2: String = deck[target]
+		deck[target] = id
+		deck[k] = tmp2
+	elif i < deck.size():
+		deck[i] = id
+	elif deck.size() < Profile.DECK_SIZE:
+		deck.append(id)
+		target = deck.size() - 1
+	else:
+		_deck_full()
+		return
+	Audio.play("card_draw", -5.0)
+	_rebuild_deck()
+	if _slot_cards[target] != null:
+		_pop(_slot_cards[target] as CardView)
+	_after_change()
+
+
+## Dropping a deck card anywhere on the collection removes it from the deck.
+func _accept_removals(c: Control) -> void:
+	c.set_drag_forwarding(func(_q: Vector2) -> Variant: return null, _can_drop_collection, _drop_collection)
+
+
+func _can_drop_collection(_pos: Vector2, data: Variant) -> bool:
+	return data is Dictionary and int((data as Dictionary).get("from", -1)) >= 0
+
+
+func _drop_collection(_pos: Vector2, data: Variant) -> void:
+	_remove_at(int(data.from))
+
+
+# ================================================================ collection
+
+func _build_collection() -> Control:
+	var p := panel(Color(0.035, 0.06, 0.1, 0.9), Color(1, 1, 1, 0.08), 14)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_accept_removals(p)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 10)
+	p.add_child(vb)
+
+	var row1 := HBoxContainer.new()
+	row1.add_theme_constant_override("separation", 6)
+	vb.add_child(row1)
+	for t in TABS:
+		var key: String = t[0]
+		var b := UITheme.small_button(t[1], UITheme.SCARLET, 22)
+		b.toggle_mode = true
+		b.button_pressed = key == filter_tab
+		b.icon = DB.icon(t[2])
+		b.add_theme_constant_override("icon_max_width", 22)
+		var col: Color = DB.category_color(key) if key in DB.CATEGORY_ORDER else (UITheme.GOLD if key == "signature" else UITheme.OFFWHITE)
+		b.add_theme_color_override("icon_normal_color", col)
+		b.add_theme_color_override("icon_pressed_color", Color.WHITE)
+		b.add_theme_stylebox_override("pressed", UITheme.button_style(UITheme.SCARLET_DEEP, UITheme.SCARLET, 0.0, 2))
+		b.custom_minimum_size = Vector2(0, 46)
+		if key == "signature":
+			b.tooltip_text = "Signature cards belong to a defender, who casts them on the field"
+		b.pressed.connect(func() -> void:
+			filter_tab = key
+			for k in _tab_btns.keys():
+				_tab_btns[k].button_pressed = k == filter_tab
+			Audio.ui("ui_tab")
+			_refresh_collection())
+		row1.add_child(b)
+		_tab_btns[key] = b
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row1.add_child(sp)
+	_new_label = UITheme.label("", 20, Color.WHITE, UITheme.font_body_bold())
+	var ns := UITheme.panel_style(UITheme.SCARLET, Color(0, 0, 0, 0), 0, 8, 0)
+	ns.content_margin_left = 10
+	ns.content_margin_right = 10
+	_new_label.add_theme_stylebox_override("normal", ns)
+	_new_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row1.add_child(_new_label)
+
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 6)
+	vb.add_child(row2)
+	row2.add_child(UITheme.label("RARITY", 18, UITheme.MUTED, UITheme.font_body_bold()))
+	for r in [""] + DB.RARITY_ORDER:
+		var rk: String = r
+		var b := UITheme.small_button("Any" if rk == "" else rk.capitalize(), DB.rarity_color(rk) if rk != "" else UITheme.OFFWHITE, 19)
+		b.toggle_mode = true
+		b.button_pressed = rk == filter_rarity
+		b.add_theme_color_override("font_color", DB.rarity_color(rk) if rk != "" else UITheme.OFFWHITE)
+		b.add_theme_stylebox_override("pressed", UITheme.button_style(Color(0.16, 0.2, 0.3, 1), DB.rarity_color(rk) if rk != "" else UITheme.OFFWHITE, 0.0, 2))
+		b.add_theme_color_override("font_pressed_color", Color.WHITE)
+		b.pressed.connect(func() -> void:
+			filter_rarity = rk
+			for k in _rarity_btns.keys():
+				_rarity_btns[k].button_pressed = k == filter_rarity
+			_refresh_collection())
+		row2.add_child(b)
+		_rarity_btns[rk] = b
+	var sp2 := Control.new()
+	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row2.add_child(sp2)
+	row2.add_child(UITheme.icon_rect("search", 24, UITheme.MUTED))
+	_search = LineEdit.new()
+	_search.placeholder_text = "Search cards (F)"
+	_search.custom_minimum_size = Vector2(230, 0)
+	_search.clear_button_enabled = true
+	_search.text_changed.connect(func(t: String) -> void:
+		search = t.to_lower()
+		_refresh_collection())
+	row2.add_child(_search)
+	var sort := OptionButton.new()
+	for s in SORTS:
+		sort.add_item(s)
+	sort.item_selected.connect(func(i: int) -> void:
+		sort_mode = i
+		_refresh_collection())
+	row2.add_child(sort)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vb.add_child(scroll)
+	_accept_removals(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 12)
+	scroll.add_child(list)
+	var oh := HBoxContainer.new()
+	oh.add_theme_constant_override("separation", 14)
+	_owned_title = UITheme.header("", 30, UITheme.OFFWHITE)
+	oh.add_child(_owned_title)
+	var hint := UITheme.label("Click a card to add or remove it  ·  drag it onto a slot  ·  hover to see details" if not collection_mode
+		else "Hover a card to see its details", 19, UITheme.MUTED, UITheme.font_body_bold())
+	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	oh.add_child(hint)
+	list.add_child(oh)
+	_owned_grid = _make_grid()
+	list.add_child(_owned_grid)
+	_empty_label = UITheme.label("No cards you own match these filters.", 20, UITheme.MUTED)
+	list.add_child(_empty_label)
+
+	var lp := panel(Color(0.02, 0.03, 0.06, 0.8), Color(1, 1, 1, 0.08), 10)
+	_locked_box = lp
+	list.add_child(lp)
+	var lh := HBoxContainer.new()
+	lh.add_theme_constant_override("separation", 12)
+	lp.add_child(lh)
+	lh.add_child(UITheme.icon_rect("lock", 30, UITheme.MUTED))
+	var lv := VBoxContainer.new()
+	lv.add_theme_constant_override("separation", -4)
+	lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_locked_title = UITheme.header("", 28, UITheme.MUTED)
+	lv.add_child(_locked_title)
+	lv.add_child(UITheme.label("Find these in card packs. Win games and level up to earn packs.", 18, UITheme.MUTED, UITheme.font_body_bold()))
+	lh.add_child(lv)
+	var go := UITheme.small_button("Open Card Packs  ▶", UITheme.BLUE, 21)
+	go.custom_minimum_size = Vector2(0, 44)
+	go.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	go.pressed.connect(func() -> void: Router.goto("packs"))
+	lh.add_child(go)
+	_locked_grid = _make_grid()
+	list.add_child(_locked_grid)
+	return p
+
+
+func _make_grid() -> GridContainer:
+	var g := GridContainer.new()
+	_accept_removals(g)
+	g.columns = 8
+	g.add_theme_constant_override("h_separation", 16)
+	g.add_theme_constant_override("v_separation", 14)
+	return g
+
+
+func _matches(cid: String) -> bool:
+	var c := DB.card(cid)
+	if filter_rarity != "" and c.rarity != filter_rarity:
+		return false
+	if filter_tab == "signature":
+		if str(c.get("linked", "")) == "":
+			return false
+	elif filter_tab != "" and c.category != filter_tab:
+		return false
+	if search != "" and not (search in str(c.name).to_lower() or search in DB.card_text(cid, 1).to_lower()):
+		return false
+	return true
+
+
+func _sorted(ids: Array) -> Array:
+	ids.sort_custom(func(a: String, b: String) -> bool:
+		var ca := DB.card(a)
+		var cb := DB.card(b)
+		match sort_mode:
+			1:
+				return int(ca.cost) < int(cb.cost) if int(ca.cost) != int(cb.cost) else str(ca.name) < str(cb.name)
+			2:
+				return str(ca.name) < str(cb.name)
+			3:
+				var la := Profile.card_level(a)
+				var lb := Profile.card_level(b)
+				return la > lb if la != lb else str(ca.name) < str(cb.name)
+		var ra := DB.RARITY_ORDER.find(ca.rarity)
+		var rb := DB.RARITY_ORDER.find(cb.rarity)
+		return ra > rb if ra != rb else str(ca.name) < str(cb.name))
+	return ids
+
+
+func _refresh_collection() -> void:
+	for g in [_owned_grid, _locked_grid]:
+		for c in g.get_children():
+			c.queue_free()
+	_col_views.clear()
+	_pills.clear()
+	var owned: Array = []
+	var locked: Array = []
+	var total_owned := 0
+	for cid in DB.card_order:
+		if Profile.is_card_owned(cid):
+			total_owned += 1
+		if not _matches(cid):
+			continue
+		if Profile.is_card_owned(cid):
+			owned.append(cid)
+		else:
+			locked.append(cid)
+	for cid in _sorted(owned):
+		_owned_grid.add_child(_make_grid_card(cid))
+	for cid in _sorted(locked):
+		_locked_grid.add_child(_make_grid_card(cid))
+	_owned_title.text = "YOUR CARDS  %d / %d" % [total_owned, DB.card_order.size()]
+	_empty_label.visible = owned.is_empty()
+	_locked_box.visible = not locked.is_empty()
+	_locked_title.text = "NOT COLLECTED YET  (%d)" % locked.size()
+	_update_new_label()
+
+
+func _make_grid_card(cid: String) -> Control:
+	var cell := Control.new()
+	cell.custom_minimum_size = GRID_CARD + Vector2(0, 12)
+	cell.mouse_filter = Control.MOUSE_FILTER_PASS
+	var owned := Profile.is_card_owned(cid)
+	var cv := CardView.new(cid, Profile.card_level(cid))
+	cv.set_card(cid, Profile.card_level(cid))
+	cv.custom_minimum_size = GRID_CARD
+	cv.size = GRID_CARD
+	cv.owned = owned
+	cv.show_level = owned
+	cv.selected = cid == selected
+	cv.count_badge = _badge_for(cid)
+	cv.gui_input.connect(func(e: InputEvent) -> void: _card_input(e, cid, cv, -1))
+	cv.hovered.connect(func(_c: CardView, on: bool) -> void:
+		if on:
+			_inspect(cid))
+	cv.set_drag_forwarding(_drag_card.bind(cid, -1), _can_drop_collection, _drop_collection)
+	_accept_removals(cell)
+	cell.add_child(cv)
+	_col_views[cid] = cv
+	if owned and not collection_mode:
+		var pill := UITheme.label("IN DECK", 17, Color(0.02, 0.1, 0.05), UITheme.font_body_bold())
+		pill.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pill.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		pill.add_theme_stylebox_override("normal", UITheme.panel_style(UITheme.GREEN, Color(0.02, 0.08, 0.04, 0.9), 2, 12, 0))
+		pill.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+		pill.custom_minimum_size = Vector2(92, 26)
+		pill.size = pill.custom_minimum_size
+		pill.position = Vector2((GRID_CARD.x - 92.0) * 0.5, GRID_CARD.y - 14.0)
+		pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pill.visible = cid in deck
+		cell.add_child(pill)
+		_pills[cid] = pill
+	return cell
+
+
+func _badge_for(cid: String) -> String:
+	if not Profile.is_card_owned(cid):
+		return ""
+	if bool(Profile.data.cards.get(cid, {}).get("fresh", false)):
+		return "NEW"
+	if Profile.can_upgrade_card(cid):
+		return "▲"
+	return ""
+
+
+## Updates the IN DECK pills without rebuilding the grid (keeps hover state).
+func _update_marks() -> void:
+	for cid in _pills.keys():
+		var pill: Label = _pills[cid]
+		var on: bool = cid in deck
+		if pill.visible != on:
+			pill.visible = on
+			if on:
+				pill.pivot_offset = pill.size * 0.5
+				pill.scale = Vector2(0.4, 0.4)
+				pill.create_tween().tween_property(pill, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _update_new_label() -> void:
+	var n := Profile.fresh_card_count()
+	_new_label.text = "%d NEW CARD%s" % [n, "" if n == 1 else "S"]
+	_new_label.visible = n > 0
+
+
+func _inspect(id: String) -> void:
+	if bool(Profile.data.cards.get(id, {}).get("fresh", false)):
+		Profile.mark_card_seen(id)
+		if _col_views.has(id):
+			var v: CardView = _col_views[id]
+			v.count_badge = _badge_for(id)
+			v.refresh()
+		_update_new_label()
+	if id == selected:
+		return
+	if _col_views.has(selected):
+		var old: CardView = _col_views[selected]
+		old.selected = false
+		old.refresh()
+	selected = id
+	if _col_views.has(id):
+		var cur: CardView = _col_views[id]
+		cur.selected = true
+		cur.refresh()
+	_refresh_detail()
+
+
+# ================================================================ inspector
+
+func _build_inspector() -> Control:
+	var p := panel(Color(0.04, 0.065, 0.11, 0.95), Color(1, 1, 1, 0.1), 16)
+	p.custom_minimum_size = Vector2(450, 0)
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	p.add_child(sc)
+	_detail = VBoxContainer.new()
+	_detail.custom_minimum_size = Vector2(410, 0)
+	_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_detail.add_theme_constant_override("separation", 10)
+	sc.add_child(_detail)
+	return p
+
+
+func _refresh_detail() -> void:
+	for c in _detail.get_children():
+		c.queue_free()
+	if selected == "":
+		return
+	var c := DB.card(selected)
+	var lvl := Profile.card_level(selected)
+	var owned := Profile.is_card_owned(selected)
+
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 14)
+	_detail.add_child(top)
+	var big := CardView.new(selected, lvl)
+	big.set_card(selected, lvl)
+	big.custom_minimum_size = Vector2(180, 252)
+	big.owned = owned
+	big.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_child(big)
+	var stats := VBoxContainer.new()
+	stats.add_theme_constant_override("separation", 6)
+	stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stats.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_child(stats)
+	stats.add_child(_stat("energy", "ENERGY COST", str(int(c.cost)), UITheme.ENERGY))
+	stats.add_child(_stat("cooldown", "COOLDOWN", ("%ds" % int(c.cooldown)) if float(c.cooldown) > 0 else "None", UITheme.OFFWHITE))
+	stats.add_child(_stat("target", "TARGET", str(TARGET_TEXT.get(str(c.target), str(c.target))), UITheme.OFFWHITE))
+	stats.add_child(_stat(str(c.category), str(c.category).to_upper(), str(c.rarity).capitalize(), DB.rarity_color(c.rarity)))
+	if owned:
+		stats.add_child(_stat("upgrade", "LEVEL", "%d / %d" % [lvl, DB.card_max_level], UITheme.GOLD))
+
+	var nm := UITheme.title(str(c.name).to_upper(), 40)
+	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_detail.add_child(nm)
+	var desc := UITheme.label(DB.card_text(selected, lvl), 22, UITheme.OFFWHITE)
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_detail.add_child(desc)
+
+	var linked: String = c.get("linked", "")
+	if linked != "":
+		var acc := DB.defender_accent(linked)
+		var lrow := HBoxContainer.new()
+		lrow.add_theme_constant_override("separation", 10)
+		lrow.add_child(portrait_rect(linked, 40, acc))
+		var ll := UITheme.label("Signature card of %s. %s casts it with their own power." % [DB.defender(linked).name, DB.defender(linked).name],
+			18, acc.lightened(0.35), UITheme.font_body_bold())
+		ll.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lrow.add_child(ll)
+		_detail.add_child(lrow)
+
+	var combos := DB.combos_for(selected)
+	if not combos.is_empty():
+		_detail.add_child(UITheme.hsep())
+		var ch := HBoxContainer.new()
+		ch.add_theme_constant_override("separation", 8)
+		ch.add_child(UITheme.icon_rect("synergy", 24, UITheme.GOLD))
+		ch.add_child(UITheme.header("COMBOS", 26, UITheme.GOLD))
+		_detail.add_child(ch)
+		for cb in combos:
+			var other := DB.card(cb.card)
+			var in_deck: bool = cb.card in deck
+			var row := VBoxContainer.new()
+			row.add_theme_constant_override("separation", -2)
+			var head := UITheme.label("+ %s%s" % [other.name, "  (in your deck)" if in_deck else ""], 19,
+				UITheme.GREEN if in_deck else DB.category_color(other.category).lightened(0.3), UITheme.font_body_bold())
+			row.add_child(head)
+			var t := UITheme.label(str(cb.text), 17, UITheme.MUTED)
+			t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			row.add_child(t)
+			_detail.add_child(row)
+
+	_detail.add_child(UITheme.hsep())
+	if not owned:
+		var lk := HBoxContainer.new()
+		lk.add_theme_constant_override("separation", 10)
+		lk.add_child(UITheme.icon_rect("lock", 26, UITheme.SCARLET))
+		var ll2 := UITheme.label("Not collected yet. Find it in card packs.", 20, UITheme.SCARLET, UITheme.font_body_bold())
+		ll2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ll2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lk.add_child(ll2)
+		_detail.add_child(lk)
+		var go := UITheme.small_button("Open Card Packs  ▶", UITheme.BLUE, 22)
+		go.custom_minimum_size = Vector2(0, 46)
+		go.pressed.connect(func() -> void: Router.goto("packs"))
+		_detail.add_child(go)
+		return
+	if collection_mode:
+		return
+	var in_deck := selected in deck
+	var id := selected
+	var btn := UITheme.small_button("Remove from Deck" if in_deck else "Add to Deck", UITheme.SCARLET if in_deck else UITheme.GREEN, 24)
+	btn.custom_minimum_size = Vector2(0, 50)
+	btn.disabled = not in_deck and deck.size() >= Profile.DECK_SIZE
+	btn.pressed.connect(func() -> void:
+		if id in deck:
+			_remove_at(deck.find(id))
+		elif _col_views.has(id):
+			_add_card(id, _col_views[id]))
+	_detail.add_child(btn)
+	if Profile.can_upgrade_card(selected):
+		var up := UITheme.label("▲  Ready to upgrade: open UPGRADE CARDS", 18, UITheme.GOLD, UITheme.font_body_bold())
+		_detail.add_child(up)
+
+
+func _stat(icon: String, title: String, value: String, col: Color) -> Control:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	var ic := UITheme.icon_rect(icon, 26, col)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(ic)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", -6)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(UITheme.label(title, 15, UITheme.MUTED, UITheme.font_body_bold()))
+	var v := UITheme.label(value, 22, col, UITheme.font_body_bold())
+	v.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(v)
+	hb.add_child(vb)
+	return hb
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -591,5 +1033,5 @@ func go_back() -> void:
 	if _dirty and deck.size() == Profile.DECK_SIZE:
 		Profile.set_deck(deck)
 	elif _dirty:
-		Router.toast("Deck not saved: it needs exactly 8 cards.", "warn")
+		Router.toast("Deck not saved: it needs all 8 cards. Your last full deck is kept.", "warn")
 	super.go_back()

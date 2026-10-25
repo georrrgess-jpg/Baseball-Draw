@@ -95,6 +95,10 @@ func _run() -> void:
 		await _test_tutorial()
 		_finish()
 		return
+	if "--ui-test-section=deck" in OS.get_cmdline_user_args():
+		await _test_deck_menus()
+		_finish()
+		return
 	Profile.data.flags["battle_help"] = true
 	Profile.data.flags["battle_tutorial_done"] = true
 	var cfg := Session.new_run_config("quick")
@@ -301,6 +305,7 @@ func _run() -> void:
 			await _click(_button_center(back))
 			_check(await _wait_scene("main_menu"), "BACK returns to the main menu from %s" % pair[1])
 	await _test_packs()
+	await _test_deck_menus()
 	await _test_tutorial()
 	_finish()
 
@@ -362,6 +367,81 @@ func _test_packs() -> void:
 		_check(ps.state == "idle", "pack screen returns to the next pack")
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+## 15. Cards & Deck: clicking removes/adds cards (a full deck saves automatically), then
+## UPGRADE CARDS opens the Card Upgrades screen where a card with enough copies levels up.
+func _test_deck_menus() -> void:
+	for cid in ["splitter", "knuckleball", "changeup"]:
+		Profile.grant_card(cid)
+	Session.menu_tab = "deck"
+	Router.goto("deck_builder")
+	_check(await _wait_scene("deck_builder"), "Cards & Deck opens")
+	await _wait(1.0)
+	var db: Node = get_tree().current_scene
+	var saved: Array = Profile.data.deck.duplicate()
+	_check(db._slots.size() == Profile.DECK_SIZE and db.deck.size() == Profile.DECK_SIZE, "deck shows 8 filled slots")
+	var first: CardView = db._slot_cards[0]
+	var removed := first.card_id
+	await _click(_ctl_center(first))
+	await _wait(0.5)
+	_check(db.deck.size() == Profile.DECK_SIZE - 1 and not removed in db.deck, "clicking a deck card removes it")
+	_check(Profile.data.deck == saved, "an incomplete deck is not saved")
+	_check("1 more" in str(db._need_label.text), "deck asks for one more card ('%s')" % db._need_label.text)
+	var scroll: Control = db._owned_grid.get_parent().get_parent()
+	var add_id := ""
+	for cid in db._col_views.keys():
+		var v: CardView = db._col_views[cid]
+		if Profile.is_card_owned(cid) and not cid in db.deck and scroll.get_global_rect().encloses(v.get_global_rect()):
+			add_id = cid
+			break
+	_check(add_id != "", "a visible owned card is outside the deck")
+	if add_id != "":
+		await _click(_ctl_center(db._col_views[add_id]))
+		await _wait(0.8)
+		_check(db.deck.size() == Profile.DECK_SIZE and add_id in db.deck, "clicking a collection card adds it to the deck")
+		_check(Profile.data.deck == db.deck, "the full deck is saved automatically")
+		_check(db._pills.has(add_id) and db._pills[add_id].visible, "the added card is marked IN DECK")
+	var cid_up: String = Profile.data.deck[0]
+	Profile.data.cards[cid_up].copies = 20
+	Profile.data.coins = maxi(int(Profile.data.coins), 5000)
+	var upb := _find_button(db, "UPGRADE CARDS  ▶")
+	_check(upb != null, "Cards & Deck has an UPGRADE CARDS button")
+	if upb == null:
+		return
+	await _click(_button_center(upb))
+	_check(await _wait_scene("card_upgrades"), "UPGRADE CARDS opens the card upgrades screen")
+	await _wait(1.0)
+	var us: Node = get_tree().current_scene
+	_check(us.ready_count() >= 1, "upgrade screen counts ready cards (%d)" % us.ready_count())
+	us._select(cid_up)
+	await _wait(0.3)
+	var lvl := Profile.card_level(cid_up)
+	var coins := int(Profile.data.coins)
+	var big := _find_button(us, "UPGRADE TO LEVEL %d" % (lvl + 1))
+	_check(big != null and not big.disabled, "UPGRADE button is enabled for %s" % cid_up)
+	if big:
+		await _click(_button_center(big))
+		await _wait(0.3)
+		_check(Profile.card_level(cid_up) == lvl + 1, "UPGRADE raises %s to level %d" % [cid_up, Profile.card_level(cid_up)])
+		_check(int(Profile.data.coins) < coins, "the upgrade spends coins (%d -> %d)" % [coins, int(Profile.data.coins)])
+		for i in 60:
+			await _wait(0.1)
+			if not us._busy:
+				break
+		_check(not us._busy and us.selected == cid_up, "upgrade animation finishes (busy %s, selected %s)" % [us._busy, us.selected])
+	var back := _find_button(us, "◀  BACK")
+	_check(back != null, "card upgrades has a BACK button")
+	if back:
+		await _click(_button_center(back))
+		_check(await _wait_scene("deck_builder"), "BACK from Card Upgrades returns to Cards & Deck")
+	await _wait(0.5)
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+func _ctl_center(c: Control) -> Vector2:
+	return get_viewport().get_final_transform() * c.get_global_rect().get_center()
 
 
 ## 14. Guided first game: pop-ups advance on NEXT and on the player's actions.
