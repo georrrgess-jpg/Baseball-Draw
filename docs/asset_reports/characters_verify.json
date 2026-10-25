@@ -3,67 +3,67 @@
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.0059
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0064
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0334
+   "min_z": -0.0118
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0035
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.003
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0174
+   "min_z": -0.0158
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.0061
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.007
+   "min_z": -0.0055
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.0074
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0054
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0063
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0047
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0038
+   "min_z": -0.0174
   }
  },
  "armored": {
@@ -131,67 +131,67 @@
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.0063
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0066
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0362
+   "min_z": -0.0213
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0036
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.003
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.018
+   "min_z": -0.0173
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.0065
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0072
+   "min_z": -0.006
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.0084
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0057
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0064
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0049
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0038
+   "min_z": -0.019
   }
  },
  "captain": {
@@ -259,67 +259,67 @@
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.0063
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0072
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0325
+   "min_z": -0.0116
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0038
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0035
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0179
+   "min_z": -0.0155
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.0065
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0077
+   "min_z": -0.0054
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.009
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0058
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0068
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0056
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0042
+   "min_z": -0.0171
   }
  },
  "grand_slammer": {
@@ -387,67 +387,67 @@
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.0096
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0108
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0305
+   "min_z": -0.0106
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0059
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0049
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0164
+   "min_z": -0.0149
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.01
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0123
+   "min_z": -0.0052
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.0134
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0087
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.01
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0079
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0075
+   "min_z": -0.0163
   }
  },
  "iron_slugger": {
@@ -515,67 +515,67 @@
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.0062
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0063
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0348
+   "min_z": -0.0138
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0036
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0031
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0183
+   "min_z": -0.0168
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.0064
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.007
+   "min_z": -0.0058
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.0085
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0057
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0066
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0049
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0039
+   "min_z": -0.0184
   }
  },
  "jumper": {
@@ -643,201 +643,201 @@
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.005
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0058
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0333
+   "min_z": -0.012
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0032
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0026
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0206
+   "min_z": -0.021
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.0052
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0063
+   "min_z": -0.0056
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.007
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0046
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0068
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0042
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0035
+   "min_z": -0.0119
   }
  },
  "maya": {
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.0048
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0057
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0314
+   "min_z": -0.0257
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0031
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0026
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0169
+   "min_z": -0.0151
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.005
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0063
+   "min_z": -0.0053
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.0071
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0044
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0065
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0042
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0036
+   "min_z": -0.0166
   }
  },
  "nova": {
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.006
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0065
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0318
+   "min_z": -0.0114
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0035
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.003
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0165
+   "min_z": -0.0152
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.0063
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0071
+   "min_z": -0.0053
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.0075
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0055
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0062
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0048
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0037
+   "min_z": -0.0167
   }
  },
  "phantom_captain": {
@@ -905,67 +905,67 @@
   "catch": {
    "foot_slide": 0.0,
    "length": 0.6,
-   "min_z": -0.0063
+   "min_z": -0.0
   },
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0068
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0336
+   "min_z": -0.0159
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": -0.0037
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0032
+   "min_z": -0.0
   },
   "pitch": {
    "length": 1.4,
-   "min_z": -0.0143
+   "min_z": -0.0122
   },
   "ready": {
    "foot_slide": 0.0,
    "length": 1.6,
    "loop_seam": 0.0,
-   "min_z": -0.0065
+   "min_z": -0.0
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0074
+   "min_z": -0.0055
   },
   "special": {
    "length": 1.2,
-   "min_z": -0.008
+   "min_z": -0.0
   },
   "stunned": {
    "foot_slide": 0.0,
    "length": 1.2,
    "loop_seam": 0.0,
-   "min_z": -0.0058
+   "min_z": -0.0
   },
   "throw": {
    "length": 0.75,
-   "min_z": -0.0065
+   "min_z": -0.0
   },
   "victory": {
    "foot_slide": 0.0,
    "length": 2.0,
    "loop_seam": 0.0,
-   "min_z": -0.0051
+   "min_z": -0.0
   },
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.004
+   "min_z": -0.0222
   }
  },
  "runner": {

@@ -43,14 +43,15 @@ def render_portrait(cid, info, path, res=512, samples=96):
         target = eye + Vector((0, 0, -0.22 * h))
         yaw = 24.0
     else:
-        frame_h = 2.05 * h
-        target = eye + Vector((0, 0, -0.30 * h))
-        yaw = 30.0
+        # stylised defenders: tight head-and-shoulders, slightly low camera
+        frame_h = 1.62 * h
+        target = eye + Vector((0, 0, -0.13 * h))
+        yaw = 27.0
     lens = 85.0
     fov = 2 * math.atan(18.0 / lens)
     dist = (frame_h / 2) / math.tan(fov / 2)
     a = math.radians(yaw)
-    el = math.radians(6)
+    el = math.radians(6 if enemy else 2)
     cam_pos = target + Vector((-math.sin(a) * math.cos(el), -math.cos(a) * math.cos(el),
                                math.sin(el))) * dist
     render.camera(cam_pos, target, lens=lens)
@@ -81,6 +82,15 @@ def _portrait_lights(c, h, cam_yaw, enemy):
                            math.sin(e))) * dist
     d = 9.0 * h
     k = (h / 0.28) ** 2
+    if not enemy:
+        # defenders: warmer, punchier key + soft cool fill + bounce from below
+        _light("Key", at(-38, 26, d), c, 210 * k, 3.0 * h * 4, (1.0, 0.94, 0.86))
+        _light("Fill", at(60, 6, d), c, 38 * k, 4.0 * h * 4, (0.80, 0.87, 1.0))
+        _light("Bounce", at(10, -35, d), c, 14 * k, 4.0 * h * 4, (1.0, 0.92, 0.85))
+        _light("RimL", at(150, 22, d), c, 360 * k, 1.4 * h * 4, (0.80, 0.90, 1.0))
+        _light("RimR", at(-150, 18, d), c, 300 * k, 1.4 * h * 4, (1.0, 0.86, 0.72))
+        _light("Top", at(0, 80, d), c, 30 * k, 3.0 * h * 4, (1.0, 1.0, 1.0))
+        return
     _light("Key", at(-40, 30, d), c, 170 * k, 3.0 * h * 4, (1.0, 0.95, 0.88))
     _light("Fill", at(55, 8, d), c, 45 * k, 4.0 * h * 4, (0.82, 0.88, 1.0))
     rim_e = 330 if not enemy else 480
