@@ -167,8 +167,13 @@ func _build_materials() -> void:
 	sphere.is_hemisphere = true
 	sphere.radial_segments = 32
 	sphere.rings = 10
-	var shard := PrismMesh.new()
-	shard.size = Vector3(1.0, 1.0, 0.85)
+	var shard := CylinderMesh.new()
+	shard.top_radius = 0.0
+	shard.bottom_radius = 0.5
+	shard.height = 1.0
+	shard.radial_segments = 5
+	shard.rings = 1
+	shard.cap_top = false
 	_meshes = {"plane": plane, "quad": quad, "cyl": cyl, "cone": cone, "sphere": sphere, "shard": shard,
 		"crystal": _crystal_mesh()}
 
@@ -729,7 +734,8 @@ func shockwave(pos: Vector3, radius: float, color: Color, time := 0.45, thicknes
 	var mi := _ground_node("ring", pos, radius, 0.07)
 	mi.set_instance_shader_parameter("color", Color(color.r, color.g, color.b, color.a))
 	mi.set_instance_shader_parameter("mode", 4.0 if implode else 0.0)
-	mi.set_instance_shader_parameter("params", Vector4(thickness, 0.25, 0.0, 0.0))
+	# Big waves keep a thin wake so they do not wash out the whole field.
+	mi.set_instance_shader_parameter("params", Vector4(thickness, 0.25 if radius < 8.0 else 0.07, 0.0, 0.0))
 	mi.set_instance_shader_parameter("progress", 0.0)
 	animate(mi, time, func(n: Node3D, k: float) -> void: (n as MeshInstance3D).set_instance_shader_parameter("progress", k), delay)
 

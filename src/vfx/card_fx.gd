@@ -571,7 +571,9 @@ func field_vision(dur: float, bonus: float) -> void:
 	var col := Color(1.0, 0.88, 0.35)
 	for df in battle.defenders:
 		var rng: float = df.s_range * (1.0 + maxf(df.dyn_range, bonus))
-		vfx.ground_fx("radar", _flat(df.global_position), rng, Color(col, 0.5), Color.WHITE, 1.3)
+		# A thin ring sweeping out to the new throwing range.
+		vfx.shockwave(_flat(df.global_position), rng, Color(col, 0.85), 0.9, 0.025)
+		vfx.ground_fx("radar", _flat(df.global_position), 2.2, Color(col, 0.6), Color.WHITE, 1.2)
 		vfx.glyph(df.model.head_position() + Vector3(0, 1.0, 0), 10, 1.3, col, 1.2, randf() * 0.15, 0.6)
 		defender_aura(df, Color(col, 0.6), dur, 1.15)
 		vfx.burst("magic", df.model.head_position(), col)
@@ -596,7 +598,7 @@ func rally_cry(dur: float) -> void:
 	var col := Color(1.0, 0.82, 0.3)
 	var c := Field.HOME + Vector3(0, 1.5, 0)
 	for i in 3:
-		vfx.sphere_pulse(c, 5.0 + i * 3.0, Color(col, 0.7), 0.7, i * 0.16)
+		vfx.sphere_pulse(c, 5.0 + i * 3.0, Color(col, 0.45), 0.6, i * 0.16)
 		vfx.shockwave(Field.HOME, 18.0 + i * 8.0, col, 0.9, 0.04, i * 0.16)
 	vfx.glyph(c + Vector3(0, 2.0, 0), 9, 2.4, col, 1.0)
 	for df in battle.defenders:

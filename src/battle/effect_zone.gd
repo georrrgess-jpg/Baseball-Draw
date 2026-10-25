@@ -62,7 +62,7 @@ func _start_frost() -> void:
 		var a := TAU * i / n + randf_range(-0.2, 0.2)
 		var d := radius * (randf_range(0.72, 0.95) if i < 8 else randf_range(0.2, 0.55))
 		var pos := c + Vector3(cos(a) * d, 0.0, sin(a) * d)
-		var sz := Vector3(randf_range(0.45, 0.7), randf_range(1.1, 2.1), randf_range(0.45, 0.65)) * (1.0 if i < 8 else 0.75)
+		var sz := Vector3(randf_range(0.8, 1.15), randf_range(1.4, 2.5), randf_range(0.8, 1.1)) * (1.0 if i < 8 else 0.75)
 		var tilt := Vector3(cos(a) * randf_range(0.15, 0.45), randf() * TAU, sin(a) * randf_range(0.15, 0.45))
 		var shard := vfx.make_owned("ice_shard")
 		add_child(shard)

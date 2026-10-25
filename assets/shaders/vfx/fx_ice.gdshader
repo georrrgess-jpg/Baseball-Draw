@@ -26,6 +26,6 @@ void fragment() {
 	ROUGHNESS = 0.08;
 	METALLIC = 0.0;
 	SPECULAR = 0.9;
-	EMISSION = tint.rgb * (0.25 + fres * 1.6) + vec3(0.7, 0.95, 1.0) * edge * 2.5;
-	ALPHA = clamp(0.5 + fres * 0.45 + edge, 0.0, 1.0) * tint.a;
+	EMISSION = tint.rgb * (0.55 + fres * 2.4) + vec3(0.7, 0.95, 1.0) * edge * 2.5;
+	ALPHA = clamp(0.68 + fres * 0.32 + edge, 0.0, 1.0) * tint.a;
 }

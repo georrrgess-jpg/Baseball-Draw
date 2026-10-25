@@ -30,7 +30,7 @@ void fragment() {
 		float k = build;
 		float life = pow(max(1.0 - k, 0.0), 1.6);
 		float bands = 0.6 + 0.4 * sin(v_dir.y * 18.0 - TIME * 10.0);
-		ALBEDO = color.rgb * (fres * 2.2 + 0.08) * bands * life * strength;
+		ALBEDO = color.rgb * (fres * 2.2 + 0.08) * bands * life * strength * color.a;
 	} else {
 		float az = atan(v_dir.z, v_dir.x);
 		float el = asin(clamp(v_dir.y, -1.0, 1.0)) / 1.5707963;
