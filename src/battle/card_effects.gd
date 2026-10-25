@@ -6,6 +6,10 @@ extends RefCounted
 
 var battle: Battle
 
+## Cards that resolve instantly (no caster wind-up): they get a cast acknowledgement pop.
+const DIRECT_CARDS := ["grand_slam_barrage", "shadow_change", "time_out", "changeup", "frost_field", "wall_of_dirt",
+	"base_shield", "bunt_trap", "field_vision", "diamond_aura", "rally_cry", "magnet_glove", "seventh_inning_stretch"]
+
 
 func _init(p_battle: Battle) -> void:
 	battle = p_battle
@@ -58,6 +62,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 	var power: float = info.power
 	var point: Vector3 = target.get("point", Field.HOME)
 	Audio.play("card_play", -4.0)
+	if card_id in DIRECT_CARDS:
+		fx.cast_ack(card_id, _ack_point(card_id, target, point))
 	match card_id:
 		"heat_wave":
 			var origin := caster.global_position if caster else Field.HOME
@@ -71,6 +77,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				fx.heat_wave(origin, end, width, 1.4)
 				Audio.play("fire_cast")
 				battle.shake(0.2)
+				var hits := 0
 				for e: Enemy in battle.enemies.duplicate():
 					if not e.targetable():
 						continue
@@ -78,9 +85,12 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 					var s := rel.dot(dir)
 					var lat := absf(rel.dot(Vector3(-dir.z, 0, dir.x)))
 					if s >= -0.5 and s <= length and lat <= width * 0.5 + 0.4:
+						hits += 1
 						battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "fire", "card": card_id})
 						if e.alive:
 							e.apply_burn(p(card_id, "burn_dps", level) * power, p(card_id, "burn_time", level), caster)
+				if hits == 0:
+					fx.fizzle(origin.lerp(end, 0.6))
 			_cast(caster, run_fire, point, "special", card_id)
 
 		"power_throw":
@@ -88,8 +98,10 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			if e == null:
 				return
 			var df := nearest_thrower(e.global_position)
+			var last_pos := e.center()
 			var go := func() -> void:
 				if not is_instance_valid(e) or not e.targetable():
+					fx.lost_throw(_origin(df), last_pos, Color(1.0, 0.85, 0.4))
 					return
 				battle.projectiles.launch(_origin(df), e, 42.0, {"source": df, "damage": p(card_id, "damage", level),
 					"knockback": p(card_id, "knockback", level), "accuracy": 200.0, "big": true, "color": Color(1.0, 0.85, 0.4), "crit": true,
@@ -105,6 +117,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 					func(at: Vector3) -> void:
 						fx.splitter_burst(at, point)
 						var victims := battle.enemies_in_radius(point, float(DB.card(card_id).get("radius", 5.0)))
+						if victims.is_empty():
+							fx.fizzle(point)
 						var n := int(p(card_id, "balls", level)) + (1 if battle.buff_active("twin_play") else 0)
 						for i in n:
 							if victims.is_empty():
@@ -160,6 +174,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				var last := prev
 				battle.get_tree().create_timer(chain.size() * 0.08 + 0.1, false).timeout.connect(func() -> void:
 					Audio.play("lightning_zap", -4.0)
+					if targets.is_empty():
+						fx.fizzle(last, "NO RUNNERS")
 					for e: Enemy in targets:
 						if is_instance_valid(e) and e.targetable():
 							fx.relay_strike(last, e.center())
@@ -174,6 +190,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 					Audio.play("boss_slam", -6.0)
 					battle.shake(0.35)
 					fx.power_catch_impact(point, r)
+					if battle.enemies_in_radius(point, r).is_empty():
+						fx.fizzle(point)
 					for e: Enemy in battle.enemies_in_radius(point, r):
 						battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "slam", "card": card_id})
 						if e.alive:
@@ -185,8 +203,11 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			var e: Enemy = target.get("enemy")
 			if e == null:
 				return
+			var last_pos := e.center()
 			var go := func() -> void:
 				if not is_instance_valid(e) or not e.targetable():
+					fx.chain_arc(_origin(caster), last_pos, Color(1.0, 0.92, 0.4))
+					fx.fizzle(last_pos, "NO TARGET")
 					return
 				Audio.play("lightning_zap")
 				var from := _origin(caster)
@@ -204,6 +225,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				battle.projectiles.launch_at(_origin(df), point + Vector3(0, 0.5, 0), 24.0, {"color": Color(0.5, 0.6, 1.0), "arc_mult": 1.6, "trail": "spiral"}, func(_at: Vector3) -> void:
 					fx.curveball_impact(point, r)
 					Audio.play("shadow_cast", -8.0)
+					if battle.enemies_in_radius(point, r).is_empty():
+						fx.fizzle(point)
 					for e: Enemy in battle.enemies_in_radius(point, r):
 						var dur := p(card_id, "duration", level) * control_mult()
 						e.apply_slow("curveball", p(card_id, "slow", level), dur)
@@ -216,8 +239,10 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			if e == null:
 				return
 			var df := nearest_thrower(e.global_position)
+			var last_pos := e.center()
 			var go := func() -> void:
 				if not is_instance_valid(e) or not e.targetable():
+					fx.lost_throw(_origin(df), last_pos, Color(0.8, 0.6, 1.0), "wobble")
 					return
 				battle.projectiles.launch_at(_origin(df), e.center(), 18.0, {"color": Color(0.8, 0.6, 1.0), "arc_mult": 1.2, "trail": "wobble"}, func(at: Vector3) -> void:
 					fx.ball_impact("knuckle", at, Color(0.8, 0.6, 1.0))
@@ -227,13 +252,15 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 							e.apply_confuse(p(card_id, "confuse", level) * control_mult())
 							battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "???", Color(0.8, 0.6, 1.0), 0.7, 0.6)
 						elif e.is_boss:
-							battle.vfx.text_popup(e.center() + Vector3(0, 1.2, 0), "IMMUNE", Color(0.8, 0.8, 0.8), 0.65, 0.6))
+							fx.fizzle(e.center() + Vector3(0, 0.6, 0), "IMMUNE"))
 			_cast(df, go, e.global_position, "throw", card_id)
 
 		"shadow_change":
 			var r := float(DB.card(card_id).get("radius", 5.0))
 			Audio.play("shadow_cast")
 			fx.shadow_change(point, r)
+			if battle.enemies_in_radius(point, r).is_empty():
+				fx.fizzle(point)
 			for e: Enemy in battle.enemies_in_radius(point, r):
 				fx.shadow_victim(e)
 				battle.deal_damage(e, p(card_id, "damage", level), {"kind": "shadow", "card": card_id})
@@ -264,11 +291,16 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			var e: Enemy = target.get("enemy")
 			if e == null:
 				return
+			var last_pos := e.center()
 			var go := func() -> void:
 				if not is_instance_valid(e) or not e.targetable():
+					fx.pickoff_strike(_origin(caster), last_pos, false)
+					fx.fizzle(last_pos, "NO TARGET")
 					return
 				var picked: bool = not e.is_boss and e.hp <= e.max_hp * p(card_id, "threshold", level) * power
 				fx.pickoff_strike(_origin(caster), e.center(), picked)
+				if not picked:
+					fx.fizzle(e.center() + Vector3(0, 0.6, 0), "IMMUNE" if e.is_boss else "SAFE!")
 				if picked:
 					battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "PICKED OFF!", Color(0.2, 1.0, 0.8), 0.8, 0.7)
 					e.die({"source": caster, "kind": "pickoff"})
@@ -287,6 +319,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 					root += p(card_id, "home_bonus", level)
 				Audio.play("magnet_pull", -4.0)
 				fx.lockdown(point, r, root)
+				if battle.enemies_in_radius(point, r).is_empty():
+					fx.fizzle(point)
 				for e: Enemy in battle.enemies_in_radius(point, r):
 					e.apply_root(root)
 					e.apply_slow("lockdown", p(card_id, "slow", level), root + p(card_id, "slow_time", level))
@@ -305,6 +339,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 
 		"base_shield":
 			fx.base_shield()
+			if battle.run.shields >= 3:
+				fx.fizzle(Field.HOME + Vector3(0, 2.0, 0), "SHIELDS FULL")
 			battle.add_shield(int(p(card_id, "shields", level)))
 
 		"bunt_trap":
@@ -317,6 +353,8 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				fx.diving_catch(from, point, r)
 				battle.vfx.shockwave(point, r, Color(1.0, 0.45, 0.7), 0.35)
 				Audio.play("glove_catch")
+				if battle.enemies_in_radius(point, r).is_empty():
+					fx.fizzle(point)
 				for e: Enemy in battle.enemies_in_radius(point, r):
 					battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "throw", "card": card_id})
 					if e.alive:
@@ -364,18 +402,23 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			Audio.play("magnet_pull")
 			var pulled := battle.enemies_in_radius(point, r)
 			fx.magnet(point, r, p(card_id, "pull_time", level) * control_mult() + 0.4, pulled)
+			if pulled.is_empty():
+				fx.fizzle(point)
 			for e: Enemy in pulled:
 				e.apply_magnet(point, p(card_id, "pull_time", level) * control_mult() + 0.4)
 
 		"sky_hook":
 			var lead := battle.lead_runners(1)
 			if lead.is_empty():
+				fx.cast_ack(card_id, caster.global_position if caster else Field.HOME)
+				fx.hook_whiff(_origin(caster))
 				return
 			var e: Enemy = lead[0]
 			var go := func() -> void:
 				if not is_instance_valid(e) or not e.targetable():
 					var again := battle.lead_runners(1)
 					if again.is_empty():
+						fx.hook_whiff(_origin(caster))
 						return
 					e = again[0]
 				battle.projectiles.launch(_origin(caster), e, 30.0, {"source": caster, "damage": p(card_id, "damage", level) * power,
@@ -396,6 +439,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 ## The wind-up visuals (anticipation) play over the same window.
 func _cast(caster: Defender, effect: Callable, face_point: Vector3, anim := "special", card_id := "") -> void:
 	if caster and is_instance_valid(caster) and not caster.is_stunned():
+		battle.vfx.cards.cast_ack(card_id, caster.global_position)
 		if anim == "special":
 			battle.vfx.burst("magic", caster.model.chest_position(), Color(caster.data.accent))
 			caster.cast_special(effect, face_point)
@@ -408,4 +452,16 @@ func _cast(caster: Defender, effect: Callable, face_point: Vector3, anim := "spe
 			battle.vfx.cards.anticipate(card_id, caster, face_point, 0.3 / 1.3, anim)
 			battle.get_tree().create_timer(0.3 / 1.3, false).timeout.connect(effect)
 	else:
+		battle.vfx.cards.cast_ack(card_id, Field.HOME)
 		effect.call()
+
+
+## Where the cast acknowledgement of an instant card shows: the target spot for area /
+## path cards, the chosen defender for Diamond Aura, home plate otherwise.
+func _ack_point(card_id: String, target: Dictionary, point: Vector3) -> Vector3:
+	var df = target.get("defender")
+	if card_id == "diamond_aura" and df is Node3D and is_instance_valid(df):
+		return (df as Node3D).global_position
+	if String(DB.card(card_id).get("target", "none")) in ["area", "path"]:
+		return point
+	return Field.HOME

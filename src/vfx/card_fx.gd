@@ -54,6 +54,40 @@ func impact_flash(pos: Vector3, color: Color, size := 1.0, light := 5.0, sparks 
 		vfx.flash_light(pos + Vector3(0, 0.6, 0), color, light, 6.0 + 4.0 * size, 0.3)
 
 
+# ---------------------------------------------------------------- acknowledgement & fizzles
+
+## Short acknowledgement the moment a card is played: a card-coloured pop on the ground
+## and a rising sparkle at `pos` (the caster's feet, the target spot or home plate), so
+## every card visibly "goes off" even before its main effect lands.
+func cast_ack(card_id: String, pos: Vector3) -> void:
+	var col := card_color(card_id)
+	var g := _flat(pos)
+	var s := rarity_scale(card_id)
+	vfx.shockwave(g, 1.9 * s, col.lerp(Color.WHITE, 0.25), 0.35, 0.08)
+	vfx.ring_emit("magic", g + Vector3(0, 0.15, 0), 0.6 * s, 10, col.lerp(Color.WHITE, 0.2), 0.6, 3.5, 0.9, 0.8)
+	vfx.emit_one("flash", g + Vector3(0, 0.6, 0), Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.4), 0.7), 0.8 * s, 0.8)
+
+
+## The card worked but had nothing to act on (empty area, immune target...).
+func fizzle(pos: Vector3, text := "NO EFFECT") -> void:
+	vfx.fizzle(pos, text)
+
+
+## A visual-only throw at the spot a runner left (the target was gone at release).
+func lost_throw(from: Vector3, to: Vector3, color: Color, trail := "comet") -> void:
+	battle.projectiles.launch_at(from, to, 26.0, {"color": color, "trail": trail}, func(at: Vector3) -> void:
+		vfx.dust(at, 0.5)
+		vfx.fizzle(at, "NO TARGET"))
+
+
+## Sky Hook with no runner on the field: the hook still flies out and comes back empty.
+func hook_whiff(from: Vector3) -> void:
+	var to := Field.MOUND + Vector3(randf_range(-2.0, 2.0), 0.4, -5.0)
+	battle.projectiles.launch_at(from, to, 30.0, {"color": CYAN, "big": true, "arc_mult": 3.5, "trail": "hook"}, func(at: Vector3) -> void:
+		impact_flash(at, CYAN, 0.8, 0.0, 8)
+		vfx.fizzle(at, "NO RUNNERS"))
+
+
 # ---------------------------------------------------------------- anticipation
 
 ## Wind-up shown while a defender plays its cast animation (before the impact frame).
@@ -434,6 +468,10 @@ func changeup() -> void:
 	vfx.decal("clock", c, 5.0, Color(col, 0.8), Color.WHITE, 1.4, func(n: Node3D, k: float) -> void:
 		var vis := smoothstep(0.0, 0.1, k) * (1.0 - smoothstep(0.6, 1.0, k))
 		(n as MeshInstance3D).set_instance_shader_parameter("anim", Vector4(k, vis, -TAU * 0.5 * k, 0.5)))
+	# Readable even with an empty field: a slow bubble and a thicker wave from the plate.
+	vfx.sphere_pulse(c + Vector3(0, 0.5, 0), 7.0, Color(col, 0.45), 0.9)
+	vfx.shockwave(c, 16.0, Color(0.7, 0.7, 1.0, 0.9), 1.0, 0.07, 0.1)
+	vfx.flash_light(c + Vector3(0, 2.0, 0), col, 3.0, 12.0, 0.6)
 
 
 func changeup_victim(e: Node3D) -> void:
@@ -675,6 +713,10 @@ func stretch() -> void:
 			vfx.emit("magic", top, 26, col.lerp(Color.WHITE, 0.5), 9.0, 0.0, 1.0, 2.2, 1.8))
 	for p in [Field.HOME + Vector3(0, 7, -8), Field.MOUND + Vector3(-6, 7, 0), Field.MOUND + Vector3(6, 7, 0)]:
 		vfx.burst("confetti", p)
+	# A golden pop on the infield so the cast reads even when the fireworks are off screen.
+	vfx.shockwave(Field.MOUND, 9.0, GOLD, 0.7, 0.06)
+	vfx.glyph(Field.MOUND + Vector3(0, 3.0, 0), 12, 2.2, GOLD, 1.2, 0.0, 1.2)
+	vfx.ring_emit("magic", Field.MOUND + Vector3(0, 0.3, 0), 1.5, 18, GOLD, 1.0, 5.0, 1.1, 1.0)
 
 
 # ---------------------------------------------------------------- debug showcase
@@ -761,7 +803,8 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 	var d0 := route.length * 0.55
 	var target := route.position_at(d0)
 	var kinds := ["runner", "swarmer", "runner", "armored", "runner", "sprinter"]
-	for i in 11:
+	# --vfx-empty casts on an empty field (checks the no-target / fizzle visuals).
+	for i in (0 if "--vfx-empty" in args else 11):
 		battle.spawn_enemy(kinds[i % kinds.size()], route, d0 - 2.6 + i * 0.5, {"lateral": randf_range(-1.3, 1.3), "hp_mult": 60.0, "speed_mult": 0.08})
 	var focus := target
 	var view := Vector3(20.0, -38.0, 24.0)

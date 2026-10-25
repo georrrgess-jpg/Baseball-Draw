@@ -62,7 +62,7 @@ func _ready() -> void:
 	battle = get_parent()
 	_scale = Settings.particle_scale()
 	reduce_flashes = bool(Settings.get_value("accessibility", "reduce_flashes", false))
-	for n in ["glow", "spark", "star", "smoke", "flame", "noise", "ring", "scorch", "cracks", "frost", "runes", "clock", "web", "chain", "icons"]:
+	for n in ["glow", "spark", "star", "smoke", "flame", "noise", "ring", "scorch", "cracks", "frost", "runes", "clock", "web", "chain", "icons", "impact"]:
 		tex[n] = load(TEX + n + ".png")
 	_build_materials()
 	_build_systems()
@@ -245,6 +245,8 @@ func _build_systems() -> void:
 	_make_system("ring", 64, 0.4, "add", tex.ring, Vector3.ZERO, 0.0, 1.0, 5, {"energy": 2.2, "fade_in": 0.0, "fade_pow": 1.5})
 	_make_system("debris", 200, 1.4, "rock", null, Vector3(0, -16, 0), 0.3, 0.26, 4, {"tumble": true, "spin": 8.0, "floor": 0.06})
 	_make_system("shard", 160, 1.1, "ice", null, Vector3(0, -14, 0), 0.4, 0.22, 4, {"tumble": true, "spin": 7.0, "floor": 0.06})
+	# Hit starbursts: solid comic "POW" shapes that read at gameplay distance.
+	_make_system("impact", 96, 0.17, "add", tex.impact, Vector3.ZERO, 0.0, 1.0, 1, {"energy": 1.1 if reduce_flashes else 2.0, "fade_in": 0.0, "fade_pow": 1.4})
 	_make_system("confetti", 400, 2.4, "confetti", null, Vector3(0, -3.0, 0), 1.2, 0.17, 4, {"tumble": true, "spin": 10.0})
 
 
@@ -640,13 +642,97 @@ func burst(kind: String, pos: Vector3, color: Color = Color.WHITE) -> void:
 			emit("magic", pos, 14, Color(1.0, 0.85, 0.3), 4.5, 1.0)
 			emit_one("glow", pos, Vector3.ZERO, Color(1.0, 0.8, 0.3, 0.9), 1.6, 0.7)
 		"out":
-			spray("spark", pos, 10, Color(1.0, 0.95, 0.8), 7.0, Vector3.UP, 1.1)
-			emit_one("ring", pos, Vector3.ZERO, Color(1.0, 0.95, 0.85, 0.8), 1.0, 0.8)
+			# A clear "out" pop (the runner itself tumbles and shrinks away, see Enemy).
+			var front := toward_camera(pos, 0.6)
+			emit_one("impact", front, Vector3.ZERO, Color(1.0, 0.97, 0.9, 1.0), 2.2, 1.35)
+			emit_one("impact", front, Vector3.ZERO, Color(1.0, 0.75, 0.3, 0.8), 3.0, 1.1)
+			emit_one("flash", front, Vector3.ZERO, Color(1.0, 0.95, 0.85, 0.85), 1.2, 1.0)
+			emit_one("ring", front, Vector3.ZERO, Color(1.0, 0.95, 0.85, 0.9), 1.5, 1.0)
+			spray("spark", front, 14, Color(1.0, 0.95, 0.8), 9.0, Vector3.UP, 1.1)
+			emit("magic", pos, 6, Color(1.0, 0.9, 0.55), 4.0, 0.8)
+			shockwave(Vector3(pos.x, 0.0, pos.z), 1.9, Color(1.0, 0.95, 0.85, 0.9), 0.35, 0.06)
 			emit("dust", Vector3(pos.x, 0.2, pos.z), 5, Color(0.6, 0.45, 0.32, 0.6), 2.0, 0.2)
 		"confetti":
 			var cols := [UITheme.SCARLET, UITheme.GOLD, UITheme.OFFWHITE, UITheme.BLUE, UITheme.GREEN]
 			for i in 3:
 				emit("confetti", pos, 18, cols[randi() % cols.size()], 7.0, 1.5)
+
+
+## A point moved `dist` metres toward the camera, so sprites spawned at a body's centre
+## sit in front of the model instead of being half hidden inside it.
+func toward_camera(pos: Vector3, dist: float) -> Vector3:
+	return pos + (camera_pos() - pos).normalized() * dist
+
+
+## A readable hit on a unit: a white-hot starburst in front of the body over a starburst
+## tinted by the thrower, a small shock ring facing along the throw and sparks glancing
+## off. strength 0..1 scales it; crits and big hits add a gold flare. The caller rate-limits.
+func hit_impact(pos: Vector3, dir: Vector3, color: Color, strength := 0.6, crit := false, big := false) -> void:
+	var to_cam := (camera_pos() - pos).normalized()
+	var front := pos + to_cam * 0.55
+	var tint := color.lerp(Color.WHITE, 0.3)
+	var s := 0.8 + 0.45 * strength
+	if crit:
+		s *= 1.45
+	elif big:
+		s *= 1.2
+	emit_one("impact", front, Vector3.ZERO, Color(tint, 0.9), 1.4 * s, 1.0)
+	emit_one("impact", front + to_cam * 0.05, Vector3.ZERO, Color(1.0, 0.98, 0.92, 1.0), 0.85 * s, 0.85)
+	var d := Vector3(dir.x, 0.0, dir.z)
+	if d.length_squared() < 0.0001:
+		d = Vector3(-to_cam.x, 0.0, -to_cam.z)
+	d = d.normalized() if d.length_squared() > 0.0001 else Vector3.FORWARD
+	# Sparks glance back toward the thrower and up; a couple carry on through.
+	spray("spark", front, 4 + int(round(4.0 * strength)), Color(1.0, 0.93, 0.75), 7.5, (-d + Vector3(0, 1.1, 0)).normalized(), 0.8, 0.85, 0.55)
+	spray("spark", front, 2, tint, 9.0, (d + Vector3(0, 0.4, 0)).normalized(), 0.4, 0.7, 0.45)
+	impact_ring(pos, d, Color(tint, 0.95), 0.5 + 0.35 * strength, 0.22)
+	if crit or big:
+		var gold := Color(1.0, 0.85, 0.35)
+		emit_one("flash", front, Vector3.ZERO, Color(gold, 0.8), 1.0 if crit else 0.7, 1.0)
+		spray("spark", front, 10 if crit else 6, gold.lerp(Color.WHITE, 0.3), 10.0, Vector3.UP, 1.2, 1.0, 0.7)
+		emit("magic", front, 5 if crit else 3, gold, 4.0, 0.6)
+		if crit:
+			impact_ring(Vector3(pos.x, 0.08, pos.z), Vector3.UP, Color(gold, 0.9), 1.5, 0.3)
+
+
+## A thin shock ring at `pos` whose plane faces `normal` (e.g. along a throw).
+func impact_ring(pos: Vector3, normal: Vector3, color: Color, radius: float, time := 0.25) -> void:
+	var mi := _take("ring")
+	var n := normal.normalized() if normal.length_squared() > 0.0001 else Vector3.UP
+	var x := n.cross(Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT).normalized()
+	var z := x.cross(n).normalized()
+	mi.global_transform = Transform3D(Basis(x * radius, n, z * radius), pos)
+	mi.set_instance_shader_parameter("color", color)
+	mi.set_instance_shader_parameter("mode", 3.0)
+	mi.set_instance_shader_parameter("params", Vector4(0.1, 0.0, 0.0, 0.0))
+	mi.set_instance_shader_parameter("progress", 0.0)
+	animate(mi, time, func(nd: Node3D, k: float) -> void: (nd as MeshInstance3D).set_instance_shader_parameter("progress", k))
+
+
+## "Worked as designed, nothing to affect": a small grey puff that sputters out, an
+## imploding ring and a short label. Used when a card lands on nothing or the target is immune.
+func fizzle(pos: Vector3, text := "NO EFFECT", color := Color(0.8, 0.82, 0.88)) -> void:
+	var p := Vector3(pos.x, maxf(pos.y, 0.6), pos.z)
+	emit("smoke", p, 6, Color(0.42, 0.44, 0.48, 0.75), 1.4, 0.6, 1.0, 1.0, 0.9)
+	spray("spark", p, 8, Color(0.9, 0.92, 0.96), 4.5, Vector3.UP, 1.0, 0.7, 0.7)
+	emit_one("ring", toward_camera(p, 0.3), Vector3.ZERO, Color(color, 0.7), 1.1, 0.9)
+	shockwave(Vector3(p.x, 0.0, p.z), 1.6, Color(color, 0.85), 0.4, 0.06, 0.0, true)
+	if text != "":
+		text_popup(p + Vector3(0, 0.8, 0), text, color, 0.8, 1.1)
+	Audio.play("swing_whoosh", -18.0, 0.1, 150)
+
+
+## Hit / stun feedback on a defender (slugger swings, boss slams).
+func defender_hit(df: Node3D, from: Vector3, resisted := false) -> void:
+	if df == null or not is_instance_valid(df):
+		return
+	var chest: Vector3 = df.model.chest_position() if "model" in df and df.model else df.global_position + Vector3(0, 1.2, 0)
+	var dir := chest - from
+	if resisted:
+		hit_impact(chest, dir, Color(0.6, 0.85, 1.0), 0.5)
+		return
+	hit_impact(chest, dir, Color(1.0, 0.45, 0.2), 1.0, false, true)
+	emit("dust", Vector3(chest.x, 0.2, chest.z), 5, Color(0.6, 0.45, 0.32, 0.6), 2.5, 0.3)
 
 
 func dust(pos: Vector3, amount := 1.0) -> void:

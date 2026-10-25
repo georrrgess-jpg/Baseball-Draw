@@ -34,6 +34,8 @@ class Ball:
 	var trail_kind := ""
 	var max_trail := MAX_TRAIL
 	var side := Vector3.RIGHT
+	var bounce_t := 0.0          # > 0 while the ball glances off a runner (cosmetic)
+	var bounce_v := Vector3.ZERO
 
 var battle: Battle
 var balls: Array[Ball] = []
@@ -125,7 +127,7 @@ func _make_ball() -> Ball:
 
 func _get_ball() -> Ball:
 	for b in balls:
-		if not b.active and b.fading <= 0.0:
+		if not b.active and b.fading <= 0.0 and b.bounce_t <= 0.0:
 			return b
 	var nb := _make_ball()
 	balls.append(nb)
@@ -162,6 +164,8 @@ func _prepare(b: Ball, from: Vector3, to: Vector3, speed: float, payload: Dictio
 		gc.a = 0.9
 		b.glow_mat.albedo_color = gc
 	b.points.clear()
+	b.bounce_t = 0.0
+	b.node.scale = Vector3.ONE
 	b.node.visible = true
 	b.trail.visible = true
 	b.node.global_position = from
@@ -188,6 +192,8 @@ func tick(delta: float) -> void:
 	if _camera == null or not is_instance_valid(_camera):
 		_camera = get_viewport().get_camera_3d()
 	for b in balls:
+		if b.bounce_t > 0.0 and not b.active:
+			_bounce(b, delta)
 		if b.active:
 			_step(b, delta)
 		elif b.fading > 0.0:
@@ -222,6 +228,35 @@ func _step(b: Ball, delta: float) -> void:
 		b.node.visible = false
 		b.fading = 0.25
 		_arrive(b)
+
+
+## Deflection after a hit (or a whiff past the runner on a miss): the drawn ball flies
+## off under gravity and shrinks away. Purely visual.
+func _start_bounce(b: Ball, hit_target: bool) -> void:
+	var d := b.end - b.start
+	d.y = 0.0
+	d = d.normalized() if d.length_squared() > 0.0001 else Vector3.FORWARD
+	var side := d.cross(Vector3.UP)
+	if hit_target:
+		b.bounce_v = -d * randf_range(1.5, 3.0) + Vector3.UP * randf_range(4.5, 6.0) + side * randf_range(-2.2, 2.2)
+	else:
+		b.bounce_v = d * 12.0 + Vector3.UP * 1.0 + side * randf_range(-1.0, 1.0)
+	b.bounce_t = 0.5 if hit_target else 0.3
+	b.node.visible = true
+	b.glow.visible = false
+	b.node.global_position = b.end
+
+
+func _bounce(b: Ball, delta: float) -> void:
+	b.bounce_t -= delta
+	b.bounce_v.y -= 18.0 * delta
+	b.node.global_position += b.bounce_v * delta
+	b.mesh.rotate_x(delta * 25.0)
+	b.node.scale = Vector3.ONE * clampf(b.bounce_t / 0.15, 0.0, 1.0)
+	if b.bounce_t <= 0.0:
+		b.bounce_t = 0.0
+		b.node.visible = false
+		b.node.scale = Vector3.ONE
 
 
 ## Cosmetic sway of the drawn ball (spiral curveball, fluttering knuckleball).
@@ -304,11 +339,12 @@ func _arrive(b: Ball) -> void:
 		else:
 			battle.vfx.dust(Vector3(b.end.x, 0, b.end.z), 0.4)
 		return
-	hit(t, p, b.end)
+	p["_dir"] = b.end - b.start
+	_start_bounce(b, hit(t, p, b.end))
 
 
-## Resolves a thrown ball against a runner.
-func hit(t: Enemy, p: Dictionary, at: Vector3) -> void:
+## Resolves a thrown ball against a runner. Returns false on a miss.
+func hit(t: Enemy, p: Dictionary, at: Vector3) -> bool:
 	var evasion := t.evasion
 	if battle.field_vision_active:
 		evasion = 0.0
@@ -316,13 +352,16 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> void:
 	if randf() < miss_chance:
 		battle.vfx.text_popup(at + Vector3(0, 0.5, 0), "MISS", Color(0.75, 0.8, 0.9), 0.8)
 		Audio.play("swing_whoosh", -16.0, 0.1, 120)
-		return
+		return false
 	var source: Defender = p.get("source")
+	# dir / at / color only drive the runner's hit reaction (Enemy._hit_feedback).
 	var dealt := t.take_damage(float(p.damage), {"source": source, "kind": "fire" if p.get("fire", false) else "throw",
-		"crit": p.get("crit", false), "pierce": p.get("pierce", 0.0)})
+		"crit": p.get("crit", false), "pierce": p.get("pierce", 0.0), "dir": p.get("_dir", Vector3.ZERO), "at": at,
+		"color": p.get("color", Color.WHITE)})
 	battle.on_damage_dealt(source, t, dealt, p.get("crit", false))
-	Audio.play("crit_hit" if p.get("crit", false) else "ball_hit", -5.0 if p.get("crit", false) else -9.0, 0.08, 40)
-	battle.vfx.burst("crit" if p.get("crit", false) else "hit", at, p.get("color", Color.WHITE))
+	Audio.play("crit_hit" if p.get("crit", false) else "ball_hit", -4.0 if p.get("crit", false) else -7.0, 0.08, 40)
+	if p.get("crit", false):
+		battle.vfx.burst("crit", at, p.get("color", Color.WHITE))
 	if p.has("fx"):
 		battle.vfx.cards.ball_impact(String(p.fx), at, p.get("color", Color.WHITE), t)
 	if p.has("burn") and t.alive:
@@ -337,7 +376,7 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> void:
 		battle.vfx.shockwave(Vector3(at.x, 0.05, at.z), r, Color(0.75, 0.5, 1.0), 0.35)
 		for e: Enemy in battle.enemies_in_radius(at, r):
 			if e != t:
-				var sd := e.take_damage(float(p.damage) * 0.5, {"source": source, "kind": "splash"})
+				var sd := e.take_damage(float(p.damage) * 0.5, {"source": source, "kind": "splash", "dir": e.global_position - at})
 				battle.on_damage_dealt(source, e, sd, false)
 				if p.has("stun") and e.alive:
 					e.apply_stun(float(p.stun))
@@ -353,6 +392,7 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> void:
 		var cp0 := p.duplicate()
 		cp0.chained = [t]
 		hit_chain_continue(t, cp0, at)
+	return true
 
 
 func hit_chain_continue(t: Enemy, p: Dictionary, at: Vector3) -> void:
@@ -365,7 +405,8 @@ func hit_chain_continue(t: Enemy, p: Dictionary, at: Vector3) -> void:
 	cp.damage = float(p.damage) * float(p.get("chain_mult", 0.5))
 	cp.chained = chained + [nxt]
 	battle.vfx.cards.chain_arc(at, nxt.center(), Color(1.0, 0.95, 0.4))
-	var dealt := nxt.take_damage(float(cp.damage), {"source": p.get("source"), "kind": "lightning"})
+	var dealt := nxt.take_damage(float(cp.damage), {"source": p.get("source"), "kind": "lightning", "dir": nxt.center() - at,
+		"color": Color(1.0, 0.95, 0.4)})
 	battle.on_damage_dealt(p.get("source"), nxt, dealt, false)
 	if cp.chain > 0:
 		hit_chain_continue(nxt, cp, nxt.center())
@@ -375,6 +416,7 @@ func clear_all() -> void:
 	for b in balls:
 		b.active = false
 		b.fading = 0.0
+		b.bounce_t = 0.0
 		b.node.visible = false
 		b.trail.visible = false
 		b.points.clear()

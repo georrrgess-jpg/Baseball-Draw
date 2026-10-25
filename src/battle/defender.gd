@@ -61,6 +61,10 @@ var selected := false
 var show_range := false
 var outs := 0
 var damage_dealt := 0.0
+# Hit feedback (cosmetic): knocked back and squashed when a slugger / boss connects.
+var _hit_k := 0.0
+var _hit_dir := Vector3.ZERO
+var _model_scale := Vector3.ONE
 
 
 func setup(p_battle: Battle, defender_id: String, uniform_colors: Dictionary) -> void:
@@ -76,6 +80,7 @@ func setup(p_battle: Battle, defender_id: String, uniform_colors: Dictionary) ->
 	colors["Undershirt"] = data.accent
 	# Defenders are drawn a little larger than runners so the team reads clearly from the camera.
 	model.setup(id, {"accent": Color(data.accent), "colors": colors, "cache_key": id, "base": "ready", "scale": Battle.UNIT_SCALE * 1.12})
+	_model_scale = model.scale
 
 	_shadow = Enemy._make_blob_shadow(0.5 * Battle.UNIT_SCALE)
 	add_child(_shadow)
@@ -182,11 +187,16 @@ func is_stunned() -> bool:
 	return stun_t > 0.0
 
 
-func stun(time: float) -> void:
+## `from` (optional) is where the blow came from, for the hit reaction.
+func stun(time: float, from := Vector3.INF) -> void:
+	var src := from if from != Vector3.INF else global_position + global_transform.basis.z * 2.0
 	if stun_guard > 0:
 		stun_guard -= 1
 		battle.vfx.text_popup(global_position + Vector3(0, 2.2, 0), "RESIST!", Color(0.7, 0.9, 1.0), 0.9)
+		battle.vfx.defender_hit(self, src, true)
+		model.flash(0.5)
 		return
+	_hit_reaction(src)
 	stun_t = maxf(stun_t, time)
 	_pending_release = -1.0
 	_dash_state = "back" if _dash_state != "" else ""
@@ -194,6 +204,26 @@ func stun(time: float) -> void:
 	model.play_base("stunned", 0.1)
 	battle.vfx.stun_stars(self, time)
 	Audio.play("defender_stunned", -4.0)
+
+
+func _hit_reaction(from: Vector3) -> void:
+	battle.vfx.defender_hit(self, from)
+	model.flash(0.6 if battle.vfx.reduce_flashes else 1.0)
+	var dir := global_position - from
+	dir.y = 0.0
+	dir = dir.normalized() if dir.length_squared() > 0.0001 else -global_transform.basis.z
+	_hit_dir = global_transform.basis.inverse() * dir
+	_hit_k = 1.0
+
+
+func _tick_hit(delta: float) -> void:
+	if _hit_k <= 0.0:
+		return
+	_hit_k = maxf(0.0, _hit_k - delta * 3.5)
+	var q := _hit_k * _hit_k
+	model.scale = _model_scale * Vector3(1.0 + 0.18 * q, 1.0 - 0.2 * q, 1.0 + 0.18 * q)
+	model.position = _hit_dir * 0.45 * q
+	model.rotation = Vector3(_hit_dir.z * 0.5 * q, 0.0, -_hit_dir.x * 0.5 * q)
 
 
 func cleanse() -> void:
@@ -226,6 +256,7 @@ func reset_wave_state() -> void:
 # ---------------------------------------------------------------- per-frame
 
 func tick(delta: float) -> void:
+	_tick_hit(delta)
 	if _shadow:
 		_shadow.global_position = Vector3(global_position.x, 0.03, global_position.z)
 	if stun_t > 0.0:
