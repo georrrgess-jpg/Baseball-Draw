@@ -160,8 +160,93 @@ class Hero(HeadMixin, BodyMixin, WearMixin):
         return self.parts
 
 
+def _sstep(a, b, x):
+    t = np.clip((x - a) / (b - a), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def shoe_top(tab, x, y):
+    """Height of the shoe upper's top surface above (x, y) (see build_shoes)."""
+    x0, y0, fs, chunky, rows = tab
+    ys = A([r[0] for r in rows])
+    yr = np.clip((y - y0) / fs, ys[-1], ys[0])
+    w = geo.interp(-ys, [r[1] for r in rows], [-yr], mono=True)[0] * chunky
+    ht = geo.interp(-ys, [r[2] for r in rows], [-yr], mono=True)[0]
+    z0 = 0.022
+    zc, hz = (z0 + ht) / 2, (ht - z0) / 2
+    e = 2.0 / 2.4
+    c = min(abs(x - x0) / fs / w, 1.0) ** (1.0 / e)
+    si = max(1.0 - c * c, 0.0) ** 0.5
+    return (zc + hz * si ** e) * fs, fs
+
+
+def axial_weights(obj, sk):
+    """Weights that depend only on the position along the leg (not on the
+    distance to the bone), shared by the pant leg below the knee and the sock
+    under it: in any pose a sock point and the pant point radially outside it
+    get the same blended bone matrix, so the tucked-in sock cannot poke out.
+    The part of the sock inside the shoe follows the foot like the shoe."""
+    import json
+    cfg = json.loads(obj["axial"])
+    me = obj.data
+    n = len(me.vertices)
+    P = np.empty(n * 3)
+    me.vertices.foreach_get("co", P)
+    P = P.reshape(-1, 3)
+    names = [g.name for g in obj.vertex_groups]
+    W = np.zeros((n, len(names)))
+    for v in me.vertices:
+        for g in v.groups:
+            W[v.index, g.group] = g.weight
+    sides = [cfg["side"]] * n if cfg["kind"] == "sock" else ["L" if x > 0 else "R" for x in P[:, 0]]
+    for sd in "LR":
+        idx = np.array([i for i in range(n) if sides[i] == sd], np.int64)
+        if not len(idx):
+            continue
+        K = A(sk.heads["shin." + sd])
+        Ak = A(sk.tails["shin." + sd])
+        d = Ak - K
+        u = (P[idx] - K) @ d / (d @ d)
+        # thigh -> shin blend centred just above the knee joint
+        wt = 1.0 - _sstep(-0.14, 0.02, u)
+        wf = np.zeros(len(idx))
+        if cfg["kind"] == "sock":
+            m = np.ones(len(idx))
+            for j, i in enumerate(idx):
+                zt, fs = shoe_top(cfg["shoe"], P[i, 0], P[i, 1])
+                wf[j] = 1.0 - _sstep(zt - 0.025 * fs, zt + 0.010 * fs, P[i, 2])
+        else:
+            um = cfg["u_mask"]
+            m = _sstep(um - 0.30, um - 0.02, u)
+        Ax = np.zeros((len(idx), len(names)))
+        for b, w in (("thigh." + sd, wt * (1 - wf)), ("shin." + sd, (1 - wt) * (1 - wf)),
+                     ("foot." + sd, wf)):
+            if b not in names:
+                if not np.any(w * m > 0):
+                    continue
+                obj.vertex_groups.new(name=b)
+                names.append(b)
+                W = np.hstack([W, np.zeros((n, 1))])
+                Ax = np.hstack([Ax, np.zeros((len(idx), 1))])
+            Ax[:, names.index(b)] += w
+        W[idx] = W[idx] * (1 - m)[:, None] + Ax * m[:, None]
+    # keep the 4 strongest, renormalise, rewrite the groups
+    if W.shape[1] > 4:
+        cut = np.argsort(-W, axis=1)[:, 4:]
+        np.put_along_axis(W, cut, 0.0, axis=1)
+    W[W < 0.005] = 0.0
+    W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
+    for j, b in enumerate(names):
+        vg = obj.vertex_groups[b]
+        vg.remove(list(range(n)))
+        nz = np.nonzero(W[:, j] > 0)[0]
+        for i in nz:
+            vg.add([int(i)], float(W[i, j]), 'REPLACE')
+
+
 def apply_weights(parts, sk):
-    """Rigid / distance-based weights, then copy weights onto decals."""
+    """Rigid / distance-based weights (axial for pant legs + socks), then copy
+    weights onto decals."""
     by_name = {p.name: p for p in parts}
     later = []
     for p in parts:
@@ -169,6 +254,8 @@ def apply_weights(parts, sk):
             later.append(p)
             continue
         skin.apply_weights(p, sk)
+        if p.get("axial"):
+            axial_weights(p, sk)
     for p in later:
         src = by_name.get(p["weights_from"])
         geo.transfer_weights(src, p)

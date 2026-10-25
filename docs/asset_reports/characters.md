@@ -29,6 +29,12 @@ material names, origin, heights) is unchanged.
   backwards cap, framing beard, eye black; Kai cyan wraparound shades; Bruno bald with purple headband, big red beard,
   bare forearms; Nova platinum pixie with side-swept fringe, bolt cap; Dex curls around the cap; Hana black bob with
   bangs + pink-striped sun visor.
+* **Sock / pant layering**: the sock top is tucked 7.5 cm (4.5 cm under Rico's knee pants) under the cuff, not
+  up at the knee, and under the cuff its radius stays 12 % inside the pant's inner fold (calf bulge only below the
+  hem). The sock and the pant leg below the knee share *axial* weights (a function of the position along the shin
+  only, `hero.axial_weights`), so a sock point and the pant point radially outside it always get the same bone
+  matrix and the sock cannot poke through the cuff in any clip (it used to, by 4–7 cm at the back of the cuff /
+  knee crease in run, ready, throw, pitch, catch). The sock inside the cleat follows the foot like the cleat.
 * **Budget** raised to 20 000 triangles; every defender is built under it without decimation. Build time ≈ 10 s per
   defender + portrait.
 * **Animation**: same clips/lengths/events. Because the legs are shorter relative to the global scale, defender hip
