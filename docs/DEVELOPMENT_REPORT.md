@@ -35,9 +35,10 @@ that means for the numbers.
 
 | Asset set | Generator | Output |
 |---|---|---|
-| 20 rigged, animated characters (9 defenders, 8 runners, 3 bosses) + portraits | `tools/blender/characters/` (Blender 5.2 `bpy`) | `assets/models/characters/*.glb`, `assets/textures/portraits/*.png` |
+| 20 rigged, animated characters (9 stylised defenders, 8 runners, 3 bosses) + portraits | `tools/blender/characters/` (Blender 5.2 `bpy`) | `assets/models/characters/*.glb`, `assets/textures/portraits/*.png` |
 | 32 stadium props (walls, gates A–D, light towers, grandstands, scoreboard, dugout, banners, industry, skyline...) | `tools/blender/props/` | `assets/models/props/*.glb` |
-| 65 sound effects, 7 music tracks, 2 ambience loops | `tools/audio/` (NumPy synthesis) | `assets/audio/` |
+| 73 sound effects (incl. pack shake/tear, card flip, rarity reveals), 7 music tracks, 2 ambience loops | `tools/audio/` (NumPy synthesis) | `assets/audio/` |
+| 15 effect textures (glow, spark, smoke atlas, flame, scorch, crater, frost, runes, clock, web, chain...) | `tools/art/vfx/` (Pillow + NumPy) | `assets/textures/vfx/` |
 | Logo, 26 card illustrations, 65 icons, rank emblems, rarity gems, UI backgrounds, app icon | `tools/art/` (Pillow + cairo) | `assets/textures/` |
 
 Detailed asset reports (dimensions, triangle counts, animation timings, loudness) are in `docs/asset_reports/`.
@@ -87,8 +88,8 @@ catch, bat impact, slam impact) land on exact frames; looping clips have identic
 | Check | How | Result |
 |---|---|---|
 | Every script parses and compiles with autoloads | `tools/check_scripts.sh` | 49 scripts, 0 failures |
-| System tests | `tests/test_suite.tscn` | 887 checks, 0 failures |
-| Interactive flows through simulated mouse/keyboard | `tests/ui_flow_test.gd` | 51 checks, 0 failures |
+| System tests | `tests/test_suite.tscn` | 922 checks, 0 failures |
+| Interactive flows through simulated mouse/keyboard | `tests/ui_flow_test.gd` (incl. pack opening and the guided first game) | 73 checks, 0 failures |
 | Full runs, all modes | autopilot (`--auto`), `tools/simulate.sh` | Standard, Quick, Endless, Practice completed; wins and losses both reached |
 | Packaged build | Linux export of the same pack as Windows, autopilot game | Quick Defense won from the exported binary (3 innings, 0 runs, Iron Slugger beaten) |
 | Windows export | `--export-release "Windows Desktop"` | `BaseballDraw.exe` (109 MB) + `BaseballDraw.pck` (43 MB) produced |
@@ -163,9 +164,55 @@ Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
 |---|---|
 | ![Main menu](screenshots/main_menu.jpg) Main menu with the live 3D lineup | ![Battle](screenshots/battle.jpg) Quick Defense, inning 1 |
 | ![Action](screenshots/action.jpg) Mid-game, inning 4 | ![Boss](screenshots/boss.jpg) Grand Slammer, inning 9 |
-| ![Setup](screenshots/setup.jpg) Setup phase: zones, routes, formation panel | ![Help](screenshots/help.jpg) First-battle help panel |
+| ![Setup](screenshots/setup.jpg) Setup phase: zones, routes, formation panel | ![Tutorial](screenshots/tutorial.jpg) Guided first game |
 | ![Dugout](screenshots/dugout.jpg) Between-innings dugout | ![Results](screenshots/results.jpg) Results screen |
 | ![Play menu](screenshots/play_menu.jpg) Play menu | ![Deck builder](screenshots/deck_builder.jpg) Deck builder |
 | ![Roster](screenshots/roster.jpg) Roster with 3D showcase | ![Progression](screenshots/progression.jpg) Progression |
 | ![Neon Diamond](screenshots/arena_neon_diamond.jpg) Neon Diamond | ![Frostpark](screenshots/arena_frostpark.jpg) Frostpark |
-| ![Champion's Citadel](screenshots/arena_champions_citadel.jpg) Champion's Citadel | |
+| ![Champion's Citadel](screenshots/arena_champions_citadel.jpg) Champion's Citadel | ![Pack](screenshots/packs.jpg) Opening a Champion Pack |
+| ![Pack reveal](screenshots/packs_reveal.jpg) Pack reveal | ![Heat Wave](screenshots/vfx_heat_wave.jpg) Heat Wave |
+| ![Grand Slam Barrage](screenshots/vfx_grand_slam_barrage.jpg) Grand Slam Barrage | ![Thunderbolt](screenshots/vfx_thunderbolt.jpg) Thunderbolt |
+| ![Frost Field](screenshots/vfx_frost_field.jpg) Frost Field | ![Lockdown](screenshots/vfx_lockdown.jpg) Lockdown |
+| ![Base Shield](screenshots/vfx_base_shield.jpg) Base Shield | |
+
+## 8. Update 2: team models, card effects, packs, tutorial, cleaner HUD
+
+* **Defender models rebuilt** (`tools/blender/characters/hero*.py`). The nine team characters no longer use the
+  SDF sculpt pipeline (lumpy, faceted surfaces, small heads). They are smooth lofted and subdivided meshes with
+  stylised hero proportions (head ≈ 1/5.4 of height, broad shoulders, chunky hands and cleats), large readable
+  eyes, eyebrows and mouths per personality, and a distinct silhouette for each defender (flame cap, catcher
+  gear, ponytail, backwards cap and beard, wraparound shades, headband and beard, pixie cut, curls, sun visor).
+  Uniform details (piping, numbers with outline, cap emblem, belt, striped socks, laced cleats and glove) are
+  modelled. Same rig, clips, lengths and event times; foot slide and loop seams stay at 0. In battle the
+  defenders get a soft rim light and are drawn 12 % larger than runners. Portraits re-rendered.
+* **Card ability effects rebuilt** (`src/vfx/vfx.gd`, `src/vfx/card_fx.gd`, `assets/shaders/vfx/`): every card has
+  its own wind-up, impact and lingering effect using pooled meshes, effect shaders (flame sheets, heat haze,
+  branching lightning, frost decals, rune seals, hex dome, cages) and generated textures, with at most three
+  flash lights at once and particle counts scaled by the quality preset. Runner status effects (rooted,
+  slowed, chilled, frozen, burning, stunned, marked...) are now visible on the runner. Gameplay values
+  and timings are unchanged.
+* **Card packs** (`data/packs.json`, `src/ui/packs_screen.gd`, `src/ui/pack_art.gd`): cards are collected only
+  from packs. Rookie (3 cards, Uncommon+ slot), Pro (4, Rare+ slot), Champion (5, Epic+ slot, bought with stars)
+  and Signature packs (a new defender's card). Packs come from every finished game (more for wins), every
+  account level (a Pro pack every fifth), new defenders and the shop. Unopened packs are saved in the profile.
+  The opening is a 3D sequence: the foil pack (its artwork drawn live into a viewport) charges up and shakes,
+  the top tears off in a burst coloured by the best card inside, the cards rise and fan out face down
+  with rarity auras, and flip on click. Epic and Legendary cards tremble first and land with light rays,
+  a ring, camera shake, a banner and, for Legendary, a flash and confetti. Each card shows NEW, +copies or
+  UPGRADE READY. Pulled cards carry a NEW badge in Cards & Deck until viewed.
+* **Card redesign** (`src/ui/card_view.gd`, `assets/shaders/card_foil.gdshader`): metallic rarity frames,
+  category banner, glossy energy gem, type line with category and rarity, corner ornaments on Epic and Legendary,
+  rarity gem and level pips on the frame, an animated foil sweep on Rare+ and a holographic edge on
+  Epic and Legendary, plus a card back for reveals.
+* **Guided first game** (`src/ui/battle_tutorial.gd`): pop-ups with an arrow and highlight walk through the
+  gates and paths, outs and runs, the defenders, dragging a defender (waits for the player to do it),
+  formations, PLAY BALL (waits), the first runners (pauses), playing a card (waits) and energy, then one-off
+  tips for the first run scored, wave break, dugout, boss and results. It can be skipped, and the rules
+  are also available from HOW TO PLAY in the pause menu.
+* **Less clutter in battle**:
+  * Compact top-left buttons and a slimmer scoreboard without the running score.
+  * Only active synergies are listed, and the duplicate scouting panel is gone (the threat panel already shows
+    the next wave).
+  * Hint text appears only in setup or while aiming, and the minimap is smaller.
+  * No per-runner OUT! or coin popups; damage numbers only for crits and big hits; no burn-tick numbers.
+  * Shorter, smaller banners, and no screen-centre banner on every card cast.

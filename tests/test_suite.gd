@@ -303,6 +303,7 @@ func test_packs() -> void:
 			break
 	if sig_def != "":
 		var sig: String = DB.defender(sig_def).signature
+		Profile.data.cards[sig].owned = false   # packs opened above may have rolled it already
 		Profile.unlock_defender(sig_def)
 		var has_sig: bool = Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "signature" and pk.get("card", "") == sig)
 		ok(has_sig and not Profile.is_card_owned(sig), "a new defender brings a Signature Pack")
