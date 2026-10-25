@@ -70,8 +70,13 @@ func _ready() -> void:
 	_detail.add_theme_constant_override("separation", 12)
 	rp.add_child(_detail)
 
+	# Start on the first ready card whose stats grow (its before -> after is the most telling).
 	var ids := _sorted_ids()
 	selected = ids[0] if not ids.is_empty() else ""
+	for cid in ids:
+		if Profile.can_upgrade_card(cid) and not DB.card(cid).get("growth", []).is_empty():
+			selected = cid
+			break
 	_rebuild()
 
 
