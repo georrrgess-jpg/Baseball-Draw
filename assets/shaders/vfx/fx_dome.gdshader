@@ -15,7 +15,8 @@ instance uniform float mode = 0.0;
 varying vec3 v_dir;
 
 void vertex() {
-	v_dir = normalize(VERTEX);
+	// Model-space normal: on a sphere it is the direction from the centre (the pole vertex can be degenerate).
+	v_dir = normalize(NORMAL + vec3(0.0, 1e-5, 0.0));
 }
 
 float hexdist(vec2 p) {
@@ -24,10 +25,10 @@ float hexdist(vec2 p) {
 }
 
 void fragment() {
-	float fres = pow(1.0 - abs(dot(NORMAL, VIEW)), 2.4);
+	float fres = pow(max(1.0 - abs(dot(NORMAL, VIEW)), 0.0), 2.4);
 	if (mode > 0.5) {
 		float k = build;
-		float life = pow(1.0 - k, 1.6);
+		float life = pow(max(1.0 - k, 0.0), 1.6);
 		float bands = 0.6 + 0.4 * sin(v_dir.y * 18.0 - TIME * 10.0);
 		ALBEDO = color.rgb * (fres * 2.2 + 0.08) * bands * life * strength;
 	} else {
@@ -47,10 +48,10 @@ void fragment() {
 		float scan = pow(0.5 + 0.5 * sin(el * 18.0 - TIME * 3.0), 12.0) * 0.4;
 		float d = acos(clamp(dot(v_dir, normalize(ripple.xyz)), -1.0, 1.0));
 		float rk = ripple.w;
-		float ring = exp(-pow((d - rk * 2.4) / 0.14, 2.0)) * (1.0 - rk) * step(rk, 0.999);
-		float hit_glow = exp(-d * d * 6.0) * pow(1.0 - rk, 3.0) * step(rk, 0.999);
+		float ring = exp(-sq((d - rk * 2.4) / 0.14)) * (1.0 - rk) * step(rk, 0.999);
+		float hit_glow = exp(-d * d * 6.0) * pow(max(1.0 - rk, 0.0), 3.0) * step(rk, 0.999);
 		float base = exp(-max(el, 0.0) * 14.0);
-		float front = exp(-pow((el - (build * 1.25 - 0.35)) / 0.05, 2.0)) * step(build, 0.999);
+		float front = exp(-sq((el - (build * 1.25 - 0.35)) / 0.05)) * step(build, 0.999);
 		float v = fres * 0.95 + edge * 0.32 * twinkle + fill * 0.7 + scan * 0.6 + base * 0.6;
 		v = v * built + front * 1.5 + (ring * 2.5 + hit_glow * 1.5) * (0.4 + edge);
 		ALBEDO = color.rgb * v * strength;

@@ -229,7 +229,7 @@ func _build_systems() -> void:
 	_make_system("spark", 700, 0.55, "streak", tex.spark, Vector3(0, -11, 0), 2.0, 0.075, 0, {"align": true, "stretch": 0.05, "energy": 2.6, "aspect": 6.0})
 	_make_system("streak", 300, 0.4, "streak", tex.spark, Vector3.ZERO, 0.8, 0.07, 4, {"align": true, "stretch": 0.06, "energy": 2.2, "aspect": 9.0})
 	_make_system("glow", 400, 0.5, "add", g, Vector3.ZERO, 4.0, 0.55, 1, {"energy": 1.7, "fade_in": 0.02, "fade_pow": 1.2})
-	_make_system("flash", 64, 0.22, "add", g, Vector3.ZERO, 0.0, 2.2, 5, {"energy": 3.2, "fade_in": 0.0, "fade_pow": 1.8})
+	_make_system("flash", 64, 0.22, "add", g, Vector3.ZERO, 0.0, 2.2, 5, {"energy": 1.4 if reduce_flashes else 3.2, "fade_in": 0.0, "fade_pow": 1.8})
 	_make_system("ember", 500, 1.2, "add", g, Vector3(0, 1.8, 0), 1.2, 0.1, 6, {"energy": 3.4, "turbulence": 7.0})
 	_make_system("fire", 600, 0.65, "flame", tex.flame, Vector3(0, 3.2, 0), 2.0, 0.95, 3, {"energy": 1.8, "turbulence": 3.0})
 	_make_system("smoke", 300, 1.7, "blend", tex.smoke, Vector3(0, 0.9, 0), 1.6, 1.0, 2, {"spin": 0.6, "turbulence": 1.0})

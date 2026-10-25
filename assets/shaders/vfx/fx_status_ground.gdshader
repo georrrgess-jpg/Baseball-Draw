@@ -44,8 +44,8 @@ void fragment() {
 	}
 	if (st.y > 0.01) {
 		float dash = step(0.45, fract((ang + t * 0.8) / 6.2831853 * 10.0));
-		float ring = exp(-pow((r - 0.86) / 0.045, 2.0)) * dash;
-		float inner = exp(-pow((r - 0.7) / 0.02, 2.0)) * 0.5;
+		float ring = exp(-sq((r - 0.86) / 0.045)) * dash;
+		float inner = exp(-sq((r - 0.7) / 0.02)) * 0.5;
 		float c = (ring + inner) * st.y;
 		col += slow_col.rgb * 1.8 * c;
 		a += c * 0.85;
@@ -60,7 +60,7 @@ void fragment() {
 		float link_o = 1.0 - smoothstep(0.12, 0.24, ell);
 		float link_b = (1.0 - smoothstep(0.12, 0.2, abs(v))) * (1.0 - smoothstep(0.6, 0.85, abs(u)));
 		float link = mix(link_o, link_b, odd);
-		float glow = exp(-pow((r - 0.66) / 0.2, 2.0)) * 0.35;
+		float glow = exp(-sq((r - 0.66) / 0.2)) * 0.35;
 		float studs = 0.0;
 		for (int i = 0; i < 4; i++) {
 			float sa = float(i) * 1.5707963 + 0.785;

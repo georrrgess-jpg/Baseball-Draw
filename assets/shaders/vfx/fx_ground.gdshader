@@ -47,7 +47,7 @@ void fragment() {
 		float arms = pow(0.5 + 0.5 * sin(sp), 3.0);
 		float n = texture(noise, vec2(ang * 0.159 + t * 0.1, r * 0.6 - t * 0.3)).r;
 		float core = 1.0 - smoothstep(0.0, 0.35, r);
-		float rim = exp(-pow((r - 0.95) / 0.05, 2.0));
+		float rim = exp(-sq((r - 0.95) / 0.05));
 		float body = arms * (0.4 + 0.6 * n) * (1.0 - smoothstep(0.55, 1.0, r)) + core * 0.6;
 		float dark = anim.w;
 		col = mix(color.rgb * (1.5 + arms * 2.0), vec3(0.05, 0.0, 0.08), dark * (1.0 - arms * 0.7)) + color2.rgb * rim * 2.0;
@@ -56,27 +56,26 @@ void fragment() {
 		float rings = pow(0.5 + 0.5 * sin(r * 22.0 + t * 9.0), 5.0);
 		float spokes = pow(0.5 + 0.5 * cos(ang * 10.0 + sin(r * 6.0 - t * 2.0) * 0.6), 18.0) * smoothstep(0.15, 0.4, r);
 		float core = exp(-r * r * 30.0);
-		float rim = exp(-pow((r - 0.96) / 0.03, 2.0));
+		float rim = exp(-sq((r - 0.96) / 0.03));
 		col = mix(color.rgb, color2.rgb, spokes) * (1.4 + rings * 1.6 + core * 3.0);
 		a = (rings * 0.45 + spokes * 0.55 + core + rim * 0.9 + 0.08) * inside;
 	} else if (mode == 2) {
 		vec2 p = rot2(t * 0.25) * q;
 		float dmd = abs(p.x) + abs(p.y) * 1.25;
-		float outline = exp(-pow((dmd - 0.92) / 0.035, 2.0));
-		float inner = exp(-pow((dmd - 0.62) / 0.02, 2.0)) * 0.6;
-		float facets = step(dmd, 0.92) * (0.18 + 0.12 * step(0.0, p.x * p.y));
+		float outline = exp(-sq((dmd - 0.92) / 0.022)) * (0.8 + 0.2 * sin(t * 3.0));
+		float inner = exp(-sq((dmd - 0.62) / 0.02)) * 0.6;
+		float facets = step(dmd, 0.92) * (0.06 + 0.05 * step(0.0, p.x * p.y));
 		float shine = pow(max(0.0, sin(p.x * 2.5 + p.y * 1.5 - t * 2.2)), 30.0) * step(dmd, 0.92);
 		float wash = (1.0 - smoothstep(0.0, 1.0, r)) * 0.15;
 		col = color.rgb * (1.3 + outline * 2.4 + shine * 3.0) + color2.rgb * inner;
 		a = clamp(outline + inner + facets + shine + wash, 0.0, 1.0) * inside;
 	} else if (mode == 3) {
 		float sweep_ang = mod(ang - t * 2.6, 6.2831853);
-		float sweep = pow(1.0 - sweep_ang / 6.2831853, 8.0);
-		float circles = exp(-pow((fract(r * 4.0) - 0.5) / 0.04, 2.0)) * 0.35;
-		float cross_l = (exp(-pow(q.x / 0.008, 2.0)) + exp(-pow(q.y / 0.008, 2.0))) * 0.4;
-		float rim = exp(-pow((r - 0.97) / 0.025, 2.0));
-		col = color.rgb * (1.3 + sweep * 2.5 + rim);
-		a = (sweep * 0.7 + circles + cross_l + rim) * inside;
+		float sweep = pow(max(1.0 - sweep_ang / 6.2831853, 0.0), 8.0);
+		float circles = exp(-sq((fract(r * 2.0) - 0.5) / 0.03)) * 0.12;
+		float rim = exp(-sq((r - 0.97) / 0.02));
+		col = color.rgb * (1.3 + sweep * 2.0 + rim);
+		a = (sweep * 0.45 + circles + rim) * inside;
 	} else if (mode == 4) {
 		vec2 p = q * 5.0;
 		vec2 h = vec2(1.0, 1.7320508);
@@ -85,7 +84,7 @@ void fragment() {
 		vec2 g = dot(a1, a1) < dot(b1, b1) ? a1 : b1;
 		float edge = smoothstep(0.38, 0.46, hexdist(g));
 		float wave = pow(0.5 + 0.5 * sin(r * 12.0 - t * 4.0), 4.0);
-		float rim = exp(-pow((r - 0.96) / 0.03, 2.0));
+		float rim = exp(-sq((r - 0.96) / 0.03));
 		col = color.rgb * (1.3 + edge * 1.5 + wave * 1.2);
 		a = (edge * (0.35 + wave * 0.5) + rim + 0.06) * inside * (1.0 - smoothstep(0.75, 1.0, r) * 0.5);
 	} else {

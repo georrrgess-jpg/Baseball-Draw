@@ -26,7 +26,7 @@ void fragment() {
 	float a = 0.0;
 	if (mode == 0 || mode == 1) {
 		vec4 t = texture(tex, UV);
-		float heat = pow(clamp(1.0 - anim.x, 0.0, 1.0), 2.0);
+		float heat = sq(clamp(1.0 - anim.x, 0.0, 1.0));
 		float n = texture(noise, UV * 1.5 + vec2(TIME * 0.05, 0.0)).r;
 		if (mode == 0) {
 			float glow = t.r * heat * (0.6 + 0.8 * n) + t.a * heat * heat * 0.5 * smoothstep(0.7, 0.0, r);
@@ -62,7 +62,7 @@ void fragment() {
 			// Sweep trail behind the hand.
 			float ang = atan(q.x, -q.y);
 			float da = mod(anim.z - ang, 6.2831853);
-			float trail = (1.0 - smoothstep(0.0, 1.4, da)) * step(r, 0.86) * 0.3;
+			float trail = (1.0 - smoothstep(0.0, 1.4, da)) * step(r, 0.86) * 0.18 * anim.w;
 			g = max(g, hand) + trail;
 		}
 		float flare = anim.w;

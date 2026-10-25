@@ -26,7 +26,7 @@ void fragment() {
 	if (mode < 0.5 || mode > 2.5) {
 		// Expanding shockwave: bright leading edge, soft wake, fades out.
 		float k = progress;
-		float front = 1.0 - pow(1.0 - k, 3.0);
+		float front = 1.0 - pow(max(1.0 - k, 0.0), 3.0);
 		if (mode > 3.5) {
 			front = 1.0 - k * k;
 		}
@@ -35,7 +35,7 @@ void fragment() {
 		float th = mix(params.x * 2.5, params.x * 0.6, k);
 		float edge = exp(-d * d / (th * th));
 		float wake = smoothstep(-0.45, 0.0, d) * (1.0 - smoothstep(0.0, aa + 0.01, d)) * params.y;
-		float fade = pow(1.0 - k, 1.4);
+		float fade = pow(max(1.0 - k, 0.0), 1.4);
 		a = (edge + wake * (mode > 2.5 ? 0.0 : 1.0)) * fade;
 		glow = edge * fade;
 	} else if (mode < 1.5) {
@@ -57,7 +57,7 @@ void fragment() {
 		float rim = smoothstep(1.0 - params.x - aa, 1.0 - params.x, r) * (1.0 - smoothstep(1.0 - aa, 1.0, r));
 		float inside = 1.0 - smoothstep(1.0 - aa, 1.0, r);
 		float grow = step(r, progress) * inside;
-		float edge = exp(-pow((r - progress) / 0.04, 2.0)) * inside;
+		float edge = exp(-sq((r - progress) / 0.04)) * inside;
 		float p = 0.75 + 0.25 * sin(TIME * 14.0);
 		a = clamp(rim * p + grow * params.y + edge * 0.8 + inside * 0.08, 0.0, 1.0);
 		glow = rim + edge;

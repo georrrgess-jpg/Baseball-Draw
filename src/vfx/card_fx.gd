@@ -144,7 +144,7 @@ func lock_on(target: Node3D, windup: float, color: Color) -> void:
 	vfx.animate(g, windup + 0.15, func(n: Node3D, k: float) -> void:
 		if is_instance_valid(target):
 			n.global_position = target.center()
-		var s := lerpf(3.2, 1.1, 1.0 - pow(1.0 - minf(k * 1.3, 1.0), 3.0))
+		var s := lerpf(4.5, 1.9, 1.0 - pow(1.0 - minf(k * 1.3, 1.0), 3.0))
 		n.scale = Vector3.ONE * s
 		(n as MeshInstance3D).set_instance_shader_parameter("anim", Vector4(0.2 + k * 0.45, 2, 0, 0)))
 
@@ -286,7 +286,7 @@ func barrage_impact(at: Vector3) -> void:
 
 ## Grand Relay: the ball zips defender to defender with golden links.
 func relay_link(a: Vector3, b: Vector3, ground: Vector3) -> void:
-	vfx.bolt(a, b, GOLD, 0.2, 0.35, 0, 0.06, 2)
+	vfx.bolt(a, b, GOLD, 0.18, 0.3, 0, 0.05, 2)
 	vfx.ribbon(vfx.arc_points(a, b, 0.6, 12), Color(1.0, 0.9, 0.5), 0.07, 0.5)
 	vfx.beam(ground, 0.6, 5.0, GOLD, 0.6)
 	vfx.shockwave(ground, 1.6, GOLD, 0.35, 0.08)
@@ -294,7 +294,7 @@ func relay_link(a: Vector3, b: Vector3, ground: Vector3) -> void:
 
 
 func relay_strike(from: Vector3, to: Vector3) -> void:
-	vfx.bolt(from, to, Color(1.0, 0.85, 0.3), 0.3, 0.4, 3, 0.14, 3)
+	vfx.bolt(from, to, Color(1.0, 0.85, 0.3), 0.24, 0.32, 1, 0.09, 2)
 	impact_flash(to, GOLD, 1.1, 4.0, 14)
 
 
@@ -387,18 +387,18 @@ func time_out(freeze_time: float) -> void:
 	var c := Field.MOUND + Vector3(0, 0, -2)
 	var spin := 1.0
 	var dur := freeze_time + 0.6
-	vfx.decal("clock", c, 15.0, Color(0.55, 0.88, 1.0, 0.8), Color(1.0, 1.0, 1.0), dur, func(n: Node3D, k: float) -> void:
+	vfx.decal("clock", c, 15.0, Color(0.45, 0.8, 1.0, 0.75), Color(0.8, 0.95, 1.0), dur, func(n: Node3D, k: float) -> void:
 		var tt := k * dur
 		var grow := 1.0 - pow(1.0 - clampf(tt / 0.35, 0.0, 1.0), 3.0)
 		n.scale = Vector3.ONE * 15.0 * (0.7 + 0.3 * grow)
 		var hand := TAU * spin * (1.0 - pow(1.0 - clampf(tt / 0.8, 0.0, 1.0), 3.0))
-		var flare := 1.0 - smoothstep(0.75, 1.2, tt)
-		var vis := grow * (1.0 - smoothstep(dur - 0.6, dur, tt)) * (0.55 + 0.45 * flare)
+		var flare := (1.0 - smoothstep(0.75, 1.2, tt)) * 0.45
+		var vis := grow * (1.0 - smoothstep(dur - 0.6, dur, tt)) * (0.6 + 0.4 * flare)
 		(n as MeshInstance3D).set_instance_shader_parameter("anim", Vector4(k, vis, hand, flare)), 0.0, 0.07)
 	vfx.shockwave(c, 34.0, Color(0.6, 0.9, 1.0), 0.9, 0.03)
 	vfx.shockwave(c, 20.0, Color(0.8, 0.95, 1.0, 0.8), 0.7, 0.04, 0.15)
 	vfx.glyph(c + Vector3(0, 7.0, 0), 3, 5.0, Color(0.7, 0.95, 1.0), 1.4, 0.0, 1.5)
-	vfx.flash_light(c + Vector3(0, 8.0, 0), Color(0.6, 0.85, 1.0), 6.0, 40.0, 0.8)
+	vfx.flash_light(c + Vector3(0, 8.0, 0), Color(0.6, 0.85, 1.0), 3.0, 40.0, 0.8)
 	_desaturate(freeze_time)
 
 
@@ -571,7 +571,7 @@ func field_vision(dur: float, bonus: float) -> void:
 	var col := Color(1.0, 0.88, 0.35)
 	for df in battle.defenders:
 		var rng: float = df.s_range * (1.0 + maxf(df.dyn_range, bonus))
-		vfx.ground_fx("radar", _flat(df.global_position), rng, Color(col, 0.75), Color.WHITE, 1.6)
+		vfx.ground_fx("radar", _flat(df.global_position), rng, Color(col, 0.5), Color.WHITE, 1.3)
 		vfx.glyph(df.model.head_position() + Vector3(0, 1.0, 0), 10, 1.3, col, 1.2, randf() * 0.15, 0.6)
 		defender_aura(df, Color(col, 0.6), dur, 1.15)
 		vfx.burst("magic", df.model.head_position(), col)
@@ -596,8 +596,8 @@ func rally_cry(dur: float) -> void:
 	var col := Color(1.0, 0.82, 0.3)
 	var c := Field.HOME + Vector3(0, 1.5, 0)
 	for i in 3:
-		vfx.sphere_pulse(c, 12.0 + i * 8.0, col, 0.9, i * 0.18)
-		vfx.shockwave(Field.HOME, 18.0 + i * 8.0, col, 0.9, 0.04, i * 0.18)
+		vfx.sphere_pulse(c, 5.0 + i * 3.0, Color(col, 0.7), 0.7, i * 0.16)
+		vfx.shockwave(Field.HOME, 18.0 + i * 8.0, col, 0.9, 0.04, i * 0.16)
 	vfx.glyph(c + Vector3(0, 2.0, 0), 9, 2.4, col, 1.0)
 	for df in battle.defenders:
 		var p: Vector3 = _flat(df.global_position)
@@ -650,8 +650,8 @@ func stretch() -> void:
 	var cols := [Color(1.0, 0.3, 0.25), Color(1.0, 0.85, 0.3), Color(0.35, 0.7, 1.0), Color(0.4, 1.0, 0.55), Color(1.0, 0.5, 0.9)]
 	for i in 7:
 		var ang := lerpf(-50.0, 50.0, i / 6.0) + randf_range(-6, 6)
-		var base := Field.wall_point(ang, 30.0)
-		var top := base + Vector3(randf_range(-3, 3), randf_range(16.0, 22.0), randf_range(-3, 3))
+		var base := Field.wall_point(ang, 31.0)
+		var top := Field.wall_point(ang, 22.0) + Vector3(randf_range(-3, 3), randf_range(10.0, 15.0), randf_range(-3, 3))
 		var col: Color = cols[i % cols.size()]
 		var delay := i * 0.16 + randf() * 0.1
 		var rise := 0.7
@@ -661,12 +661,16 @@ func stretch() -> void:
 				if _rate(40.0):
 					vfx.emit_one("ember", base.lerp(top, k), Vector3(randf_range(-0.5, 0.5), -1.0, randf_range(-0.5, 0.5)), Color(1.0, 0.7, 0.3), 1.0, 0.6)))
 		vfx.after(delay + rise, func() -> void:
-			vfx.emit_one("flash", top, Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.4), 0.9), 2.5, 1.2)
+			vfx.emit_one("flash", top, Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.4), 0.9), 4.0, 1.4)
+			vfx.emit_one("ring", top, Vector3.ZERO, col, 6.0, 1.6)
 			vfx.flash_light(top, col, 6.0, 30.0, 0.5)
-			for k in vfx._count(46):
+			for k in vfx._count(60):
 				var d := Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized()
-				vfx.emit_one("spark", top, d * randf_range(7.0, 10.0), col.lerp(Color.WHITE, 0.25), 1.6, 2.0)
-			vfx.emit("magic", top, 20, col.lerp(Color.WHITE, 0.5), 8.0, 0.0, 1.0, 1.3, 1.6))
+				vfx.emit_one("spark", top, d * randf_range(8.0, 11.0), col.lerp(Color.WHITE, 0.25), 2.8, 2.2)
+			for k in vfx._count(10):
+				var d2 := Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized()
+				vfx.emit_one("glow", top + d2 * 1.5, d2 * 6.0, Color(col, 0.8), 3.0, 1.6)
+			vfx.emit("magic", top, 26, col.lerp(Color.WHITE, 0.5), 9.0, 0.0, 1.0, 2.2, 1.8))
 	for p in [Field.HOME + Vector3(0, 7, -8), Field.MOUND + Vector3(-6, 7, 0), Field.MOUND + Vector3(6, 7, 0)]:
 		vfx.burst("confetti", p)
 

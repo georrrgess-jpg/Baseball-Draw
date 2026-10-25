@@ -44,15 +44,15 @@ func setup(p_battle: Battle, pos: Vector3, facing: Vector3, p_hp: float, dur: fl
 	time_left = dur
 	position = Vector3(pos.x, 0, pos.z)
 	rotation.y = atan2(facing.x, facing.z)
-	var dirt := Color(battle.arena.theme.get("dirt", "#b06a3e")).darkened(0.15)
+	var dirt := Color(battle.arena.theme.get("dirt", "#b06a3e")).lightened(0.05)
 	var mat := _dirt_material(dirt)
-	var dark := _dirt_material(dirt.darkened(0.3))
+	var dark := _dirt_material(dirt.darkened(0.22))
 	_mesh = Node3D.new()
 	add_child(_mesh)
 	# Base berm.
 	var base := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(3.6, 0.9, 1.2)
+	bm.size = Vector3(3.8, 1.0, 1.3)
 	base.mesh = bm
 	base.material_override = mat
 	base.position.y = 0.4
@@ -62,11 +62,11 @@ func setup(p_battle: Battle, pos: Vector3, facing: Vector3, p_hp: float, dur: fl
 	for i in n:
 		var spike := MeshInstance3D.new()
 		var pm := PrismMesh.new()
-		var h := randf_range(1.2, 2.0) * (1.0 - absf(i - (n - 1) * 0.5) / n * 0.6)
-		pm.size = Vector3(randf_range(0.7, 1.0), h, randf_range(0.8, 1.05))
+		var h := randf_range(1.6, 2.6) * (1.0 - absf(i - (n - 1) * 0.5) / n * 0.7)
+		pm.size = Vector3(randf_range(0.8, 1.15), h, randf_range(0.9, 1.15))
 		spike.mesh = pm
 		spike.material_override = mat if i % 2 == 0 else dark
-		spike.position = Vector3(lerpf(-1.45, 1.45, float(i) / (n - 1)) + randf_range(-0.1, 0.1), 0.55 + h * 0.5, randf_range(-0.12, 0.12))
+		spike.position = Vector3(lerpf(-1.6, 1.6, float(i) / (n - 1)) + randf_range(-0.1, 0.1), 0.6 + h * 0.5, randf_range(-0.12, 0.12))
 		spike.rotation = Vector3(randf_range(-0.12, 0.12), randf_range(-0.3, 0.3), randf_range(-0.18, 0.18))
 		_mesh.add_child(spike)
 	for i in 6:

@@ -15,7 +15,7 @@ void vertex() {
 
 void fragment() {
 	float k = anim.x;
-	float pop = 1.0 + 0.6 * pow(1.0 - smoothstep(0.0, 0.18, k), 2.0) - 0.4 * (1.0 - smoothstep(0.0, 0.06, k));
+	float pop = 1.0 + 0.6 * sq(1.0 - smoothstep(0.0, 0.18, k)) - 0.4 * (1.0 - smoothstep(0.0, 0.06, k));
 	vec2 d = (UV - 0.5) * pop * 1.15 + 0.5;
 	vec2 c = vec2(mod(anim.y, 4.0), floor(anim.y / 4.0));
 	float m = 0.0;

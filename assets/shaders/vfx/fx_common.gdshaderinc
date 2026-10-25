@@ -1,5 +1,9 @@
 // Shared helpers for the VFX shaders.
 
+float sq(float x) {
+	return x * x;
+}
+
 // Camera-facing billboard for a particle; INSTANCE_CUSTOM.x is the screen-space angle.
 void billboard_vertex(inout vec3 vtx, inout mat4 modelview, mat4 model, mat4 view, mat4 inv_view, float angle) {
 	vec2 sc = vec2(length(model[0].xyz), length(model[1].xyz));

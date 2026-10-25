@@ -13,4 +13,4 @@ mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 timeout 3000 xvfb-run -a -s "-screen 0 1920x1080x24" godot --path . --rendering-driver vulkan --resolution 1280x720 --fixed-fps 30 \
 	-- --test-battle=practice --profile=vfx --no-hud --vfx-showcase="$card" --vfx-shots="$times" --vfx-out="$out" "$@" 2>&1 \
-	| grep -E "SCRIPT ERROR|SHADER ERROR|^ERROR|^\[VFX\]|at: |error\("  | grep -v "ALSA\|audio" | head -30
+	| grep -E "SCRIPT ERROR|SHADER ERROR|^ERROR|^\[VFX\]|at: |error\("  | grep -v "ALSA\|audio"
