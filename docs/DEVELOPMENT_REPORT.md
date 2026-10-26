@@ -314,6 +314,9 @@ Known limitations of this update:
   survives, and a new card pops into its slot without moving the others. Keys 1–5 always match the slots.
 * **Exact click area** (`src/ui/card_view.gd`): the area that reacts is exactly the drawn card (raised and enlarged
   while hovered or selected) plus its resting slot. The card cannot slip out from under the cursor as it rises.
+* **Forgiving runner targeting** (`src/battle/battle.gd`): while a card that targets a runner is selected, the
+  nearest runner within 95 px of the cursor counts (50 px otherwise). The target is read again at the moment of
+  the click, not from the previous frame, so a runner moving past the cursor is still hit.
 * The fast-play part of the test clicks a card, clicks the field, then immediately clicks the next card,
   twelve times, with new cards landing in the slots meanwhile. All twelve clicks register and all twelve
   cards are cast.

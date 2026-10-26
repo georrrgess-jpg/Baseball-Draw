@@ -190,10 +190,14 @@ func _run() -> void:
 			var sp := _screen_of(tpos + Vector3(0, 1.0, 0))
 			_mouse_move(sp)
 			await _wait(0.2)
+			if not lead.is_empty() and is_instance_valid(lead[0]) and DB.card(id).target == "enemy":
+				sp = _screen_of(lead[0].center())   # the runner kept running meanwhile
 			await _click(sp)
 			await _wait(0.4)
 			cast_ok = battle.cards.hand_count() < hand_before or battle.cards.energy < energy_before - 0.5
-			_check(cast_ok, "clicking the field casts '%s' (energy %.1f -> %.1f)" % [id, energy_before, battle.cards.energy])
+			var hc := get_viewport().gui_get_hovered_control()
+			_check(cast_ok, "clicking the field casts '%s' (energy %.1f -> %.1f)%s" % [id, energy_before, battle.cards.energy,
+				"" if cast_ok else " at %s over %s %s, targeting %d" % [sp, hc.get_path() if hc else "field", hc.get_global_rect() if hc else "", battle.targeting_index]])
 			break
 	if not cast_ok:
 		_check(false, "no castable card found in hand %s" % [battle.cards.hand])
@@ -611,6 +615,9 @@ func _test_tutorial() -> void:
 			var sp := _screen_of(tpos + Vector3(0, 1.0, 0))
 			_mouse_move(sp)
 			await _wait(0.2)
+			var lead_now := battle.lead_runners(1)
+			if not lead_now.is_empty() and DB.card(id).target == "enemy":
+				sp = _screen_of(lead_now[0].center())   # the runner kept running meanwhile
 			await _click(sp)
 			break
 	for i in 30:

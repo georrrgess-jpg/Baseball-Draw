@@ -1359,7 +1359,8 @@ func try_cast_at_cursor() -> bool:
 	var id := targeting_card()
 	if id == "":
 		return false
-	_update_target_preview()
+	# Re-read what is under the cursor right now (not last frame): runners move.
+	_update_hover()
 	if not target_preview.get("valid", false):
 		Audio.ui("card_denied")
 		var want := {"enemy": "Click a runner", "defender": "Click a defender", "path": "Click on a basepath", "area": "Click on the field"}
@@ -1394,7 +1395,9 @@ func _update_hover() -> void:
 	# Nothing in the world is "under the cursor" while it is over a HUD panel or the hand.
 	var over_ui := _mouse_over_ui() and dragging == null
 	hover_defender = null if over_ui else _pick_defender(_mouse_pos)
-	hover_enemy = null if over_ui else _pick_enemy(_mouse_pos)
+	# Aiming a runner card: forgiving pick radius (runners are small and moving).
+	var aiming_runner := targeting_index >= 0 and str(DB.card(targeting_card()).get("target", "")) == "enemy"
+	hover_enemy = null if over_ui else _pick_enemy(_mouse_pos, 95.0 if aiming_runner else 50.0)
 	if targeting_index >= 0:
 		_update_target_preview()
 	if dragging:
@@ -1428,9 +1431,9 @@ func _pick_defender(mp: Vector2) -> Defender:
 	return best
 
 
-func _pick_enemy(mp: Vector2) -> Enemy:
+func _pick_enemy(mp: Vector2, radius := 50.0) -> Enemy:
 	var best: Enemy = null
-	var best_d := 50.0
+	var best_d := radius
 	for e in enemies:
 		if not e.targetable():
 			continue
