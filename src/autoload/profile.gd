@@ -21,6 +21,8 @@ const STARTER_DECK := ["power_throw", "curveball", "heat_wave", "lockdown", "fro
 const STARTER_TEAM := ["ace", "rico", "maya", "jax", "kai", "bruno"]
 const DECK_SIZE := 8
 const TEAM_SIZE := 6
+const BUNDLE_SIZE := 10          # packs in a shop bundle
+const BUNDLE_DISCOUNT := 0.9     # bundle price factor before rounding
 
 var data: Dictionary = {}
 var load_status := "new"   # new | ok | restored_backup | reset_corrupt
@@ -457,21 +459,37 @@ func pack_count(type := "") -> int:
 	return data.packs.filter(func(pk: Dictionary) -> bool: return pk.type == type).size()
 
 
-func can_buy_pack(type: String) -> bool:
+## Price of `count` packs as {"coins", "stars"}. A bundle of BUNDLE_SIZE gets BUNDLE_DISCOUNT
+## off, rounded to a clean number like every other price in the game.
+func pack_price(type: String, count := 1) -> Dictionary:
 	var pd := DB.pack(type)
-	if not bool(pd.get("for_sale", false)):
-		return false
-	return data.coins >= int(pd.get("price_coins", 0)) and data.stars >= int(pd.get("price_stars", 0))
+	var coins := int(pd.get("price_coins", 0))
+	var stars := int(pd.get("price_stars", 0))
+	if count == BUNDLE_SIZE:
+		return {"coins": RunState.round_price(coins * count * BUNDLE_DISCOUNT) if coins > 0 else 0,
+			"stars": RunState.round_price(stars * count * BUNDLE_DISCOUNT) if stars > 0 else 0}
+	return {"coins": coins * count, "stars": stars * count}
 
 
-func buy_pack(type: String) -> bool:
-	if not can_buy_pack(type):
-		return false
+func can_buy_pack(type: String, count := 1) -> bool:
 	var pd := DB.pack(type)
-	data.coins -= int(pd.get("price_coins", 0))
-	data.stars -= int(pd.get("price_stars", 0))
-	add_pack(type, "Bought in the shop")
-	bump_stat("packs_bought")
+	if not bool(pd.get("for_sale", false)) or count < 1:
+		return false
+	var price := pack_price(type, count)
+	return data.coins >= int(price.coins) and data.stars >= int(price.stars)
+
+
+func buy_pack(type: String, count := 1) -> bool:
+	if not can_buy_pack(type, count):
+		return false
+	var price := pack_price(type, count)
+	data.coins -= int(price.coins)
+	data.stars -= int(price.stars)
+	for i in count:
+		data.packs.append({"type": type, "source": "Bought in the shop"})
+	bump_stat("packs_bought", count)
+	packs_changed.emit()
+	changed.emit()
 	save_soon()
 	return true
 
@@ -479,6 +497,39 @@ func buy_pack(type: String) -> bool:
 ## Opens the unopened pack at `index`: rolls its cards, adds them to the collection
 ## and returns {"type", "source", "cards": [{"id", "rarity", "new", "copies"}]}.
 func open_pack(index: int) -> Dictionary:
+	var res := _open_one(index)
+	if res.is_empty():
+		return res
+	packs_changed.emit()
+	changed.emit()
+	save_soon()
+	return res
+
+
+## Opens `count` unopened packs of one type (and signature card) in one go, each rolled
+## exactly like a single open. Opens nothing unless that many are owned. Returns
+## {"type", "packs", "cards"} with every card of every pack, in opening order.
+func open_packs(type: String, count: int, card := "") -> Dictionary:
+	var idx: Array[int] = []
+	for i in data.packs.size():
+		var pk: Dictionary = data.packs[i]
+		if pk.type == type and str(pk.get("card", "")) == card:
+			idx.append(i)
+	if count < 1 or idx.size() < count:
+		return {}
+	var cards: Array = []
+	# Highest index first so earlier indices stay valid as packs are removed.
+	idx.resize(count)
+	idx.reverse()
+	for i in idx:
+		cards.append_array(_open_one(i).get("cards", []))
+	packs_changed.emit()
+	changed.emit()
+	save_soon()
+	return {"type": type, "packs": count, "cards": cards}
+
+
+func _open_one(index: int) -> Dictionary:
 	if index < 0 or index >= data.packs.size():
 		return {}
 	var pk: Dictionary = data.packs[index]
@@ -494,9 +545,6 @@ func open_pack(index: int) -> Dictionary:
 		cards.append({"id": cid, "rarity": rarity, "new": is_new, "copies": 0 if is_new else copies})
 	data.packs_opened = int(data.packs_opened) + 1
 	bump_stat("packs_opened")
-	packs_changed.emit()
-	changed.emit()
-	save_soon()
 	return {"type": pk.type, "source": pk.get("source", ""), "cards": cards}
 
 

@@ -292,6 +292,7 @@ func test_packs() -> void:
 	ok(int(Profile.data.coins) == 1000 - int(DB.pack("rookie").price_coins), "the shop charges the pack price")
 	ok(not Profile.buy_pack("champion"), "Champion Packs need stars")
 	ok(not Profile.buy_pack("signature"), "Signature Packs are not for sale")
+	test_pack_bundles()
 	# Level-ups and new defenders give packs.
 	var n := Profile.pack_count()
 	Profile.add_xp(Profile.xp_to_next(int(Profile.data.level)))
@@ -330,6 +331,83 @@ func test_packs() -> void:
 	Profile.load_profile()
 	ok(Profile.pack_count() == count, "unopened packs survive save and load")
 	Profile.reset_profile()
+
+
+## Shop bundles of 10 and opening 5 / 10 packs at once.
+func test_pack_bundles() -> void:
+	section("pack bundles and multi-open")
+	var n := Profile.BUNDLE_SIZE
+	var packs0 := Profile.pack_count()
+	for type in ["rookie", "pro", "champion"]:
+		var single := Profile.pack_price(type)
+		var bundle := Profile.pack_price(type, n)
+		var key := "stars" if int(single.stars) > 0 else "coins"
+		ok(int(bundle[key]) < int(single[key]) * n, "%s bundle is cheaper than %d singles (%d vs %d)" % [type, n, int(bundle[key]), int(single[key]) * n])
+		ok(int(bundle[key]) == RunState.round_price(int(single[key]) * n * Profile.BUNDLE_DISCOUNT), "%s bundle price is the rounded discount" % type)
+	ok(int(Profile.pack_price("rookie", n).coins) == 1350, "10 Rookie Packs cost 1,350 coins (%d)" % int(Profile.pack_price("rookie", n).coins))
+	ok(int(Profile.pack_price("rookie", 3).coins) == 450, "other counts are not discounted")
+	# Refused when short, without touching the wallet or the inventory.
+	var price := int(Profile.pack_price("rookie", n).coins)
+	Profile.data.coins = price - 1
+	ok(not Profile.can_buy_pack("rookie", n), "a bundle needs its full price")
+	ok(not Profile.buy_pack("rookie", n), "buying a bundle without enough coins fails")
+	ok(int(Profile.data.coins) == price - 1 and Profile.pack_count() == packs0, "a refused bundle charges nothing and adds no packs")
+	ok(not Profile.buy_pack("signature", n), "Signature Packs are not sold in bundles")
+	Profile.data.stars = 0
+	ok(not Profile.buy_pack("champion", n), "a Champion bundle needs stars")
+	# Buying a bundle.
+	Profile.data.coins = price + 7
+	var bought0 := Profile.stat("packs_bought")
+	var rookies0 := Profile.pack_count("rookie")
+	ok(Profile.buy_pack("rookie", n), "buying 10 Rookie Packs succeeds")
+	ok(int(Profile.data.coins) == 7, "the bundle price is deducted (%d left)" % int(Profile.data.coins))
+	ok(Profile.pack_count("rookie") == rookies0 + n, "the bundle adds 10 Rookie Packs")
+	ok(Profile.stat("packs_bought") == bought0 + n, "the bundle counts 10 packs bought")
+	Profile.data.stars = int(Profile.pack_price("champion", n).stars)
+	ok(Profile.buy_pack("champion", n) and int(Profile.data.stars) == 0 and Profile.pack_count("champion") >= n, "a Champion bundle is paid in stars")
+	# Opening 10 at once.
+	var opened0 := int(Profile.data.packs_opened)
+	var rookies := Profile.pack_count("rookie")
+	Profile._save_queued = false
+	var res := Profile.open_packs("rookie", n)
+	ok(int(res.get("packs", 0)) == n and res.get("cards", []).size() == n * int(DB.pack("rookie").cards), "opening 10 Rookie Packs gives 30 cards (%d)" % res.get("cards", []).size())
+	ok(Profile.pack_count("rookie") == rookies - n, "opening 10 consumes 10 packs")
+	ok(int(Profile.data.packs_opened) == opened0 + n, "every pack counts as opened")
+	ok(Profile._save_queued, "a multi-open saves the profile")
+	var all_owned := true
+	var new_seen := {}
+	var flags_ok := true
+	for c in res.get("cards", []):
+		all_owned = all_owned and Profile.is_card_owned(c.id)
+		if c.new:
+			flags_ok = flags_ok and not new_seen.has(c.id) and int(c.copies) == 0
+			new_seen[c.id] = true
+		else:
+			flags_ok = flags_ok and int(c.copies) > 0
+	ok(all_owned, "every multi-open card is in the collection")
+	ok(flags_ok, "a card is NEW at most once per multi-open; repeats become copies")
+	# Each pack keeps its own guarantees: 10 Champion Packs hold at least 10 Epic+ cards.
+	var champs := Profile.pack_count("champion")
+	var cres := Profile.open_packs("champion", n)
+	var epics := 0
+	for c in cres.get("cards", []):
+		if DB.rarity_index(c.rarity) >= DB.rarity_index("epic"):
+			epics += 1
+	ok(cres.get("cards", []).size() == n * int(DB.pack("champion").cards) and epics >= n, "10 Champion Packs keep a guaranteed Epic each (%d)" % epics)
+	ok(Profile.pack_count("champion") == champs - n, "10 Champion Packs consumed")
+	# Opening more than owned does nothing.
+	Profile.add_pack("pro", "test")
+	Profile.add_pack("pro", "test")
+	var pros := Profile.pack_count("pro")
+	ok(Profile.open_packs("pro", 5).is_empty() and Profile.pack_count("pro") == pros, "opening 5 with fewer owned opens nothing")
+	var five := Profile.open_packs("pro", 2)
+	ok(five.get("cards", []).size() == 2 * int(DB.pack("pro").cards) and Profile.pack_count("pro") == pros - 2, "opening a smaller batch works")
+	# Saved like single opens.
+	Profile.save_now()
+	var opened := int(Profile.data.packs_opened)
+	var owned_id: String = res.cards[0].id
+	Profile.load_profile()
+	ok(int(Profile.data.packs_opened) == opened and Profile.is_card_owned(owned_id), "multi-open results survive save and load")
 
 
 func test_battle_systems() -> void:

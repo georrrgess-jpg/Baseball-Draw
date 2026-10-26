@@ -99,6 +99,11 @@ func _run() -> void:
 		await _test_deck_menus()
 		_finish()
 		return
+	if "--ui-test-section=packs" in OS.get_cmdline_user_args():
+		await _test_packs()
+		await _test_multi_packs()
+		_finish()
+		return
 	Profile.data.flags["battle_help"] = true
 	Profile.data.flags["battle_tutorial_done"] = true
 	var cfg := Session.new_run_config("quick")
@@ -305,6 +310,7 @@ func _run() -> void:
 			await _click(_button_center(back))
 			_check(await _wait_scene("main_menu"), "BACK returns to the main menu from %s" % pair[1])
 	await _test_packs()
+	await _test_multi_packs()
 	await _test_deck_menus()
 	await _test_tutorial()
 	_finish()
@@ -365,6 +371,83 @@ func _test_packs() -> void:
 			if ps.state == "idle":
 				break
 		_check(ps.state == "idle", "pack screen returns to the next pack")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+## 13b. Pack shop bundle and multi-open: BUY 10, OPEN ×10, REVEAL ALL, DONE.
+func _test_multi_packs() -> void:
+	var n: int = Profile.BUNDLE_SIZE
+	var price := int(Profile.pack_price("rookie", n).coins)
+	Profile.data.coins = price + 100
+	Router.goto("packs")
+	_check(await _wait_scene("packs"), "packs screen opens for the bundle test")
+	await _wait(1.2)
+	var ps: Node = get_tree().current_scene
+	var buy: Button = ps._buy_buttons.get("rookie:%d" % n)
+	_check(buy != null and not buy.disabled, "Rookie Pack has an enabled BUY 10 button")
+	var pro_buy: Button = ps._buy_buttons.get("pro:%d" % n)
+	_check(pro_buy != null and pro_buy.disabled, "an unaffordable BUY 10 is disabled")
+	if buy == null:
+		return
+	var rookies := Profile.pack_count("rookie")
+	await _click(_button_center(buy))
+	await _wait(0.6)
+	_check(Profile.pack_count("rookie") == rookies + n, "BUY 10 adds 10 Rookie Packs (%d -> %d)" % [rookies, Profile.pack_count("rookie")])
+	_check(int(Profile.data.coins) == 100, "BUY 10 charges the bundle price (%d left)" % int(Profile.data.coins))
+	_check(ps.selected.get("type", "") == "rookie", "the bought pack type is shown on the stage")
+	var five := _find_button(ps, "OPEN ×5")
+	var ten := _find_button(ps, "OPEN ×10")
+	_check(five != null and not five.disabled, "OPEN ×5 offered with 10+ packs")
+	_check(ten != null and not ten.disabled, "OPEN ×10 offered with 10+ packs")
+	if ten == null:
+		return
+	var before := Profile.pack_count("rookie")
+	var opened := int(Profile.data.packs_opened)
+	await _click(_button_center(ten))
+	for i in 120:
+		await _wait(0.1)
+		if ps.state == "reveal":
+			break
+	_check(ps.state == "reveal" and ps._multi != null, "the ×10 opening reaches the summary grid (state %s)" % ps.state)
+	_check(Profile.pack_count("rookie") == before - n and int(Profile.data.packs_opened) == opened + n, "OPEN ×10 consumes 10 packs")
+	if ps._multi == null:
+		return
+	var summary: PackSummary = ps._multi
+	var pulled := 0
+	for e in summary.entries:
+		pulled += int(e.count)
+	_check(pulled == n * int(DB.pack("rookie").cards), "the grid holds all %d cards (%d)" % [n * int(DB.pack("rookie").cards), pulled])
+	var sorted_ok := true
+	for i in range(1, summary.entries.size()):
+		sorted_ok = sorted_ok and DB.rarity_index(summary.entries[i - 1].rarity) >= DB.rarity_index(summary.entries[i].rarity)
+	_check(sorted_ok, "the grid is sorted best rarity first")
+	var vp_rect := get_viewport().get_visible_rect()
+	var inside := true
+	for e in summary.entries:
+		inside = inside and vp_rect.encloses((e.view as Control).get_global_rect())
+	_check(inside or summary._scroll.get_v_scroll_bar().visible, "every card fits on screen (or the grid scrolls)")
+	var all := _find_button(ps, "REVEAL ALL")
+	_check(all != null, "REVEAL ALL shown for the multi-open")
+	if all:
+		await _click(_button_center(all))
+	for i in 150:
+		await _wait(0.1)
+		if ps.state == "done":
+			break
+	_check(ps.state == "done", "every multi-open card revealed")
+	_check(summary.entries.all(func(e: Dictionary) -> bool: return e.revealed and not (e.view as CardView).face_down), "all grid cards face up")
+	var done := _find_button(ps, "DONE")
+	_check(done != null, "DONE shown after the multi-open")
+	if done:
+		await _click(_button_center(done))
+		for i in 40:
+			await _wait(0.1)
+			if ps.state == "idle":
+				break
+		_check(ps.state == "idle" and ps._multi == null, "DONE returns to the pack screen")
+		await _wait(0.6)
+		_check(not is_instance_valid(summary), "the summary grid is removed")
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
 
