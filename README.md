@@ -85,7 +85,7 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
 | Mouse wheel | Zoom |
 | Left click | Select defender / drag to reposition / cast card |
 | Right click | Cancel targeting or drag, deselect |
-| 1–5 | Select ability card (press again to cast at the cursor when it is over the field) |
+| 1–5 | Select the card in that slot (press again to cast at the cursor when it is over the field) |
 | Q / E | Previous / next playable card |
 | Space | Begin next wave (early calls earn bonus coins) |
 | Shift | Fast-forward (1x → 2x → 3x) |

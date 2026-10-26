@@ -296,3 +296,24 @@ Known limitations of this update:
   from the renders. Jersey/trouser and sleeve layering were not changed.
 * When runners bunch tightly, their health bars overlap (the nearest is drawn on top).
 * The Windows executable is built by CI but was not run on Windows here.
+
+## 10. Update 4: reliable card clicks, 10-pack bundles, multi-open
+
+* **Dead click zones on the hand fixed.** A new UI test (`--ui-test-section=cards`) moves the mouse over a
+  5 × 7 grid on every card in the hand and checks which control would receive a click. It found two culprits:
+  * The scene-transition layer (`src/autoload/router.gd`, drawn above every screen) left its 600 × 80
+    loading-text box in place, invisible, at the bottom centre of the screen. It took the clicks on the middle
+    and lower part of the hand cards, and on anything else in that spot on other screens. About a third of
+    each card did not respond. It now ignores the mouse.
+  * The energy row under the cards could take clicks on their bottom edge; it now ignores the mouse.
+  After the fix, all 175 sampled points respond.
+* **Fixed card slots** (`src/battle/card_system.gd`, `src/ui/battle_hud.gd`): the hand used to be rebuilt from scratch
+  after every play and every draw, and it re-centred, so all cards slid sideways by half a card under the
+  cursor. Now the hand has five fixed slots. A played card leaves an empty slot showing a NEXT CARD timer,
+  and the next draw fills it. Cards that stay are never recreated, so their hover and selection state
+  survives, and a new card pops into its slot without moving the others. Keys 1–5 always match the slots.
+* **Exact click area** (`src/ui/card_view.gd`): the area that reacts is exactly the drawn card (raised and enlarged
+  while hovered or selected) plus its resting slot. The card cannot slip out from under the cursor as it rises.
+* The fast-play part of the test clicks a card, clicks the field, then immediately clicks the next card,
+  twelve times, with new cards landing in the slots meanwhile. All twelve clicks register and all twelve
+  cards are cast.
