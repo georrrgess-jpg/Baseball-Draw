@@ -88,7 +88,10 @@ func _update_foil() -> void:
 	_foil_mat.set_shader_parameter("sheen", [0.0, 0.0, 0.32, 0.42, 0.55][r])
 	_foil_mat.set_shader_parameter("holo", [0.0, 0.0, 0.0, 0.55, 0.85][r])
 	_foil_mat.set_shader_parameter("phase", float(absi(hash(card_id)) % 97) / 27.0)
-	_foil_mat.set_shader_parameter("card_size", size if size.x > 1.0 else custom_minimum_size)
+	var sz := size if size.x > 1.0 else custom_minimum_size
+	_foil_mat.set_shader_parameter("card_size", sz)
+	# _draw() draws the card around its bottom centre (see draw_set_transform there).
+	_foil_mat.set_shader_parameter("rect_origin", Vector2(-sz.x * 0.5, -sz.y))
 	material = _foil_mat
 
 

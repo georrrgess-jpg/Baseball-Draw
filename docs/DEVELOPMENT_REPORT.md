@@ -236,6 +236,9 @@ Vulkan, 1600×900, High preset). Gameplay shots come from autopilot games.
     "Click a runner").
   * Every cast flies a glow from the card to the target and bursts there, so each card visibly does
     something even when its effect is quiet.
+* **Foil fix** (`assets/shaders/card_foil.gdshader`): Epic and Legendary cards were washed in rainbow colours and
+  their light sweep jumped around while hovering. The foil now uses the card's own coordinates (the card is
+  drawn around its bottom centre since the hover animation was added) and the sweep keeps one speed.
 * **Field view** (`src/battle/camera_rig.gd`, `src/ui/battle_hud.gd`): the default camera shows all three gates,
   including the middle one, and home plate above the hand. The scoreboard moved to a compact top-right panel.
 * **Hits are easy to see** (`src/battle/enemy.gd`, `src/battle/projectiles.gd`, `src/vfx/vfx.gd`,
