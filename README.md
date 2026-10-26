@@ -36,7 +36,8 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
   pack shop. Each pack has its own design and opening: the foil pack charges up and tears open, the cards
   fan out face down with a glow in their rarity colour, and flip when clicked. Pro, Champion and Signature
   packs add light rays, lightning arcs, particle spirals and confetti, and Epic and Legendary pulls get an
-  extra build-up. Duplicates become upgrade copies, spent in the **Upgrade Cards** screen.
+  extra build-up. Buy packs one at a time or in bundles of 10, and open 5 or 10 at once into a single
+  results grid. Duplicates become upgrade copies, spent in the **Upgrade Cards** screen.
 - **Guided first game**: pop-up tips walk new players through the field, outs and runs, moving defenders,
   starting a wave and playing a card, with extra tips for the first run scored, the dugout and the first
   boss.

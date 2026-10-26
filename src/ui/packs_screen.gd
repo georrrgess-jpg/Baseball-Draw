@@ -1453,7 +1453,9 @@ func _flip(i: int) -> void:
 	tw.tween_property(c.root, "scale", c.root.scale * 1.16, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.chain().tween_property(c.root, "scale", c.root.scale, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	tw.parallel().tween_callback(_reveal_fx.bind(i)).set_delay(0.0)
-	tw.chain().tween_callback(_check_done)
+	tw.chain().tween_callback(func() -> void:
+		c["face_up"] = true   # "revealed" is set when the flip starts (an Epic trembles first)
+		_check_done())
 
 
 func _reveal_fx(i: int) -> void:
@@ -1520,7 +1522,7 @@ func _check_done() -> void:
 	if state != "reveal":
 		return
 	for c in _cards:
-		if not c.revealed:
+		if not c.get("face_up", false):
 			return
 	state = "done"
 	_update_action()

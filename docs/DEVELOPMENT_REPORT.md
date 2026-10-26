@@ -317,3 +317,23 @@ Known limitations of this update:
 * The fast-play part of the test clicks a card, clicks the field, then immediately clicks the next card,
   twelve times, with new cards landing in the slots meanwhile. All twelve clicks register and all twelve
   cards are cast.
+* **BUY 10** (`src/autoload/profile.gd`, `src/ui/packs_screen.gd`): every pack in the shop has BUY and BUY 10.
+  Bundles are 10 % off, rounded like other prices: Rookie 1,350 coins, Pro 3,600 coins, Champion 325 stars.
+  The line under the buttons shows the saving or how much is missing. Buying plays a sound, shows a toast and
+  highlights the pack in YOUR PACKS.
+* **OPEN ×5 / OPEN ×10**: these appear beside OPEN PACK when you own at least 5 or 10 of the selected pack.
+  * One opening plays for all of them. The extra packs fan out behind the front pack and fly into it during the
+    charge-up, and it tears with a bigger burst.
+  * Every pack is rolled with the same odds and guarantees as a single open.
+  * The results grid (`src/ui/pack_summary.gd`) deals the cards face down, best rarity first.
+    * Duplicates stack with a ×N badge. Each card is tagged NEW!, UPGRADE READY or +N copies, and the
+      header counts each rarity.
+    * REVEAL ALL flips the cards in a cascade from commons up, so the best land last. Epic and Legendary
+      cards get the same celebration as a single open.
+    * SKIP, clicking single cards, and DONE work as on a single open.
+* Single opens now wait until every card has actually turned (an Epic or Legendary trembles first) before
+  offering DONE or the next pack.
+
+| | |
+|---|---|
+| ![Pack shop](screenshots/packs_shop.jpg) BUY 10 and OPEN ×5 / ×10 | ![Multi-open](screenshots/packs_multi.jpg) Ten Champion packs at once |
