@@ -1183,8 +1183,8 @@ func select_card(index: int, from_key := false) -> void:
 			Audio.ui("ui_back")
 			_cancel_targeting()
 		return
-	if index < 0 or index >= cards.hand.size():
-		return
+	if index < 0 or index >= cards.hand.size() or cards.hand[index] == "":
+		return   # empty slot: the next card is on its way
 	var reason := cards.check(index)
 	if reason == "" and not (state == "wave" or practice):
 		reason = "Play cards during waves"

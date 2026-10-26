@@ -55,6 +55,9 @@ func _ready() -> void:
 	box.position = Vector2(-300, -170)
 	box.custom_minimum_size = Vector2(600, 80)
 	box.add_theme_constant_override("separation", 10)
+	# The fade layer sits above every screen: nothing on it may ever take mouse input
+	# (this box used to block clicks on the bottom-centre of every screen, e.g. the card hand).
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade.add_child(box)
 	_loading_label = Label.new()
 	_loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -64,6 +67,7 @@ func _ready() -> void:
 	_loading_bar = ProgressBar.new()
 	_loading_bar.show_percentage = false
 	_loading_bar.custom_minimum_size = Vector2(600, 10)
+	_loading_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(_loading_bar)
 	_set_loading_visible(false)
 

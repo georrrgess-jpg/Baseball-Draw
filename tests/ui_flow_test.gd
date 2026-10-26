@@ -99,6 +99,10 @@ func _run() -> void:
 		await _test_deck_menus()
 		_finish()
 		return
+	if "--ui-test-section=cards" in OS.get_cmdline_user_args():
+		await _test_card_clicks()
+		_finish()
+		return
 	Profile.data.flags["battle_help"] = true
 	Profile.data.flags["battle_tutorial_done"] = true
 	var cfg := Session.new_run_config("quick")
@@ -168,7 +172,7 @@ func _run() -> void:
 	for idx in battle.cards.hand.size():
 		if battle.cards.check(idx) == "":
 			var id: String = battle.cards.hand[idx]
-			var hand_before := battle.cards.hand.size()
+			var hand_before := battle.cards.hand_count()
 			var energy_before := battle.cards.energy
 			await _key("card_%d" % (idx + 1))
 			_check(battle.targeting_index == idx, "key %d selects card '%s'" % [idx + 1, id])
@@ -183,7 +187,7 @@ func _run() -> void:
 			await _wait(0.2)
 			await _click(sp)
 			await _wait(0.4)
-			cast_ok = battle.cards.hand.size() < hand_before or battle.cards.energy < energy_before - 0.5
+			cast_ok = battle.cards.hand_count() < hand_before or battle.cards.energy < energy_before - 0.5
 			_check(cast_ok, "clicking the field casts '%s' (energy %.1f -> %.1f)" % [id, energy_before, battle.cards.energy])
 			break
 	if not cast_ok:
@@ -554,6 +558,130 @@ func _all_buttons(n: Node) -> Array[Button]:
 	for c in n.get_children():
 		out.append_array(_all_buttons(c))
 	return out
+
+
+## Card hand responsiveness: every point of every card must react to the mouse, and fast
+## click sequences (select, cast, select the next card right away) must never be dropped.
+func _test_card_clicks() -> void:
+	Profile.data.flags["battle_help"] = true
+	Profile.data.flags["battle_tutorial_done"] = true
+	var cfg := Session.new_run_config("quick")
+	cfg.difficulty = "rookie"
+	Session.start(cfg)
+	for i in 200:
+		await _wait(0.1)
+		var scene := get_tree().current_scene
+		if scene is Battle and (scene as Battle).state == "setup":
+			battle = scene
+			break
+	_check(battle != null, "battle loaded")
+	if battle == null:
+		return
+	await _wait(0.8)
+	await _key("start_wave")
+	await _wait(0.3)
+	battle.cam.default_view(true)
+	battle.cards.infinite_energy = true
+	battle.cards.energy = CardSystem.MAX_ENERGY
+	for i in 80:
+		await _wait(0.1)
+		if battle.enemies.size() > 0:
+			break
+	await _wait(0.5)
+	var xf := get_viewport().get_final_transform()
+	var hud: Node = battle.hud
+	# 1. Hit map: a grid of points over every card in the hand (3D off meanwhile: faster).
+	RenderingServer.viewport_set_disable_3d(get_viewport().get_viewport_rid(), true)
+	var dead := 0
+	var total := 0
+	var dead_pts: Array[String] = []
+	var views: Array = hud.get("_card_views")
+	for slot in views.size():
+		if not is_instance_valid(views[slot]):
+			continue
+		var r: Rect2 = (views[slot] as CardView).get_global_rect()
+		for gx in 5:
+			for gy in 7:
+				var p := r.position + Vector2(3 + (r.size.x - 6) * gx / 4.0, 3 + (r.size.y - 6) * gy / 6.0)
+				_mouse_move(xf * p)
+				await get_tree().process_frame
+				await get_tree().process_frame
+				var cv: CardView = views[slot] if is_instance_valid(views[slot]) else null
+				if cv == null:
+					continue   # played or replaced meanwhile
+				total += 1
+				var h := get_viewport().gui_get_hovered_control()
+				if h != cv:
+					dead += 1
+					if dead_pts.size() < 12:
+						dead_pts.append("%s@(%d,%d)->%s" % [cv.card_id, gx, gy, ("%s %s" % [h.get_path(), h.get_global_rect()]) if h else "none"])
+	RenderingServer.viewport_set_disable_3d(get_viewport().get_viewport_rid(), false)
+	_check(dead == 0 and total > 0, "every point of every hand card reacts to the mouse (%d/%d dead) %s" % [dead, total, dead_pts])
+	# 2. Fast play: click a card, click a target, then immediately click the next card.
+	var reacted := [0]
+	var on_sel := func(_i: int) -> void: reacted[0] += 1
+	var on_deny := func(_i: int, _r: String) -> void: reacted[0] += 1
+	battle.targeting_changed.connect(on_sel)
+	battle.card_denied.connect(on_deny)
+	var clicks := 0
+	var misses: Array[String] = []
+	var casts := 0
+	for round_i in 12:
+		if battle.state != "wave":   # the slow hit map may outlast the first wave
+			await _key("start_wave")
+			for i in 60:
+				await _wait(0.1)
+				if battle.state == "wave" and battle.enemies.size() > 0:
+					break
+		battle.cards.energy = CardSystem.MAX_ENERGY
+		battle.cards.cooldowns.clear()
+		battle.cards.draw_interval = 0.3   # new cards land in empty slots while we click
+		var pick: CardView = null
+		for idx in views.size():
+			var cv: CardView = views[idx] if is_instance_valid(views[idx]) else null
+			if cv and cv.is_visible_in_tree() and battle.cards.check(idx) == "" \
+					and str(DB.card(cv.card_id).target) in ["none", "area", "path", "enemy"]:
+				pick = cv
+				break
+		if pick == null:
+			await _wait(0.3)
+			continue
+		var before: int = reacted[0]
+		var cp := xf * pick.get_global_rect().get_center()
+		_mouse_move(cp)
+		await get_tree().process_frame
+		_mouse_button(cp, true)
+		await get_tree().process_frame
+		_mouse_button(cp, false)
+		await get_tree().process_frame
+		clicks += 1
+		if reacted[0] == before:
+			misses.append(pick.card_id)
+			continue
+		if battle.targeting_index < 0:
+			continue   # instant cards cast on the first click
+		var tpos := Field.MOUND
+		var lead := battle.lead_runners(1)
+		if not lead.is_empty():
+			tpos = lead[0].global_position
+		var sp := _screen_of(tpos + Vector3(0, 1.0, 0))
+		var hand_before := battle.cards.hand.duplicate()
+		_mouse_move(sp)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_mouse_button(sp, true)
+		await get_tree().process_frame
+		_mouse_button(sp, false)
+		await get_tree().process_frame
+		if battle.cards.hand != hand_before:
+			casts += 1
+		else:
+			var hc := get_viewport().gui_get_hovered_control()
+			print("[UITEST] note: no cast of '%s' at %s (targeting %d, over ui %s, preview %s)" % [pick.card_id, sp,
+				battle.targeting_index, hc.get_path() if hc else "none", battle.target_preview.get("valid", "?")])
+	_check(clicks >= 8, "fast play made %d card clicks" % clicks)
+	_check(misses.is_empty(), "no fast card click was dropped (%d dropped: %s)" % [misses.size(), misses])
+	_check(casts >= 4, "fast play cast %d cards" % casts)
 
 
 func _finish() -> void:

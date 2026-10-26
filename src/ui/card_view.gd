@@ -106,10 +106,18 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
-## The clickable area follows the card as it rises, plus a few forgiving pixels around it.
+## The clickable area is exactly what is drawn (the raised, enlarged card) plus the card's
+## resting slot, so the card never slips out from under the cursor while it rises.
 func _has_point(point: Vector2) -> bool:
-	var up := lift_px * 2.2 * (size.x / 150.0) * maxf(_lift, _sel) + 6.0
-	return Rect2(Vector2(-4, -up), size + Vector2(8, up + 4)).has_point(point)
+	return _hit_rect().has_point(point)
+
+
+func _hit_rect() -> Rect2:
+	var s := size.x / 150.0
+	var rise := s * (lift_px * _lift + lift_px * 1.2 * _sel)
+	var grow := 1.0 + 0.035 * _lift + 0.06 * _sel
+	var vis := Rect2(size.x * 0.5 * (1.0 - grow), size.y - rise - size.y * grow, size.x * grow, size.y * grow)
+	return Rect2(Vector2.ZERO, size).merge(vis).grow_individual(3.0, 6.0, 3.0, 6.0)
 
 
 ## Shake and flash red: the card was clicked but can't be played right now.
@@ -120,6 +128,10 @@ func deny() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	# Never stay "hovered" once the mouse is elsewhere (e.g. a card dealt under a resting mouse).
+	if _hover and not _hit_rect().has_point(get_local_mouse_position()):
+		_hover = false
+		hovered.emit(self, false)
 	var k := 1.0 - exp(-delta * 16.0)
 	var hover_t := 1.0 if (_hover and playable) or (_hover and not selected) else 0.0
 	var sel_t := 1.0 if selected else 0.0

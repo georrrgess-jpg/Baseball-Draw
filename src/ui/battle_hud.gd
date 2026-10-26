@@ -18,8 +18,11 @@ var _threat_bar: ProgressBar
 var _threat_icons: HBoxContainer
 var _threat_title: Label
 var _mods_label: Label
-var _hand_box: HBoxContainer
-var _card_views: Array[CardView] = []
+const HAND_CARD := Vector2(146, 204)
+const HAND_GAP := 12.0
+
+var _hand_box: HandTray
+var _card_views: Array = []        # one per hand slot: CardView, or null for an empty slot
 var _energy_bar: Control
 var _energy_label: Label
 var _deck_label: Label
@@ -214,13 +217,15 @@ func _build_threats() -> void:
 
 
 func _build_bottom() -> void:
-	# Card hand
-	_hand_box = HBoxContainer.new()
+	# Card hand: five fixed slots, so cards never slide under the cursor.
+	_hand_box = HandTray.new()
+	_hand_box.hud = self
+	var tray_w := HAND_CARD.x * CardSystem.MAX_HAND + HAND_GAP * (CardSystem.MAX_HAND - 1)
 	_hand_box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_hand_box.position = Vector2(-380, -236)
-	_hand_box.custom_minimum_size = Vector2(760, 190)
-	_hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_hand_box.add_theme_constant_override("separation", 12)
+	_hand_box.offset_left = -tray_w * 0.5
+	_hand_box.offset_right = tray_w * 0.5
+	_hand_box.offset_top = -236.0
+	_hand_box.offset_bottom = -236.0 + HAND_CARD.y
 	_hand_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_hand_box)
 	# Energy bar
@@ -248,9 +253,10 @@ func _build_bottom() -> void:
 	_draw_bar.show_percentage = false
 	_draw_bar.max_value = 1.0
 	_draw_bar.add_theme_stylebox_override("fill", UITheme.panel_style(UITheme.GOLD, Color(0, 0, 0, 0), 0, 3, 0))
-	_draw_bar.tooltip_text = "Next card draw"
 	deck_box.add_child(_draw_bar)
 	eb.add_child(deck_box)
+	# The energy row sits just under the cards: it must never take clicks meant for them.
+	_ignore_mouse(eb)
 
 
 func _build_minimap() -> void:
@@ -471,9 +477,13 @@ func _build_practice_panel() -> void:
 	var give := UITheme.small_button("To hand", UITheme.GOLD, 18)
 	give.pressed.connect(func() -> void:
 		var cid: String = DB.card_order[card_opt.selected]
-		if battle.cards.hand.size() >= CardSystem.MAX_HAND:
-			battle.cards.hand.pop_front()
-		battle.cards.hand.append(cid)
+		var slot := battle.cards.hand.find("")
+		if slot >= 0:
+			battle.cards.hand[slot] = cid
+		elif battle.cards.hand.size() < CardSystem.MAX_HAND:
+			battle.cards.hand.append(cid)
+		else:
+			battle.cards.hand[0] = cid
 		battle.cards.hand_changed.emit())
 	card_row.add_child(give)
 	vb.add_child(card_row)
@@ -531,42 +541,64 @@ func _build_tooltips() -> void:
 # ---------------------------------------------------------------- hand
 
 func _rebuild_hand() -> void:
-	for c in _hand_box.get_children():
-		c.queue_free()
-	_card_views.clear()
+	# Update slot by slot: cards that stay keep their node (and hover/selection state);
+	# only a played or replaced card is removed and only a new card is dealt in.
 	var cs: CardSystem = battle.cards
-	for i in cs.hand.size():
-		var id: String = cs.hand[i]
-		var cv := CardView.new(id, battle.run.card_level(id))
-		cv.set_card(id, battle.run.card_level(id))
-		cv.custom_minimum_size = Vector2(146, 204)
-		cv.lift_px = 14.0
-		cv.hotkey = str(i + 1)
-		cv.selected = i == battle.targeting_index
-		var idx := i
-		cv.clicked.connect(func(_c: CardView) -> void: battle.select_card(idx))
-		cv.hovered.connect(_on_card_hover)
-		_hand_box.add_child(cv)
-		_card_views.append(cv)
+	_card_views.resize(CardSystem.MAX_HAND)
+	for i in CardSystem.MAX_HAND:
+		var id: String = cs.hand[i] if i < cs.hand.size() else ""
+		var cv: CardView = _card_views[i] if is_instance_valid(_card_views[i]) else null
+		if cv and cv.card_id == id:
+			continue
+		if cv:
+			cv.visible = false
+			cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cv.queue_free()
+		_card_views[i] = _deal_card(i, id) if id != "" else null
 	_update_cards()
-	_restore_hover.call_deferred()
 
 
-## A rebuilt hand starts un-hovered; re-hover the card that is under the mouse right now.
-func _restore_hover() -> void:
-	var mp := root.get_global_mouse_position()
-	for cv in _card_views:
-		if is_instance_valid(cv) and cv.get_global_rect().has_point(mp):
-			cv._hover = true
-			cv.queue_redraw()
+func _ignore_mouse(n: Node) -> void:
+	if n is Control:
+		(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in n.get_children():
+		_ignore_mouse(c)
+
+
+func _slot_pos(i: int) -> Vector2:
+	return Vector2(i * (HAND_CARD.x + HAND_GAP), 0.0)
+
+
+func _deal_card(i: int, id: String) -> CardView:
+	var cv := CardView.new(id, battle.run.card_level(id))
+	cv.set_card(id, battle.run.card_level(id))
+	cv.custom_minimum_size = HAND_CARD
+	cv.size = HAND_CARD
+	cv.position = _slot_pos(i)
+	cv.lift_px = 14.0
+	cv.hotkey = str(i + 1)
+	cv.clicked.connect(func(_c: CardView) -> void: battle.select_card(i))
+	cv.hovered.connect(_on_card_hover)
+	_hand_box.add_child(cv)
+	# Deal-in: a quick pop from the bottom of the slot (the click area stays in place).
+	cv.pivot_offset = Vector2(HAND_CARD.x * 0.5, HAND_CARD.y)
+	cv.scale = Vector2(0.85, 0.85)
+	cv.modulate.a = 0.0
+	var tw := cv.create_tween()
+	tw.tween_property(cv, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(cv, "modulate:a", 1.0, 0.1)
+	# A card dealt under a resting mouse gets no mouse_entered until the mouse moves.
+	if cv.get_global_rect().has_point(cv.get_global_mouse_position()):
+		cv._hover = true
+	return cv
 
 
 ## A card was clicked but can't be played: shake it and say why, right above it.
 func _on_card_denied(index: int, reason: String) -> void:
-	if index < 0 or index >= _card_views.size():
+	if index < 0 or index >= _card_views.size() or not is_instance_valid(_card_views[index]):
 		banner(reason.to_upper(), Color(1.0, 0.55, 0.45))
 		return
-	var cv := _card_views[index]
+	var cv: CardView = _card_views[index]
 	cv.deny()
 	var l := UITheme.label(reason, 22, Color(1.0, 0.82, 0.75), UITheme.font_body_bold())
 	l.add_theme_constant_override("outline_size", 8)
@@ -613,8 +645,8 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 func _update_cards() -> void:
 	var cs: CardSystem = battle.cards
 	for i in _card_views.size():
-		var cv := _card_views[i]
-		if i >= cs.hand.size():
+		var cv: CardView = _card_views[i] if is_instance_valid(_card_views[i]) else null
+		if cv == null or i >= cs.hand.size() or cs.hand[i] == "":
 			continue
 		var id: String = cs.hand[i]
 		var cd := cs.cooldown_left(id)
@@ -1179,3 +1211,34 @@ class EnergyBar extends Control:
 				if fill >= 1.0:
 					draw_rect(Rect2(r.position, Vector2(r.size.x, r.size.y * 0.35)), Color(1, 1, 1, 0.25))
 			draw_rect(r, Color(1, 1, 1, 0.18), false, 1.0)
+
+
+## The hand area: draws empty slots (with the next-card timer in the first one) behind the cards.
+class HandTray:
+	extends Control
+	var hud: Node
+
+	func _process(_d: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		if hud == null:
+			return
+		var cs: CardSystem = hud.battle.cards
+		var first_empty := true
+		for i in CardSystem.MAX_HAND:
+			var empty: bool = i >= cs.hand.size() or cs.hand[i] == ""
+			if not empty:
+				continue
+			var r := Rect2(hud._slot_pos(i), hud.HAND_CARD)
+			draw_rect(r, Color(0.02, 0.04, 0.08, 0.35))
+			draw_rect(r, Color(1, 1, 1, 0.16), false, 2.0)
+			if first_empty:
+				first_empty = false
+				var p := cs.next_draw_progress()
+				var fh := r.size.y * p
+				draw_rect(Rect2(r.position.x, r.end.y - fh, r.size.x, fh), Color(UITheme.GOLD, 0.16))
+				var f := UITheme.font_body_bold()
+				var t := "NEXT CARD"
+				var tw := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+				draw_string(f, r.get_center() + Vector2(-tw * 0.5, 6), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.45))

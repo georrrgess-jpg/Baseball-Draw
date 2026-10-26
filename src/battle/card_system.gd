@@ -1,6 +1,8 @@
 class_name CardSystem
 extends RefCounted
 ## Deck, hand (max 5), draw and discard piles, energy (max 10) and per-card cooldowns.
+## The hand keeps fixed slots: a played card leaves an empty slot ("") that the next drawn
+## card fills, so the other cards never move under the player's cursor.
 
 signal hand_changed
 signal energy_changed
@@ -53,7 +55,7 @@ func add_card(id: String) -> void:
 func draw(n: int) -> int:
 	var drawn := 0
 	for i in n:
-		if hand.size() >= MAX_HAND:
+		if hand_count() >= MAX_HAND:
 			break
 		if draw_pile.is_empty():
 			if discard.is_empty():
@@ -62,7 +64,11 @@ func draw(n: int) -> int:
 			discard.clear()
 			_shuffle(draw_pile)
 		var id: String = draw_pile.pop_back()
-		hand.append(id)
+		var slot := hand.find("")
+		if slot >= 0:
+			hand[slot] = id
+		else:
+			hand.append(id)
 		drawn += 1
 		card_drawn.emit(id)
 	if drawn > 0:
@@ -72,7 +78,12 @@ func draw(n: int) -> int:
 
 ## Refill the hand at the start of an inning.
 func refill() -> void:
-	draw(MAX_HAND - hand.size())
+	draw(MAX_HAND - hand_count())
+
+
+## Cards in hand (empty slots don't count).
+func hand_count() -> int:
+	return hand.size() - hand.count("")
 
 
 func tick(delta: float, active: bool) -> void:
@@ -88,7 +99,7 @@ func tick(delta: float, active: bool) -> void:
 		energy = MAX_ENERGY
 	if int(before) != int(energy) or (energy >= MAX_ENERGY and before < MAX_ENERGY):
 		energy_changed.emit()
-	if hand.size() < MAX_HAND:
+	if hand_count() < MAX_HAND:
 		draw_timer += delta
 		if draw_timer >= draw_interval:
 			draw_timer = 0.0
@@ -107,7 +118,7 @@ func cooldown_left(id: String) -> float:
 
 ## Returns "" when playable, otherwise a short reason.
 func check(index: int) -> String:
-	if index < 0 or index >= hand.size():
+	if index < 0 or index >= hand.size() or hand[index] == "":
 		return "No card"
 	var id: String = hand[index]
 	if cooldown_left(id) > 0.0:
@@ -121,7 +132,7 @@ func check(index: int) -> String:
 func commit(index: int, cooldown_scale := 1.0) -> String:
 	var id: String = hand[index]
 	energy -= cost_of(id)
-	hand.remove_at(index)
+	hand[index] = ""
 	discard.append(id)
 	var cd := float(DB.card(id).get("cooldown", 0.0)) * cooldown_mult * cooldown_scale
 	if cd > 0.0:

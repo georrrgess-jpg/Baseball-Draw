@@ -433,7 +433,7 @@ func _test_card(cid: String) -> void:
 	var tgt := {"point": center, "enemy": lead, "defender": battle.defenders[0], "valid": true}
 	var energy_before := battle.cards.energy
 	var shields := battle.run.shields
-	var hand_before := battle.cards.hand.size()
+	var hand_before := battle.cards.hand_count()
 	battle.effects.execute(cid, 1, tgt)
 	if cid == "wall_of_dirt":
 		ok(battle.walls.size() > 0, "wall of dirt places a wall")
@@ -480,7 +480,7 @@ func _test_card(cid: String) -> void:
 		"magnet_glove":
 			ok(any.call(func(en: Enemy) -> bool: return en.magnet_t > 0.0) or damaged, "magnet glove pulls runners")
 		"seventh_inning_stretch":
-			ok(battle.cards.hand.size() >= mini(hand_before + 1, CardSystem.MAX_HAND) or battle.cards.energy >= energy_before, "stretch draws cards / gives energy")
+			ok(battle.cards.hand_count() >= mini(hand_before + 1, CardSystem.MAX_HAND) or battle.cards.energy >= energy_before, "stretch draws cards / gives energy")
 		"shadow_change":
 			ok(damaged, "shadow change damages runners")
 		_:
