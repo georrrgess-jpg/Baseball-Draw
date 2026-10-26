@@ -4,6 +4,8 @@ extends Node3D
 ## the cards rise out and fan into a row face down with an aura in their rarity colour,
 ## then each card flips when clicked — Epic and Legendary cards tremble first and land
 ## with light rays, a shockwave, confetti and a banner.
+## Multi-open (OPEN ×5 / ×10): the packs fan out into a hand, merge into one glowing pack
+## that tears with a bigger burst, and every card is dealt into a PackSummary grid.
 
 const CARD_W := 0.86
 const CARD_H := 1.204
@@ -32,12 +34,21 @@ var _right: PanelContainer
 var _inv_box: VBoxContainer
 var _shop_box: VBoxContainer
 var _action: Button
+var _open_multi_btns := {}     # count -> Button (OPEN ×5 / OPEN ×10)
+var _buy_buttons := {}         # "type:count" -> Button
+var _center: VBoxContainer
+var _multi: PackSummary        # the ×5/×10 results grid while it is on screen
+var _demo_multi := false       # debug: reveal the multi-open grid by itself
+var _flash_type := ""          # pack type whose inventory row flashes after a purchase
 var _hint: Label
 var _banner: Label
 var _flash: ColorRect
 var _pack_root: Node3D
 var _pack_top: Node3D
 var _pack_mats: Array[ShaderMaterial] = []
+var _pillow: ArrayMesh
+var _crimp_meshes: Array[ArrayMesh] = []
+var _stack: Array[Node3D] = []   # extra packs shown fanned out behind the pack for a multi-open
 var _crimp_mats: Array[ShaderMaterial] = []
 var _art_vp: SubViewport
 var _art: PackArt
@@ -52,6 +63,7 @@ var _spiral: GPUParticles3D
 var _arc_sparks: GPUParticles3D
 var _leak: GPUParticles3D
 var _burst: GPUParticles3D
+var _burst_big: GPUParticles3D
 var _confetti: GPUParticles3D
 var _burst_light: OmniLight3D
 var _cards: Array = []         # {"root", "mesh", "mat", "vp", "view", "aura", "aura_mat", "fx", "data", "revealed", "badge"}
@@ -94,6 +106,23 @@ func _ready() -> void:
 			_refresh_panels()
 			get_tree().create_timer(1.2).timeout.connect(_open_selected)
 			get_tree().create_timer(4.6).timeout.connect(_reveal_all)
+		# `--pack-demo-multi=<type>:<count>` adds that many packs, opens them all at once and
+		# flips every card; `--pack-demo-add=<type>:<count>` only adds them.
+		# `--pack-demo-coins=<n>` sets the wallet (shop screenshots).
+		elif a.begins_with("--pack-demo-multi=") or a.begins_with("--pack-demo-add="):
+			var spec := a.split("=")[1].split(":")
+			var n := int(spec[1]) if spec.size() > 1 else Profile.BUNDLE_SIZE
+			for i in n:
+				Profile.add_pack(spec[0], "Demo")
+			_show_pack(spec[0])
+			_refresh_panels()
+			if a.begins_with("--pack-demo-multi="):
+				_demo_multi = true
+				get_tree().create_timer(1.2).timeout.connect(_open_multi.bind(n))
+		elif a.begins_with("--pack-demo-coins="):
+			Profile.data.coins = int(a.split("=")[1])
+			Profile.changed.emit()
+			_refresh_panels()
 
 
 # ---------------------------------------------------------------- stage
@@ -203,6 +232,17 @@ func _build_stage() -> void:
 	bm.gravity = Vector3(0, -1.5, 0)
 	_burst.position = PACK_POS + Vector3(0, PACK_H * 0.5, 0.1)
 	stage.add_child(_burst)
+	# Multi-opens: a second, wider burst on top of the usual one.
+	_burst_big = _particles(260, 1.7, _star_tex, 0.13, true, 1.0)
+	var bbm: ParticleProcessMaterial = _burst_big.process_material
+	bbm.direction = Vector3(0, 1, 0.2)
+	bbm.spread = 180.0
+	bbm.initial_velocity_min = 4.0
+	bbm.initial_velocity_max = 9.0
+	bbm.damping_min = 3.5
+	bbm.damping_max = 5.5
+	bbm.gravity = Vector3(0, -1.0, 0)
+	stage.add_child(_burst_big)
 	_confetti = _make_confetti()
 	stage.add_child(_confetti)
 	# Premium packs: sparkles spiralling up around the pack, and electric sparks off its edges.
@@ -393,8 +433,10 @@ func _build_pack() -> void:
 	_pack_root = Node3D.new()
 	_pack_root.position = PACK_POS
 	stage.add_child(_pack_root)
+	_pillow = _pillow_mesh()
+	_crimp_meshes = [_crimp_mesh(-1.0), _crimp_mesh(1.0)]
 	var body := MeshInstance3D.new()
-	body.mesh = _pillow_mesh()
+	body.mesh = _pillow
 	for i in 2:
 		var m := ShaderMaterial.new()
 		m.shader = preload("res://assets/shaders/packs/pack_foil.gdshader")
@@ -404,13 +446,13 @@ func _build_pack() -> void:
 		_pack_mats.append(m)
 	_pack_root.add_child(body)
 	var bottom := MeshInstance3D.new()
-	bottom.mesh = _crimp_mesh(-1.0)
+	bottom.mesh = _crimp_meshes[0]
 	bottom.material_override = _crimp_material()
 	_pack_root.add_child(bottom)
 	_pack_top = Node3D.new()
 	_pack_root.add_child(_pack_top)
 	var top := MeshInstance3D.new()
-	top.mesh = _crimp_mesh(1.0)
+	top.mesh = _crimp_meshes[1]
 	top.material_override = _crimp_material()
 	_pack_top.add_child(top)
 
@@ -496,6 +538,8 @@ func _show_pack(type: String, card := "") -> void:
 	_rays_mat.set_shader_parameter("color", Color(str(pd.get("color", "#2F7BE0"))).lightened(0.3))
 	_rays_mat.set_shader_parameter("intensity", 0.35)
 	_pack_root.visible = true
+	for sp in _stack:
+		sp.visible = false
 	_pack_top.position = Vector3.ZERO
 	_pack_top.rotation = Vector3.ZERO
 	_pack_top.scale = Vector3.ONE
@@ -544,6 +588,7 @@ func _build_ui() -> void:
 	ls.add_child(_inv_box)
 
 	var center := VBoxContainer.new()
+	_center = center
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.alignment = BoxContainer.ALIGNMENT_END
@@ -555,11 +600,23 @@ func _build_ui() -> void:
 	_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	_hint.add_theme_constant_override("outline_size", 6)
 	center.add_child(_hint)
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	actions.add_theme_constant_override("separation", 14)
+	center.add_child(actions)
 	_action = UITheme.menu_button("OPEN PACK", UITheme.SCARLET, 34)
 	_action.custom_minimum_size = Vector2(380, 72)
 	_action.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_action.pressed.connect(_on_action)
-	center.add_child(_action)
+	actions.add_child(_action)
+	for n in [5, Profile.BUNDLE_SIZE]:
+		var mb := UITheme.menu_button("OPEN ×%d" % n, UITheme.GOLD, 30)
+		mb.custom_minimum_size = Vector2(200, 72)
+		mb.add_theme_color_override("font_color", UITheme.GOLD.lightened(0.35))
+		mb.visible = false
+		mb.pressed.connect(_open_multi.bind(n))
+		actions.add_child(mb)
+		_open_multi_btns[n] = mb
 
 	_right = MenuScreen.panel()
 	_right.custom_minimum_size = Vector2(400, 0)
@@ -632,9 +689,11 @@ func _refresh_panels() -> void:
 		_inv_box.add_child(_inventory_row(e))
 	for c in _shop_box.get_children():
 		c.queue_free()
+	_buy_buttons.clear()
 	for id in DB.pack_order:
 		if bool(DB.pack(id).get("for_sale", false)):
 			_shop_box.add_child(_shop_row(id))
+	_flash_type = ""
 	_update_action()
 
 
@@ -660,6 +719,14 @@ func _inventory_row(e: Dictionary) -> Control:
 	vb.add_child(UITheme.label(e.source, 16, UITheme.MUTED))
 	var cnt := UITheme.label("×%d" % e.count, 34, Color(str(pd.accent)), UITheme.font_display())
 	hb.add_child(cnt)
+	if _flash_type == e.type and e.card == "":
+		# Just bought: the row lights up and the count pops.
+		p.modulate = Color(1.8, 1.7, 1.2)
+		var ft := p.create_tween().set_parallel(true)
+		ft.tween_property(p, "modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		cnt.pivot_offset = Vector2(24, 24)
+		cnt.scale = Vector2.ONE * 1.6
+		ft.tween_property(cnt, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
 	p.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT and state == "idle":
@@ -672,32 +739,92 @@ func _inventory_row(e: Dictionary) -> Control:
 func _shop_row(id: String) -> Control:
 	var pd := DB.pack(id)
 	var p := MenuScreen.panel(Color(0.07, 0.11, 0.18, 0.95), Color(str(pd.accent), 0.35), 10)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 8)
+	p.add_child(outer)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 12)
-	p.add_child(hb)
+	outer.add_child(hb)
 	var art := PackArt.new(id)
-	art.custom_minimum_size = Vector2(78, 120)
+	art.custom_minimum_size = Vector2(70, 108)
 	hb.add_child(art)
 	var vb := VBoxContainer.new()
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
 	vb.add_theme_constant_override("separation", 4)
 	hb.add_child(vb)
 	vb.add_child(UITheme.label(str(pd.name), 24, Color(str(pd.accent)).lightened(0.3), UITheme.font_header()))
 	var tl := UITheme.label(str(pd.tagline), 16, UITheme.MUTED)
 	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(tl)
-	var stars := int(pd.get("price_stars", 0))
-	var price := "★ %d" % stars if stars > 0 else "%s coins" % UITheme.format_int(int(pd.get("price_coins", 0)))
-	var buy := UITheme.small_button("BUY  ·  " + price, UITheme.GOLD if Profile.can_buy_pack(id) else UITheme.MUTED, 18)
-	buy.disabled = not Profile.can_buy_pack(id) or state != "idle"
-	buy.pressed.connect(func() -> void:
-		if Profile.buy_pack(id):
-			Audio.ui("purchase")
-			Router.toast("Bought a %s!" % pd.name, "info")
-			_show_pack(id)
-			_refresh_panels())
-	vb.add_child(buy)
+	var buys := HBoxContainer.new()
+	buys.add_theme_constant_override("separation", 10)
+	outer.add_child(buys)
+	buys.add_child(_buy_button(id, 1))
+	buys.add_child(_buy_button(id, Profile.BUNDLE_SIZE))
 	return p
+
+
+## BUY / BUY 10 with the price on the button and, underneath, the bundle saving or
+## how much more the player needs.
+func _buy_button(id: String, count: int) -> Control:
+	var pd := DB.pack(id)
+	var price := Profile.pack_price(id, count)
+	var in_stars := int(price.stars) > 0
+	var cost := int(price.stars) if in_stars else int(price.coins)
+	var have := int(Profile.data.stars) if in_stars else int(Profile.data.coins)
+	var can := Profile.can_buy_pack(id, count)
+	var cur_col := Color(0.7, 0.85, 1.0) if in_stars else UITheme.GOLD
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 3)
+	var b := UITheme.small_button("", UITheme.GOLD if can else UITheme.MUTED, 18)
+	b.custom_minimum_size = Vector2(0, 46)
+	b.disabled = not can or state != "idle"
+	b.tooltip_text = "Buy %d %s%s" % [count, pd.name, "s" if count > 1 else ""]
+	box.add_child(b)
+	var row := HBoxContainer.new()
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not can:
+		row.modulate = Color(1, 1, 1, 0.5)
+	b.add_child(row)
+	var bl := UITheme.label("BUY" if count == 1 else "BUY %d" % count, 19, UITheme.OFFWHITE, UITheme.font_body_bold())
+	bl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(bl)
+	row.add_child(UITheme.icon_rect("star" if in_stars else "coin", 20, cur_col))
+	var pl := UITheme.label(UITheme.format_int(cost), 20, cur_col, UITheme.font_header())
+	pl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(pl)
+	var cap := UITheme.label("", 14, UITheme.MUTED, UITheme.font_body_bold())
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.custom_minimum_size = Vector2(0, 18)
+	if have < cost:
+		cap.text = "Need %s more %s" % [UITheme.format_int(cost - have), "stars" if in_stars else "coins"]
+		cap.add_theme_color_override("font_color", Color(1.0, 0.5, 0.45))
+	elif count > 1:
+		var full := Profile.pack_price(id, 1)
+		var saved := (int(full.stars) if in_stars else int(full.coins)) * count - cost
+		if saved > 0:
+			cap.text = "Save %s" % UITheme.format_int(saved)
+			cap.add_theme_color_override("font_color", UITheme.GREEN)
+	box.add_child(cap)
+	b.pressed.connect(func() -> void:
+		if state != "idle" or not Profile.buy_pack(id, count):
+			return
+		Audio.ui("purchase")
+		if count > 1:
+			Audio.play("coin", 0.0, 0.0, 0)
+			Router.toast("Bought %d %ss!" % [count, pd.name], "info")
+		else:
+			Router.toast("Bought a %s!" % pd.name, "info")
+		_flash_type = id
+		_show_pack(id)
+		_refresh_panels())
+	_buy_buttons["%s:%d" % [id, count]] = b
+	return box
 
 
 func _select_default() -> void:
@@ -717,9 +844,23 @@ func _find_pack_index() -> int:
 	return -1
 
 
+## Unopened packs that match the pack on the stage (type, and card for signature packs).
+func _selected_count() -> int:
+	var n := 0
+	for pk in Profile.data.packs:
+		if pk.type == selected.get("type", "") and str(pk.get("card", "")) == selected.get("card", ""):
+			n += 1
+	return n
+
+
 func _update_action() -> void:
 	if _action == null:
 		return
+	var owned_n := _selected_count() if state == "idle" else 0
+	for n in _open_multi_btns:
+		var mb: Button = _open_multi_btns[n]
+		mb.visible = owned_n >= int(n)
+		mb.disabled = owned_n < int(n)
 	match state:
 		"idle":
 			var owned := _find_pack_index() >= 0
@@ -727,6 +868,8 @@ func _update_action() -> void:
 			_action.text = "OPEN PACK" if owned else "NO PACKS TO OPEN"
 			if owned:
 				_hint.text = "Click the pack (or OPEN PACK) to tear it open!" if int(Profile.data.packs_opened) == 0 else ""
+				if owned_n >= 5 and _hint.text == "":
+					_hint.text = "%d %ss waiting: open them one by one, or several at once." % [owned_n, DB.pack(str(selected.type)).name]
 			else:
 				_hint.text = "Earn packs by playing, or buy one in the shop."
 		"opening":
@@ -734,14 +877,22 @@ func _update_action() -> void:
 			_action.text = "OPENING..."
 			_hint.text = ""
 		"reveal":
-			_action.disabled = false
-			_action.text = "REVEAL ALL"
-			_hint.text = "Click a card to flip it."
+			_action.disabled = _multi != null and not _multi.dealt
+			if _multi:
+				_action.text = "SKIP" if _multi.cascading else "REVEAL ALL"
+				_hint.text = "Click a card to flip it, or reveal them all."
+			else:
+				_action.text = "REVEAL ALL"
+				_hint.text = "Click a card to flip it."
 		"done":
 			_action.disabled = false
-			var left := Profile.pack_count()
-			_action.text = "OPEN NEXT PACK  (%d)" % left if left > 0 else "DONE"
-			_hint.text = _summary_text()
+			if _multi:
+				_action.text = "DONE"
+				_hint.text = _multi.summary_text()
+			else:
+				var left := Profile.pack_count()
+				_action.text = "OPEN NEXT PACK  (%d)" % left if left > 0 else "DONE"
+				_hint.text = _summary_text()
 
 
 func _summary_text() -> String:
@@ -765,9 +916,21 @@ func _on_action() -> void:
 		"idle":
 			_open_selected()
 		"reveal":
-			_reveal_all()
+			if _multi:
+				if not _multi.dealt:
+					return
+				if _multi.cascading:
+					_multi.skip()
+				else:
+					_multi.reveal_all()
+				_update_action()
+			else:
+				_reveal_all()
 		"done":
-			_finish_reveal()
+			if _multi:
+				_finish_multi()
+			else:
+				_finish_reveal()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -835,19 +998,7 @@ func _open_selected() -> void:
 	_create_cards()
 	var fx: Dictionary = TIER_FX.get(str(_result.type), TIER_FX.rookie)
 	var charge := float(fx.charge)
-	Audio.play("pack_shake", 0.0, 0.0, 0)
-	(_leak.process_material as ParticleProcessMaterial).color = Color(accent.lightened(0.3), 1.0)
-	_leak.emitting = true
-	_set_stage_dim(float(fx.dim), 0.5, accent)
-	if bool(fx.spiral):
-		(_spiral.process_material as ParticleProcessMaterial).color = Color(accent.lightened(0.4), 1.0)
-		_spiral.emitting = true
-	if bool(fx.arcs):
-		_arc_sparks.emitting = true
-		for i in int(charge * 7.0):
-			get_tree().create_timer(0.12 + i * charge / (charge * 7.0) + _rng.randf_range(0.0, 0.08)).timeout.connect(_arc_flicker)
-	for i in int(fx.pulses):
-		get_tree().create_timer(charge * (0.35 + 0.6 * float(i) / maxf(1.0, float(fx.pulses)))).timeout.connect(_pulse.bind(accent))
+	_charge_fx(fx, accent, charge)
 	var tw := create_tween()
 	tw.tween_method(_set_charge, 0.0, 1.0, charge).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.parallel().tween_property(self, "_shake", 1.0, charge)
@@ -872,6 +1023,226 @@ func _open_selected() -> void:
 		_update_action()
 		if _cards.size() == 1:
 			_flip(0))
+
+
+## The tier's charge-up effects: light leaking from the seal, stage dimming, spiral
+## sparkles, electric arcs and heartbeat pulses, spread over `charge` seconds.
+func _charge_fx(fx: Dictionary, accent: Color, charge: float) -> void:
+	Audio.play("pack_shake", 0.0, 0.0, 0)
+	(_leak.process_material as ParticleProcessMaterial).color = Color(accent.lightened(0.3), 1.0)
+	_leak.emitting = true
+	_set_stage_dim(float(fx.dim), 0.5, accent)
+	if bool(fx.spiral):
+		(_spiral.process_material as ParticleProcessMaterial).color = Color(accent.lightened(0.4), 1.0)
+		_spiral.emitting = true
+	if bool(fx.arcs):
+		_arc_sparks.emitting = true
+		for i in int(charge * 7.0):
+			get_tree().create_timer(0.12 + i * charge / (charge * 7.0) + _rng.randf_range(0.0, 0.08)).timeout.connect(_arc_flicker)
+	for i in int(fx.pulses):
+		get_tree().create_timer(charge * (0.35 + 0.6 * float(i) / maxf(1.0, float(fx.pulses)))).timeout.connect(_pulse.bind(accent))
+
+
+# ---------------------------------------------------------------- multi-open
+
+## Opens `n` packs like the one on the stage at once: one charge-up for the whole hand,
+## then every card goes into a PackSummary grid.
+func _open_multi(n: int) -> void:
+	if state != "idle" or _selected_count() < n:
+		return
+	var type := str(selected.get("type", "rookie"))
+	_result = Profile.open_packs(type, n, str(selected.get("card", "")))
+	if _result.is_empty():
+		return
+	state = "opening"
+	_update_action()
+	_set_panels_visible(false)
+	var best := "common"
+	for c in _result.cards:
+		if DB.rarity_index(c.rarity) > DB.rarity_index(best):
+			best = c.rarity
+	var best_col := DB.rarity_color(best)
+	var accent := Color(str(DB.pack(type).accent))
+	# A bigger version of the tier's effects: longer charge, more rays, always confetti.
+	var fx: Dictionary = TIER_FX.get(type, TIER_FX.rookie).duplicate()
+	fx.rays = float(fx.rays) + 0.9
+	fx.ray_count = float(fx.ray_count) + 8.0
+	fx.shake = float(fx.shake) + 0.25
+	fx.confetti = true
+	fx.pulses = maxi(int(fx.pulses), 1)
+	var charge := float(fx.charge) + 0.7
+	var spread := _fan_stack(n - 1)
+	Audio.play("card_whoosh", 0.0, 0.0, 0)
+	var tw := create_tween()
+	tw.tween_interval(spread)
+	tw.tween_callback(_charge_fx.bind(fx, accent, charge))
+	tw.tween_method(_set_charge, 0.0, 1.0, charge).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(self, "_shake", 1.0, charge)
+	tw.parallel().tween_property(_pack_root, "position", PACK_POS + Vector3(0, 0.15 + 0.2 * float(fx.spin), 0.7), charge).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(camera, "position:z", 6.4 - float(fx.push) - 0.2, charge).set_trans(Tween.TRANS_SINE)
+	if float(fx.spin) > 0.0:
+		_spin = 0.0
+		tw.parallel().tween_property(self, "_spin", TAU * float(fx.spin), charge * 0.85).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	# The fanned packs fly into the front one during the charge; it swells with each.
+	var k := _stack.filter(func(sp: Node3D) -> bool: return sp.visible).size()
+	for i in k:
+		get_tree().create_timer(spread + charge * (0.08 + 0.72 * float(i) / maxf(1.0, k))).timeout.connect(_merge_stack_pack.bind(i, k))
+	tw.tween_callback(_tear.bind(best, best_col, fx))
+	tw.tween_callback(_big_burst.bind(accent))
+	tw.tween_interval(0.35)
+	tw.tween_callback(_drop_pack)
+	tw.tween_interval(0.15)
+	tw.tween_callback(_show_multi_summary)
+	tw.parallel().tween_property(camera, "position:z", 6.4, 0.8).set_trans(Tween.TRANS_SINE)
+
+
+## Shows `k` (up to 9) extra packs fanned out like a hand behind the front pack.
+## Returns how long the fan takes to open.
+func _fan_stack(k: int) -> float:
+	k = clampi(k, 0, 9)
+	while _stack.size() < k:
+		var sp := Node3D.new()
+		var body := MeshInstance3D.new()
+		body.mesh = _pillow
+		for i in 2:
+			body.set_surface_override_material(i, _pack_mats[i])
+		sp.add_child(body)
+		var cm := _crimp_material()
+		for cmesh in _crimp_meshes:
+			var cr := MeshInstance3D.new()
+			cr.mesh = cmesh
+			cr.material_override = cm
+			sp.add_child(cr)
+		sp.visible = false
+		stage.add_child(sp)
+		_stack.append(sp)
+	var col := Color(str(DB.pack(str(selected.get("type", "rookie"))).get("color", "#2F7BE0"))).lightened(0.45)
+	for m in _crimp_mats:
+		m.set_shader_parameter("color", col)
+	var spread := 0.0
+	for i in k:
+		var sp: Node3D = _stack[i]
+		# Spread the hand evenly on both sides, outermost packs furthest back.
+		var t := (float(i) / maxf(1.0, k - 1) - 0.5) * 2.0 if k > 1 else 1.0
+		var ang := t * clampf(0.09 * k, 0.18, 0.62)
+		var pivot := PACK_POS + Vector3(0, -2.3, 0)
+		var target := pivot + Vector3(sin(ang) * 2.45, cos(ang) * 2.45, -0.12 - 0.04 * absf(t) * k)
+		sp.position = PACK_POS + Vector3(0, 0, -0.1)
+		sp.rotation = Vector3.ZERO
+		sp.scale = Vector3.ONE * _pack_base * 0.96
+		sp.visible = true
+		sp.set_meta("fan_pos", target)
+		sp.set_meta("fan_rot", Vector3(0, 0, -ang))
+		var d := 0.03 * i
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(sp, "position", target, 0.45).set_delay(d).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(sp, "rotation", Vector3(0, 0, -ang), 0.45).set_delay(d).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		spread = d + 0.5
+	return spread
+
+
+## One fanned pack flies into the front pack: the merge order runs from the outside in.
+func _merge_stack_pack(i: int, k: int) -> void:
+	if state != "opening":
+		return
+	var order: Array[int] = []
+	for j in k:
+		order.append(j)
+	order.sort_custom(func(a: int, b: int) -> bool: return absf(a - (k - 1) * 0.5) > absf(b - (k - 1) * 0.5))
+	var sp: Node3D = _stack[order[i]]
+	var from: Vector3 = sp.get_meta("fan_pos", sp.position)
+	var from_rot: Vector3 = sp.get_meta("fan_rot", sp.rotation)
+	var s0 := sp.scale.x
+	var tw := create_tween()
+	tw.tween_method(func(v: float) -> void:
+		sp.position = from.lerp(_pack_root.position + Vector3(0, 0, -0.06), v)
+		sp.rotation = from_rot.lerp(Vector3.ZERO, v)   # flat, not the front pack's spin
+		sp.scale = Vector3.ONE * lerpf(s0, _pack_root.scale.x * 0.85, v), 0.0, 1.0, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		sp.visible = false
+		if state != "opening":
+			return
+		Audio.play("card_flip", -2.0, 0.1, 0)
+		_pack_base += 0.2 / maxf(1.0, k)
+		_pulse_amt = 0.06
+		var pt := create_tween()
+		pt.tween_property(self, "_pulse_amt", 0.0, 0.2)
+		_flash_screen(Color(Color(str(DB.pack(str(selected.get("type", "rookie"))).accent)).lightened(0.5), 0.1), 0.15))
+
+
+## Multi-opens: an extra wide burst and a second flash right after the tear.
+func _big_burst(col: Color) -> void:
+	var bm: ParticleProcessMaterial = _burst_big.process_material
+	bm.color = Color(col.lightened(0.45), 1.0)
+	_burst_big.global_position = _pack_root.global_position + Vector3(0, PACK_H * 0.45, 0.1)
+	_burst_big.restart()
+	_burst_big.emitting = true
+	_cam_shake = maxf(_cam_shake, 0.7)
+	var ft := create_tween()
+	ft.tween_interval(0.12)
+	ft.tween_callback(_flash_screen.bind(Color(col.lightened(0.7), 0.45), 0.5))
+
+
+func _show_multi_summary() -> void:
+	_spiral.emitting = false
+	_arc_sparks.emitting = false
+	_multi = PackSummary.new()
+	_multi.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_multi.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_center.add_child(_multi)
+	_center.move_child(_multi, 0)
+	_multi.setup(_result, _star_tex)
+	_multi.revealed.connect(_on_multi_revealed)
+	_multi.all_revealed.connect(_on_multi_done)
+	_multi.deal_finished.connect(func() -> void:
+		if state != "opening":
+			return
+		state = "reveal"
+		_update_action()
+		if _demo_multi:
+			_multi.reveal_all()
+			_update_action())
+	_multi.deal(camera.unproject_position(PACK_POS + Vector3(0, 0.35, 0.7)))
+
+
+func _on_multi_revealed(rarity: String, _at: Vector2) -> void:
+	var r := DB.rarity_index(rarity)
+	var col := DB.rarity_color(rarity)
+	if r >= 2:
+		Audio.play(REVEAL_SOUNDS.get(rarity, "reveal_rare"), 0.0 if r >= 3 else -4.0, 0.0, 0 if r >= 3 else 60)
+	else:
+		Audio.play("reveal_common", -10.0, 0.08, 90)
+	if r >= 3:
+		_cam_shake = 0.3 if r == 3 else 0.6
+		_banner_pop(rarity.to_upper() + "!", col)
+		_rays_mat.set_shader_parameter("color", col)
+		var rt := create_tween()
+		rt.tween_method(func(v: float) -> void: _rays_mat.set_shader_parameter("intensity", v), 1.6 + 0.6 * (r - 3), 0.5, 1.2)
+	if r >= 4:
+		_flash_screen(Color(1.0, 0.92, 0.6, 0.55), 0.6)
+		_confetti.restart()
+		_confetti.emitting = true
+		Audio.play("crowd_cheer", -6.0, 0.0, 0)
+
+
+func _on_multi_done() -> void:
+	if state != "reveal":
+		return
+	state = "done"
+	_update_action()
+
+
+func _finish_multi() -> void:
+	state = "opening"
+	_update_action()
+	if _multi:
+		_multi.outro()
+		_multi = null
+	_set_stage_dim(0.0, 0.6)
+	_rays_mat.set_shader_parameter("ray_count", 14.0)
+	var done := create_tween()
+	done.tween_interval(0.45)
+	done.tween_callback(_return_to_idle)
 
 
 ## Darkens the stage (premium packs open under a spotlight); 0 restores it.
@@ -1181,21 +1552,26 @@ func _finish_reveal() -> void:
 	_rays_mat.set_shader_parameter("ray_count", 14.0)
 	var done := create_tween()
 	done.tween_interval(0.6)
-	done.tween_callback(func() -> void:
-		_cards.clear()
-		_result = {}
-		state = "idle"
-		_rays_mat.set_shader_parameter("intensity", 0.35)
-		_set_panels_visible(true)
-		var entries := _pack_entries()
-		var same := entries.filter(func(e: Dictionary) -> bool: return e.type == selected.get("type", "") and e.card == selected.get("card", ""))
-		if not same.is_empty():
-			_show_pack(same[0].type, same[0].card)
-		elif not entries.is_empty():
-			_show_pack(entries[0].type, entries[0].card)
-		else:
-			_show_pack("rookie")
-		_refresh_panels())
+	done.tween_callback(_return_to_idle)
+
+
+## Back to browsing: panels return and the stage shows the same kind of pack if any are
+## left, else the first unopened pack (or a Rookie Pack to look at).
+func _return_to_idle() -> void:
+	_cards.clear()
+	_result = {}
+	state = "idle"
+	_rays_mat.set_shader_parameter("intensity", 0.35)
+	_set_panels_visible(true)
+	var entries := _pack_entries()
+	var same := entries.filter(func(e: Dictionary) -> bool: return e.type == selected.get("type", "") and e.card == selected.get("card", ""))
+	if not same.is_empty():
+		_show_pack(same[0].type, same[0].card)
+	elif not entries.is_empty():
+		_show_pack(entries[0].type, entries[0].card)
+	else:
+		_show_pack("rookie")
+	_refresh_panels()
 
 
 # ---------------------------------------------------------------- feedback
