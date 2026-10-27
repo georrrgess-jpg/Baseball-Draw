@@ -178,7 +178,7 @@ func _refresh() -> void:
 func _fill_list() -> void:
 	for c in _list.get_children():
 		c.queue_free()
-	_list.add_child(UITheme.header("DEFENDERS", 30, UITheme.GOLD))
+	_list.add_child(UITheme.section_header("DEFENDERS", "roster", UITheme.GOLD, UITheme.FS_H2))
 	for id in DB.defender_order:
 		var d := DB.defender(id)
 		var unlocked := Profile.is_defender_unlocked(id)
@@ -275,11 +275,11 @@ func _fill_info() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var in_team: bool = selected in Profile.data.team
-	var tb := UITheme.small_button("Remove from team" if in_team else "Add to team", UITheme.SCARLET if in_team else UITheme.GREEN, 21)
+	var tb := UITheme.button("Remove from team" if in_team else "Add to team", "danger" if in_team else "primary", 22, "minus" if in_team else "plus", UITheme.SCARLET if in_team else UITheme.GREEN.darkened(0.25))
 	tb.pressed.connect(_toggle_team)
 	row.add_child(tb)
 	if in_team and selected != Profile.data.captain:
-		var cap := UITheme.small_button("Make captain", UITheme.GOLD, 21)
+		var cap := UITheme.button("Make captain", "secondary", 22, "captain", UITheme.GOLD)
 		cap.pressed.connect(func() -> void:
 			Profile.set_team(Profile.data.team, selected)
 			Audio.ui("ui_confirm")
@@ -288,7 +288,7 @@ func _fill_info() -> void:
 	_info.add_child(row)
 	# Traits
 	_info.add_child(UITheme.hsep())
-	_info.add_child(UITheme.header("TRAINING TRAITS", 26, UITheme.GOLD))
+	_info.add_child(UITheme.section_header("TRAINING TRAITS", "upgrade", UITheme.GOLD, UITheme.FS_H3))
 	for tier in DB.traits:
 		var tl := int(tier.level)
 		var hb := HBoxContainer.new()
@@ -310,7 +310,7 @@ func _fill_info() -> void:
 		_info.add_child(hb)
 	# Gear
 	_info.add_child(UITheme.hsep())
-	_info.add_child(UITheme.header("GEAR", 26, UITheme.GOLD))
+	_info.add_child(UITheme.section_header("GEAR", "defense", UITheme.GOLD, UITheme.FS_H3))
 	var gear_opt := OptionButton.new()
 	gear_opt.add_item("— none —")
 	var equipped := Profile.equipped_gear(selected)
@@ -337,7 +337,7 @@ func _fill_info() -> void:
 	_info.add_child(UITheme.label("Buy gear in Progression → Pro Shop.", 16, UITheme.MUTED))
 	# Uniform (team-wide)
 	_info.add_child(UITheme.hsep())
-	_info.add_child(UITheme.header("TEAM UNIFORM", 26, UITheme.GOLD))
+	_info.add_child(UITheme.section_header("TEAM UNIFORM", "special", UITheme.GOLD, UITheme.FS_H3))
 	var uf := HFlowContainer.new()
 	uf.add_theme_constant_override("h_separation", 6)
 	for uid in DB.uniform_order:
@@ -459,7 +459,7 @@ func _toggle_team() -> void:
 func _fill_team() -> void:
 	for c in _team_strip.get_children():
 		c.queue_free()
-	_team_strip.add_child(UITheme.header("STARTING SIX", 28, UITheme.GOLD))
+	_team_strip.add_child(UITheme.section_header("STARTING SIX", "formation", UITheme.GOLD, 28))
 	for id in Profile.data.team:
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 0)

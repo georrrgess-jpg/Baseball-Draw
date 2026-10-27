@@ -110,7 +110,7 @@ func _build() -> void:
 	left.custom_minimum_size = Vector2(420, 0)
 	left.add_theme_constant_override("separation", 12)
 	body.add_child(left)
-	var perf := _card_panel("MATCH PERFORMANCE")
+	var perf := _card_panel("MATCH PERFORMANCE", "outs")
 	left.add_child(perf)
 	var pv: VBoxContainer = perf.get_child(0)
 	var rows := [
@@ -129,7 +129,7 @@ func _build() -> void:
 	if mvp != "":
 		pv.add_child(_kv("Inning MVP", DB.defender(mvp).name, Color(DB.defender(mvp).accent).lightened(0.3)))
 
-	var nxt := _card_panel("NEXT INNING SCOUTING")
+	var nxt := _card_panel("NEXT INNING SCOUTING", "enemy")
 	left.add_child(nxt)
 	var nv: VBoxContainer = nxt.get_child(0)
 	var saved_inning := run.inning
@@ -169,7 +169,7 @@ func _build() -> void:
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.add_theme_constant_override("separation", 10)
 	body.add_child(mid)
-	mid.add_child(UITheme.label("Upgrades last for the rest of this game. Hover one for details.", 18, UITheme.MUTED))
+	mid.add_child(UITheme.label("Upgrades last for the rest of this game. Hover one for details.", UITheme.FS_SMALL, UITheme.MUTED))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -183,7 +183,7 @@ func _build() -> void:
 	_fill_shop()
 
 	# Right: team stats.
-	var right := _card_panel("TEAM")
+	var right := _card_panel("TEAM", "roster")
 	right.custom_minimum_size = Vector2(380, 0)
 	body.add_child(right)
 	_team_box = right.get_child(0)
@@ -193,23 +193,29 @@ func _build() -> void:
 	bottom.alignment = BoxContainer.ALIGNMENT_END
 	bottom.add_theme_constant_override("separation", 14)
 	outer.add_child(bottom)
-	var hint := UITheme.label("Temporary upgrades last for this run only. Permanent progress is earned at the end of the run.", 18, UITheme.MUTED)
+	var hint := UITheme.label("Temporary upgrades last for this run only. Permanent progress is earned at the end of the run.", UITheme.FS_SMALL, UITheme.MUTED)
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(hint)
-	var go := UITheme.menu_button("NEXT INNING  ▶", UITheme.SCARLET, 40)
+	var go := UITheme.button("NEXT INNING  ▶", "primary", 40)
 	go.custom_minimum_size = Vector2(380, 74)
 	go.pressed.connect(_finish)
 	bottom.add_child(go)
 
 
-func _card_panel(title: String) -> PanelContainer:
-	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.04, 0.07, 0.12, 0.9), Color(1, 1, 1, 0.1), 1, 10, 16))
+func _card_panel(title: String, icon := "") -> PanelContainer:
+	var p := UITheme.card_panel(UITheme.BORDER, 16)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 6)
 	p.add_child(vb)
-	vb.add_child(UITheme.header(title, 28, UITheme.GOLD))
+	vb.add_child(UITheme.section_header(title, icon, UITheme.GOLD, UITheme.FS_H3))
 	return p
+
+
+## A small caption tag ("NOW", "NEXT") in a fixed width so the values line up.
+func _tag(text: String, col: Color) -> Control:
+	var l := UITheme.label(text, UITheme.FS_MIN, col, UITheme.font_body_bold())
+	l.custom_minimum_size = Vector2(46, 0)
+	return l
 
 
 func _kv(k: String, v: String, vc := UITheme.OFFWHITE) -> HBoxContainer:
@@ -246,7 +252,7 @@ func _fill_shop() -> void:
 	var run: RunState = battle.run
 	var sections := [["TEAM UPGRADES", false], ["TODAY'S SPECIALS  ·  20% OFF", true]]
 	for sec in sections:
-		var header := UITheme.header(sec[0], 24, UITheme.GOLD if sec[1] else UITheme.OFFWHITE)
+		var header := UITheme.section_header(sec[0], "special" if sec[1] else "upgrade", UITheme.GOLD if sec[1] else UITheme.OFFWHITE, 24)
 		_shop.add_child(header)
 		_shop.add_child(Control.new())
 		for offer in _offers:
@@ -298,26 +304,28 @@ func _offer_card(offer: Dictionary, run: RunState) -> Control:
 	if fx.has("key"):
 		var now_row := HBoxContainer.new()
 		now_row.add_theme_constant_override("separation", 10)
-		now_row.add_child(UITheme.label("NOW", 15, UITheme.MUTED, UITheme.font_body_bold()))
-		now_row.add_child(UITheme.label(_fx_text(u, lvl, offer) if lvl > 0 else "—", 18, Color(0.82, 0.86, 0.94), UITheme.font_body_bold()))
+		now_row.add_child(_tag("NOW", UITheme.MUTED))
+		now_row.add_child(UITheme.label(_fx_text(u, lvl, offer) if lvl > 0 else "Not bought yet", UITheme.FS_SMALL, Color(0.82, 0.86, 0.94) if lvl > 0 else UITheme.MUTED, UITheme.font_body_bold()))
 		vb.add_child(now_row)
 		if not maxed:
 			var next_row := HBoxContainer.new()
 			next_row.add_theme_constant_override("separation", 10)
-			next_row.add_child(UITheme.label("NEXT", 15, UITheme.GREEN, UITheme.font_body_bold()))
-			next_row.add_child(UITheme.label(_fx_text(u, lvl + 1, offer), 20, UITheme.GREEN, UITheme.font_body_bold()))
+			next_row.add_child(_tag("NEXT", UITheme.GREEN))
+			next_row.add_child(UITheme.label(_fx_text(u, lvl + 1, offer), UITheme.FS_BODY + 1, UITheme.GREEN, UITheme.font_body_bold()))
 			vb.add_child(next_row)
 	else:
 		var d := UITheme.label(_fx_text(u, 1, offer), 19, Color(0.86, 0.9, 0.97), UITheme.font_body_bold())
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vb.add_child(d)
-	var buy := UITheme.small_button("MAXED" if maxed else ("BUY  %d" % price if can_buy else "NEED %d MORE" % (price - run.coins)), UITheme.GOLD if can_buy else UITheme.MUTED, 22)
-	buy.icon = DB.icon("coin") if not maxed else null
-	buy.expand_icon = false
-	buy.custom_minimum_size = Vector2(170, 56)
+	# The price is the button: coin icon + amount (gold when affordable).
+	var buy := UITheme.button("MAXED" if maxed else str(price), "primary" if can_buy else "secondary", 26, "" if maxed else "coin", UITheme.GOLD.darkened(0.3))
+	if not maxed and not can_buy:
+		buy.tooltip_text = "Need %d more coins" % (price - run.coins)
+	buy.custom_minimum_size = Vector2(130, 56)
 	buy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	buy.disabled = not can_buy
-	buy.tooltip_text = str(u.text)
+	if buy.tooltip_text == "":
+		buy.tooltip_text = str(u.text)
 	buy.pressed.connect(func() -> void: _buy(offer))
 	hb.add_child(buy)
 	p.tooltip_text = str(u.text)
@@ -457,7 +465,7 @@ func _fill_team() -> void:
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", -2)
 		vb.add_child(UITheme.label(df.data.name + (" (C)" if df.is_captain else ""), 22, Color(df.data.accent).lightened(0.3), UITheme.font_header()))
-		vb.add_child(UITheme.label("DMG %d · %.2fs · %.0fm · %d outs" % [int(df.s_damage), df.s_interval, df.s_range, df.outs], 16, UITheme.MUTED))
+		vb.add_child(UITheme.label("DMG %d · %.2fs · %.0fm · %d outs" % [int(df.s_damage), df.s_interval, df.s_range, df.outs], UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
 		hb.add_child(vb)
 		_team_box.add_child(hb)
 

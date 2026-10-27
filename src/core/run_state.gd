@@ -41,6 +41,8 @@ var stats := {
 	"damage_by": {}, "outs_by": {}, "cards_played": 0, "double_plays": 0, "triple_plays": 0,
 	"grand_combos": 0, "max_combo": 0, "clean_innings": 0, "bosses": [], "runs_by_inning": [],
 	"curve_heat": 0, "shield_saves": 0, "early_calls": 0,
+	# Filled by RunHighlights for the Results screen: per-inning summary and best moments.
+	"timeline": [], "highlights": {},
 }
 var finished := false
 var won := false

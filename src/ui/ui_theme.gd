@@ -15,6 +15,30 @@ const PURPLE := Color("#9B5DE5")
 const OFFWHITE := Color("#F4F1EA")
 const MUTED := Color("#8D9AB0")
 const ENERGY := Color("#3FD0FF")
+const STAR := Color(0.7, 0.85, 1.0)
+
+# ---- Design system (menus). Sizes are design pixels at 1920x1080; nothing below FS_MIN.
+const FS_MIN := 16        ## captions, footnotes
+const FS_SMALL := 18      ## secondary text, tile details
+const FS_BODY := 20       ## body text
+const FS_LEAD := 24       ## emphasised body, list names
+const FS_H3 := 26         ## tile titles
+const FS_H2 := 30         ## panel / section headers
+const FS_H1 := 40         ## big numbers, sub-titles
+const FS_TITLE := 64      ## screen titles
+## Standard panel colours: a screen's main panels, tiles inside them, and their borders.
+const PANEL_BG := Color(0.04, 0.07, 0.12, 0.92)
+const TILE_BG := Color(0.06, 0.095, 0.16, 0.95)
+const BORDER := Color(1, 1, 1, 0.1)
+## Button heights per role.
+const BTN_H_HERO := 112
+const BTN_H_LARGE := 72
+const BTN_H := 56
+const BTN_H_SMALL := 44
+## Motion: everything that appears uses these (seconds).
+const T_FAST := 0.12
+const T_MED := 0.22
+const T_SLOW := 0.35
 
 static var _fonts := {}
 static var _theme: Theme
@@ -165,6 +189,16 @@ static func build() -> Theme:
 	# Check boxes
 	t.set_font_size("font_size", "CheckBox", 22)
 	t.set_font_size("font_size", "CheckButton", 22)
+	# Toggle switches sit on the row's panel; without this they inherit the filled Button styles.
+	for st in ["normal", "pressed", "hover", "hover_pressed", "disabled"]:
+		var cs := panel_style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 6)
+		if st.begins_with("hover"):
+			cs.bg_color = Color(1, 1, 1, 0.05)
+		t.set_stylebox(st, "CheckButton", cs)
+	t.set_stylebox("focus", "CheckButton", panel_style(Color(0, 0, 0, 0), Color(GOLD, 0.6), 1, 6, 6))
+	t.set_color("font_pressed_color", "CheckButton", GREEN)
+	t.set_color("font_hover_pressed_color", "CheckButton", GREEN)
+	t.set_font("font", "CheckButton", font_body_bold())
 
 	# Scrollbars
 	var sb := panel_style(Color(0, 0, 0, 0.25), Color(0, 0, 0, 0), 0, 4, 0)
@@ -187,6 +221,7 @@ static func build() -> Theme:
 	t.set_stylebox("tab_hovered", "TabContainer", button_style(Color(0.13, 0.2, 0.33, 1), SCARLET))
 	t.set_font("font", "TabContainer", font_header())
 	t.set_font_size("font_size", "TabContainer", 26)
+	t.set_constant("icon_separation", "TabContainer", 8)
 
 	_theme = t
 	return t
@@ -242,6 +277,7 @@ static func menu_button(text: String, accent := SCARLET, size := 34, skew := -0.
 	b.add_theme_constant_override("outline_size", 4)
 	b.mouse_entered.connect(func() -> void: Audio.ui("ui_hover", -6.0))
 	b.pressed.connect(func() -> void: Audio.ui("ui_click"))
+	add_feedback(b)
 	return b
 
 
@@ -255,7 +291,195 @@ static func small_button(text: String, accent := BLUE, size := 22) -> Button:
 	b.add_theme_stylebox_override("pressed", button_style(accent, Color.WHITE, 0.0, 2))
 	b.mouse_entered.connect(func() -> void: Audio.ui("ui_hover", -8.0))
 	b.pressed.connect(func() -> void: Audio.ui("ui_click", -3.0))
+	add_feedback(b, 1.0)
 	return b
+
+
+## Standard menu button. Variants:
+##   "primary"   — the screen's main action (filled scarlet, or `accent` if given)
+##   "secondary" — everything else (navy, accent border on hover)
+##   "danger"    — destructive actions (deep red outline)
+##   "ghost"     — low-emphasis text button
+## `icon` is an icon name from assets/textures/icons.
+static func button(text: String, variant := "secondary", size := FS_LEAD, icon := "", accent := Color(0, 0, 0, 0)) -> Button:
+	var b := Button.new()
+	b.text = text
+	var acc: Color = accent
+	if acc.a == 0.0:
+		acc = {"primary": SCARLET, "danger": SCARLET_DEEP, "ghost": MUTED}.get(variant, BLUE)
+	var normal_bg := Color(0.07, 0.115, 0.195, 0.95)
+	var normal_border := Color(1, 1, 1, 0.14)
+	var font := font_header()
+	match variant:
+		"primary":
+			normal_bg = acc.darkened(0.15)
+			normal_border = acc.lightened(0.35)
+			font = font_display()
+		"danger":
+			normal_bg = Color(0.16, 0.05, 0.07, 0.92)
+			normal_border = Color(SCARLET, 0.55)
+		"ghost":
+			normal_bg = Color(1, 1, 1, 0.0)
+			normal_border = Color(1, 1, 1, 0.0)
+	var mk := func(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
+		var s := button_style(bg, border, 0.0, bw)
+		s.set_corner_radius_all(8)
+		s.content_margin_left = 20
+		s.content_margin_right = 20
+		return s
+	b.add_theme_stylebox_override("normal", mk.call(normal_bg, normal_border, 2))
+	b.add_theme_stylebox_override("hover", mk.call(acc.lightened(0.08) if variant == "primary" else Color(acc.r * 0.45, acc.g * 0.45, acc.b * 0.45, 0.98), Color.WHITE if variant == "primary" else acc, 2))
+	b.add_theme_stylebox_override("pressed", mk.call(acc.darkened(0.3) if variant == "primary" else acc.darkened(0.2), Color.WHITE, 2))
+	b.add_theme_stylebox_override("focus", mk.call(Color(0, 0, 0, 0), Color(GOLD, 0.85), 2))
+	b.add_theme_stylebox_override("disabled", mk.call(Color(0.06, 0.08, 0.11, 0.7), Color(1, 1, 1, 0.05), 1))
+	b.add_theme_font_override("font", font)
+	b.add_theme_font_size_override("font_size", maxi(size, FS_MIN))
+	b.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 0.38))
+	if variant == "primary":
+		b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.45))
+		b.add_theme_constant_override("outline_size", 4)
+	b.custom_minimum_size = Vector2(0, BTN_H_SMALL if size < 24 else BTN_H)
+	if icon != "":
+		b.icon = DB.icon(icon)
+		b.expand_icon = false
+		b.add_theme_constant_override("icon_max_width", int(size * 1.05))
+		b.add_theme_constant_override("h_separation", 10)
+	b.mouse_entered.connect(func() -> void: Audio.ui("ui_hover", -7.0))
+	if not text.ends_with("BACK"):   # BACK buttons play ui_back from their screen's go_back()
+		b.pressed.connect(func() -> void: Audio.ui("ui_click", -2.0))
+	add_feedback(b)
+	return b
+
+
+## Square icon-only button with a tooltip.
+static func icon_button(icon: String, tooltip: String, accent := BLUE, side := 52) -> Button:
+	var b := button("", "secondary", FS_LEAD, icon, accent)
+	b.tooltip_text = tooltip
+	b.custom_minimum_size = Vector2(side, side)
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	for st in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var s: StyleBoxFlat = b.get_theme_stylebox(st)
+		s.content_margin_left = 8
+		s.content_margin_right = 8
+	return b
+
+
+## Hover and press feedback shared by every menu button: a quick grow on hover, a squish on
+## press (scale is safe inside containers). `hover_scale` 1.0 keeps only the press squish.
+static func add_feedback(c: Control, hover_scale := 1.03) -> void:
+	var to := func(s: float, t: float) -> void:
+		if not c.is_inside_tree():
+			return
+		c.pivot_offset = c.size * 0.5
+		var tw := c.create_tween()
+		tw.tween_property(c, "scale", Vector2(s, s), t).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if hover_scale != 1.0:
+		c.mouse_entered.connect(func() -> void:
+			if not (c is BaseButton and (c as BaseButton).disabled):
+				to.call(hover_scale, T_FAST))
+		c.mouse_exited.connect(func() -> void: to.call(1.0, T_FAST))
+	if c is BaseButton:
+		(c as BaseButton).button_down.connect(func() -> void: to.call(0.96, 0.06))
+		(c as BaseButton).button_up.connect(func() -> void:
+			to.call(hover_scale if c.get_global_rect().has_point(c.get_global_mouse_position()) else 1.0, T_FAST))
+
+
+## Screen-enter motion shared by every menu: fade in and rise a little, staggered by `delay`.
+## Uses scale + modulate (not position), so it is safe for children of containers.
+static func animate_in(c: Control, delay := 0.0, from_scale := 0.97) -> void:
+	c.modulate.a = 0.0
+	var tw := c.create_tween()
+	if delay > 0.0:
+		tw.tween_interval(delay)
+	tw.tween_callback(func() -> void:
+		c.pivot_offset = Vector2(c.size.x * 0.5, c.size.y)
+		c.scale = Vector2(from_scale, from_scale))
+	tw.set_parallel(true)
+	tw.tween_property(c, "modulate:a", 1.0, T_MED)
+	tw.tween_property(c, "scale", Vector2.ONE, T_SLOW).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
+## The standard content panel (a screen's main blocks). `accent` tints the border.
+static func card_panel(accent := BORDER, pad := 16, bg := PANEL_BG, border_w := 1) -> PanelContainer:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", panel_style(bg, accent, border_w, 12, pad))
+	return p
+
+
+## A smaller tile inside a panel (stats, list rows, offers).
+static func tile_panel(accent := BORDER, pad := 12, highlighted := false) -> PanelContainer:
+	var p := PanelContainer.new()
+	var bg := TILE_BG if not highlighted else Color(accent.darkened(0.7), 0.95)
+	p.add_theme_stylebox_override("panel", panel_style(bg, accent, 2 if highlighted else 1, 10, pad))
+	return p
+
+
+## Section header used inside panels: optional icon, gold caps text and a thin rule.
+static func section_header(text: String, icon := "", color := GOLD, size := FS_H2) -> HBoxContainer:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 10)
+	if icon != "":
+		var ic := icon_rect(icon, size * 0.9, color)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hb.add_child(ic)
+	var l := header(text, size, color)
+	hb.add_child(l)
+	var rule := ColorRect.new()
+	rule.color = Color(color, 0.22)
+	rule.custom_minimum_size = Vector2(24, 2)
+	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(rule)
+	return hb
+
+
+## A small rounded count/status pill ("3 NEW", "LOCKED").
+static func badge(text: String, color := SCARLET, size := FS_MIN) -> PanelContainer:
+	var p := PanelContainer.new()
+	var s := panel_style(color, Color(1, 1, 1, 0.35), 1, 10, 0)
+	s.content_margin_left = 9
+	s.content_margin_right = 9
+	s.content_margin_top = 1
+	s.content_margin_bottom = 1
+	p.add_theme_stylebox_override("panel", s)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := label(text, size, Color.WHITE, font_body_bold())
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	p.add_child(l)
+	return p
+
+
+## A coloured progress bar in the shared style.
+static func bar(color := BLUE, height := 12, max_v := 1.0, value := 0.0) -> ProgressBar:
+	var pb := ProgressBar.new()
+	pb.custom_minimum_size = Vector2(0, height)
+	pb.show_percentage = false
+	pb.max_value = max_v
+	pb.value = value
+	pb.mouse_filter = Control.MOUSE_FILTER_PASS
+	pb.add_theme_stylebox_override("fill", panel_style(color, Color(0, 0, 0, 0), 0, int(height / 2.0), 0))
+	pb.add_theme_stylebox_override("background", panel_style(Color(0, 0, 0, 0.45), Color(1, 1, 1, 0.08), 1, int(height / 2.0), 0))
+	return pb
+
+
+## Stat tile: icon, big value and a caption underneath.
+static func stat_tile(icon: String, value: String, caption: String, color := OFFWHITE, min_w := 200.0) -> PanelContainer:
+	var p := tile_panel(Color(color, 0.25), 12)
+	p.custom_minimum_size = Vector2(min_w, 0)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 12)
+	p.add_child(hb)
+	var ic := icon_rect(icon, 40, color)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(ic)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", -4)
+	vb.add_child(label(value, 34, color, font_header()))
+	var cap := label(caption, FS_MIN, MUTED, font_body_bold())
+	vb.add_child(cap)
+	hb.add_child(vb)
+	return p
 
 
 static func hsep(alpha := 0.12) -> ColorRect:
@@ -264,6 +488,23 @@ static func hsep(alpha := 0.12) -> ColorRect:
 	c.custom_minimum_size = Vector2(0, 2)
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return c
+
+
+## Screenshot helper: `-- --ui-scale=1.25` overrides the UI scale setting for this session
+## (used to check layouts at UI scale 0.8–1.25 without touching the player's settings file).
+static func apply_debug_ui_scale(n: Node) -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--ui-scale="):
+			n.get_tree().root.content_scale_factor = float(a.split("=")[1])
+
+
+## Picture of a stadium rendered offline (assets/textures/arenas/<id>.jpg), or null.
+static func arena_thumbnail(id: String) -> Texture2D:
+	for ext in ["jpg", "png"]:
+		var path := "res://assets/textures/arenas/%s.%s" % [id, ext]
+		if ResourceLoader.exists(path):
+			return load(path)
+	return null
 
 
 static func format_int(n: int) -> String:

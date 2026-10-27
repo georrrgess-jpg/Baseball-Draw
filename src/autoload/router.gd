@@ -120,8 +120,9 @@ func goto(scene_name: String, show_loading := false) -> void:
 	Engine.time_scale = 1.0
 	var path: String = SCENES[scene_name]
 	_fade.mouse_filter = Control.MOUSE_FILTER_STOP
+	Audio.ui("ui_slide", -10.0)
 	var tw := create_tween()
-	tw.tween_property(_fade, "modulate:a", 1.0, 0.28)
+	tw.tween_property(_fade, "modulate:a", 1.0, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	await tw.finished
 	if show_loading or scene_name == "battle":
 		var tex_path := "res://assets/textures/ui/loading_bg.png"
@@ -149,7 +150,7 @@ func goto(scene_name: String, show_loading := false) -> void:
 	await get_tree().process_frame
 	_set_loading_visible(false)
 	var tw2 := create_tween()
-	tw2.tween_property(_fade, "modulate:a", 0.0, 0.35)
+	tw2.tween_property(_fade, "modulate:a", 0.0, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await tw2.finished
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	busy = false

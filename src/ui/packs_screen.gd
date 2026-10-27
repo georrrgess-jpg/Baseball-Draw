@@ -798,9 +798,9 @@ func _buy_button(id: String, count: int) -> Control:
 	var pl := UITheme.label(UITheme.format_int(cost), 20, cur_col, UITheme.font_header())
 	pl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(pl)
-	var cap := UITheme.label("", 14, UITheme.MUTED, UITheme.font_body_bold())
+	var cap := UITheme.label("", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.custom_minimum_size = Vector2(0, 18)
+	cap.custom_minimum_size = Vector2(0, 20)
 	if have < cost:
 		cap.text = "Need %s more %s" % [UITheme.format_int(cost - have), "stars" if in_stars else "coins"]
 		cap.add_theme_color_override("font_color", Color(1.0, 0.5, 0.45))

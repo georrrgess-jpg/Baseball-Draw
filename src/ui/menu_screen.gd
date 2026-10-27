@@ -4,6 +4,8 @@ extends Control
 ## back button and currencies, and a content area.
 
 var content: Control
+var back_button: Button
+var _header: Control
 var _coins_label: Label
 var _stars_label: Label
 
@@ -54,32 +56,49 @@ func setup_screen(title: String, subtitle := "") -> void:
 	margin.add_child(outer)
 
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 20)
+	header.add_theme_constant_override("separation", 22)
 	outer.add_child(header)
-	var back := UITheme.menu_button("◀  BACK", UITheme.MUTED, 28)
-	back.custom_minimum_size = Vector2(170, 56)
+	# Back is always the first thing top-left, the same size on every screen.
+	var back := UITheme.button("◀  BACK", "secondary", 26, "", UITheme.MUTED)
+	back.custom_minimum_size = Vector2(170, UITheme.BTN_H)
+	back.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	back.tooltip_text = "Back to the main menu (Esc)"
 	back.pressed.connect(go_back)
 	header.add_child(back)
+	back_button = back
 	var tb := VBoxContainer.new()
-	tb.add_theme_constant_override("separation", -6)
-	tb.add_child(UITheme.title(title, 64))
+	tb.add_theme_constant_override("separation", -8)
+	tb.add_child(UITheme.title(title, UITheme.FS_TITLE))
 	if subtitle != "":
-		tb.add_child(UITheme.label(subtitle, 20, UITheme.MUTED, UITheme.font_body_bold()))
+		tb.add_child(UITheme.label(subtitle, UITheme.FS_BODY, UITheme.MUTED, UITheme.font_body_bold()))
 	tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(tb)
+	# Currencies sit in one pill on the right of every menu.
+	var pill := PanelContainer.new()
+	var ps := UITheme.panel_style(Color(0.03, 0.05, 0.09, 0.85), Color(1, 1, 1, 0.12), 1, 26, 0)
+	ps.content_margin_left = 18
+	ps.content_margin_right = 18
+	ps.content_margin_top = 4
+	ps.content_margin_bottom = 4
+	pill.add_theme_stylebox_override("panel", ps)
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var cur := HBoxContainer.new()
 	cur.add_theme_constant_override("separation", 18)
+	pill.add_child(cur)
 	var cb := HBoxContainer.new()
-	cb.add_child(UITheme.icon_rect("coin", 32, UITheme.GOLD))
+	cb.tooltip_text = "Coins: buy card packs, card upgrades and gear"
+	cb.add_child(UITheme.icon_rect("coin", 30, UITheme.GOLD))
 	_coins_label = UITheme.label("", 32, UITheme.GOLD, UITheme.font_header())
 	cb.add_child(_coins_label)
 	cur.add_child(cb)
 	var sb := HBoxContainer.new()
-	sb.add_child(UITheme.icon_rect("star", 32, Color(0.7, 0.85, 1.0)))
-	_stars_label = UITheme.label("", 32, Color(0.7, 0.85, 1.0), UITheme.font_header())
+	sb.tooltip_text = "Stars: earned from achievements, spent on uniforms"
+	sb.add_child(UITheme.icon_rect("star", 30, UITheme.STAR))
+	_stars_label = UITheme.label("", 32, UITheme.STAR, UITheme.font_header())
 	sb.add_child(_stars_label)
 	cur.add_child(sb)
-	header.add_child(cur)
+	header.add_child(pill)
+	_header = header
 	var brush_path := "res://assets/textures/logo/brush_stroke.png"
 	if ResourceLoader.exists(brush_path):
 		var brush := TextureRect.new()
@@ -95,6 +114,28 @@ func setup_screen(title: String, subtitle := "") -> void:
 	refresh_currency()
 	Profile.changed.connect(refresh_currency)
 	Audio.play_music("menu_theme")
+	_play_enter.call_deferred()
+	UITheme.apply_debug_ui_scale(self)
+
+
+## Shared screen-enter motion: the header, then each top-level block of the content, fade and
+## rise in quick succession.
+func _play_enter() -> void:
+	if _header:
+		UITheme.animate_in(_header, 0.0, 0.99)
+	var i := 0
+	for c in _enter_targets():
+		if c is Control and (c as Control).visible:
+			UITheme.animate_in(c, 0.06 + i * 0.05)
+			i += 1
+
+
+## The blocks that animate in; screens with one wrapper container animate its children.
+func _enter_targets() -> Array:
+	var kids := content.get_children()
+	if kids.size() == 1 and (kids[0] is BoxContainer):
+		return kids[0].get_children()
+	return kids
 
 
 func refresh_currency() -> void:
@@ -115,10 +156,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-static func panel(bg := Color(0.04, 0.07, 0.12, 0.9), border := Color(1, 1, 1, 0.1), pad := 16) -> PanelContainer:
-	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UITheme.panel_style(bg, border, 1, 12, pad))
-	return p
+static func panel(bg := UITheme.PANEL_BG, border := UITheme.BORDER, pad := 16) -> PanelContainer:
+	return UITheme.card_panel(border, pad, bg)
 
 
 static func portrait_rect(id: String, size := 64.0, accent := Color(1, 1, 1, 0.3)) -> PanelContainer:
