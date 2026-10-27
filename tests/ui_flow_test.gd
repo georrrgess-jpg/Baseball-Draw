@@ -153,6 +153,10 @@ func _run() -> void:
 
 	# 2. Formation button.
 	var wide := _find_button(battle.hud.root, "Wide")
+	if wide == null:   # formation buttons are drawn cards (no text): find it by its formation id
+		for b in _all_buttons(battle.hud.root):
+			if b.has_meta("fid") and str(b.get_meta("fid")) == "wide" and b.is_visible_in_tree():
+				wide = b
 	_check(wide != null, "formation button 'Wide' exists")
 	if wide:
 		var before := maya.post
@@ -569,9 +573,11 @@ func _test_daily() -> void:
 		texts.append((l as Label).text)
 	var shows_rules := false
 	for t in texts:
-		if str(t).begins_with("Next challenge in"):
+		if str(t).begins_with("Twist: "):
 			shows_rules = true
-	_check("DAILY CHALLENGE" in texts and shows_rules, "the Daily card shows today's rules and a countdown")
+	var countdown: bool = not pm._countdown_labels.is_empty() and pm._countdown_labels[0].is_visible_in_tree() \
+		and str(pm._countdown_labels[0].text).contains("m")
+	_check("DAILY CHALLENGE" in texts and shows_rules and countdown, "the Daily card shows today's rules and a countdown")
 	_check(pm._start.text.begins_with("PLAY DAILY"), "START becomes PLAY DAILY")
 	var plays_before := {}
 	for cid in DB.card_order:
