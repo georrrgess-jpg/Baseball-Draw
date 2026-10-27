@@ -56,3 +56,22 @@ is the floor, so nothing in menus should be smaller than 16.
   each content block in a 50 ms stagger, and by overlays (pause, dialogs, results panels).
 * **Header**: every `MenuScreen` has the same BACK button top-left (170×56, Esc also works), the title at 64 px,
   a subtitle at 20 px and the currencies in one pill on the right.
+
+## Verification
+
+* `tools/check_scripts.sh`: all scripts compile.
+* Test suite: 962 checks, 0 failed (new "menus" section: settings search filters rows and categories, the
+  Results screen builds the game-flow graph and the three highlights from a result).
+* UI flow test (full run, 1600×900): 110 checks, 0 failed. The dugout purchase check now runs (the price
+  button text is the amount, so the test finds it; before it was skipped silently).
+* Captures (1920×1080 and 1280×720, plus Play at UI scale 1.25) were reviewed for every redesigned screen.
+  Found and fixed from the captures: oversized search icon, two stadium tiles per row, empty lower third
+  on Progression (now "Almost there" achievements), START cut off at UI scale 1.25 (columns now scroll).
+
+## Tools added
+
+* `tools/art/arena_thumbs.tscn` renders `assets/textures/arenas/<id>.jpg` (640×360) for every arena;
+  re-run it after stadium art changes (`--only=<arena_id>` for one).
+* Screenshot helpers: `--tab=N` (Progression), `--settings-tab=<id>`, `--settings-search=<text>`,
+  `--run-benchmark` (Settings), `--open-pause` (battle), `--ui-scale=1.25` (menus), and `--show-results`
+  now also fills demo game-flow data and highlights.
