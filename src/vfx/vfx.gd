@@ -1252,6 +1252,72 @@ func status_chill(pos: Vector3, h: float, delta: float) -> void:
 			Vector3(0, -0.3, 0), Color(0.8, 0.95, 1.0), 1.0, 0.8)
 
 
+const STEAL_PINK := Color(1.0, 0.3, 0.72)
+const BUBBLE_AMBER := Color(1.0, 0.62, 0.22)
+
+
+## Shielded elite: an amber hex bubble around the runner (Enemy drives `build`).
+func make_runner_bubble() -> MeshInstance3D:
+	var mi := make_owned("pulse")
+	mi.set_instance_shader_parameter("color", Color(BUBBLE_AMBER * 0.5, 1.0))
+	mi.set_instance_shader_parameter("mode", 0.0)
+	mi.set_instance_shader_parameter("build", 0.0)
+	mi.set_instance_shader_parameter("ripple", Vector4(0, 0, 1, 1))
+	return mi
+
+
+## The bubble soaks a hit and shatters: hex shards, a ring and a broken-shield icon.
+func bubble_pop(e: Node3D, broken: bool) -> void:
+	var c: Vector3 = e.center()
+	var h: float = e.height
+	emit_one("flash", c, Vector3.ZERO, Color(1.0, 0.85, 0.55, 0.9), 1.4, 0.9)
+	emit_one("ring", c, Vector3.ZERO, BUBBLE_AMBER, 1.8, 1.0)
+	for i in _count(22):
+		var d := Vector3(randf_range(-1, 1), randf_range(-0.2, 1), randf_range(-1, 1)).normalized()
+		_emit_raw("spark", c + d * h * 0.4, d * randf_range(5.0, 9.0), BUBBLE_AMBER.lerp(Color.WHITE, 0.3), 1.0, 0.9)
+	emit("glow", c, 6, Color(BUBBLE_AMBER, 0.6), 3.0, 0.3, 1.0, 0.8, 0.6)
+	shockwave(Vector3(c.x, 0.06, c.z), 1.8, BUBBLE_AMBER, 0.35, 0.06)
+	glyph(c + Vector3(0, h * 0.75 + 0.4, 0), 15 if broken else 14, 1.3, Color(1.0, 0.75, 0.35), 0.9, 0.0, 0.7)
+	text_popup(c + Vector3(0, h * 0.5, 0), "BLOCKED", Color(1.0, 0.78, 0.4), 0.75, 0.7)
+
+
+## Base Stealer takes off: a pink flash at the feet, chevrons over the head and a dashed
+## arrow along the path it is about to run.
+func steal_start(e: Node3D) -> void:
+	var feet := Vector3(e.global_position.x, 0.06, e.global_position.z)
+	var h: float = e.height
+	shockwave(feet, 1.5, STEAL_PINK, 0.3, 0.07)
+	emit_one("flash", feet + Vector3(0, 0.5, 0), Vector3.ZERO, Color(1.0, 0.6, 0.85, 0.8), 0.9, 0.7)
+	dust(feet, 1.4)
+	glyph(e.global_position + Vector3(0, h + 0.9, 0), 6, 1.1, STEAL_PINK, 0.8, 0.0, 0.5)
+	if "route" in e and e.route:
+		var pts := PackedVector3Array()
+		for i in 10:
+			var p: Vector3 = e.route.position_at(minf(e.d + 0.6 + i * 0.75, e.route.length))
+			pts.append(Vector3(p.x, 0.12, p.z))
+		ribbon(pts, Color(STEAL_PINK, 0.85), 0.45, 0.8, 0.0, true)
+
+
+## While stealing: pink speed streaks streaming off the runner and dust at the feet.
+func status_steal(pos: Vector3, dir: Vector3, h: float, delta: float) -> void:
+	if randf() < delta * 26.0:
+		status_emit("streak", pos + Vector3(randf_range(-0.3, 0.3), randf_range(0.3, h), randf_range(-0.3, 0.3)) - dir * 0.3,
+			-dir * 8.0, STEAL_PINK, 0.9, 0.7)
+	if randf() < delta * 6.0:
+		status_emit("dust", Vector3(pos.x, 0.2, pos.z), -dir * 1.5 + Vector3(0, 0.6, 0), Color(0.62, 0.46, 0.33, 0.5), 0.8, 0.7)
+
+
+## A steal stopped by a slow / root / stun: CAUGHT STEALING!
+func caught_stealing(e: Node3D) -> void:
+	var c: Vector3 = e.center()
+	emit_one("flash", c, Vector3.ZERO, Color(0.6, 1.0, 0.9, 0.9), 1.3, 0.8)
+	emit_one("ring", c, Vector3.ZERO, Color(0.4, 1.0, 0.85), 1.6, 1.0)
+	emit("magic", c, 12, Color(0.5, 1.0, 0.85), 4.0, 0.6)
+	shockwave(Vector3(c.x, 0.06, c.z), 2.0, Color(0.4, 1.0, 0.85), 0.35, 0.06)
+	glyph(c + Vector3(0, e.height * 0.6 + 0.6, 0), 5, 1.3, Color(0.45, 1.0, 0.85), 1.0, 0.0, 0.6)
+	text_popup(c + Vector3(0, 1.0, 0), "CAUGHT STEALING!", Color(0.45, 1.0, 0.85), 0.9, 1.0)
+
+
 func status_magnet(pos: Vector3, to_center: Vector3, h: float, delta: float) -> void:
 	if randf() < delta * 16.0:
 		var back := -to_center.normalized()

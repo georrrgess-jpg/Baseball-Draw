@@ -811,6 +811,8 @@ func _on_combo(n: int) -> void:
 func on_enemy_reached_home(e: Enemy) -> void:
 	if not e.alive:
 		return
+	if e.id != "decoy" and e.runs > 0 and _plate_tag(e):
+		return
 	e.alive = false
 	enemies.erase(e)
 	if e == boss_alive:
@@ -870,6 +872,39 @@ func on_enemy_reached_home(e: Enemy) -> void:
 		notify("GAME OVER", Color(1.0, 0.2, 0.2))
 		get_tree().create_timer(1.2).timeout.connect(func() -> void: finish_run(false))
 		set_state("results")
+
+
+## Tag at the Plate / Perfect Game: a runner reaching home while a plate tag is up is tagged
+## out (a boss is stunned and shoved back instead). Tag at the Plate is used up by one runner;
+## Perfect Game's window tags everyone. Returns true when the runner was stopped.
+func _plate_tag(e: Enemy) -> bool:
+	var tag: Dictionary = {}
+	for b in buffs:
+		if b.kind == "plate_tag" or b.kind == "perfect_tag":
+			tag = b
+			if b.kind == "perfect_tag":
+				break   # the Perfect Game window doesn't use up a single tag
+	if tag.is_empty():
+		return false
+	if tag.kind == "plate_tag":
+		buffs.erase(tag)
+	var card := "tag_at_the_plate" if tag.kind == "plate_tag" else "perfect_game"
+	if e.is_boss:
+		e.d = maxf(0.0, e.route.length - float(tag.get("knockback", 4.0)))
+		e.knock_from = e.route.length
+		e.knock_t = 0.25
+		e.stun_t = maxf(e.stun_t, float(tag.get("stun", 2.0)))
+		vfx.cards.plate_tag(e, false)
+		notify("BLOCKED AT THE PLATE!", Color(0.4, 1.0, 0.85))
+	else:
+		vfx.cards.plate_tag(e, true)
+		run.stats.plate_tags = int(run.stats.get("plate_tags", 0)) + 1
+		e.die({"kind": "tag", "card": card, "dir": -e.route.direction_at(e.d)})
+		notify("TAGGED OUT AT THE PLATE!", Color(0.4, 1.0, 0.85))
+	Audio.play("glove_catch")
+	Audio.play("crowd_cheer", -6.0)
+	cam.shake(0.25)
+	return true
 
 
 func _on_boss_defeated(e: Enemy) -> void:
@@ -1042,6 +1077,14 @@ func buff_active(kind: String) -> bool:
 	return false
 
 
+## Hot Corner: this defender's throws pierce armor and can't be dodged.
+func hot_corner_on(df: Defender) -> bool:
+	for b in buffs:
+		if b.kind == "hot_corner" and b.get("defender") == df:
+			return true
+	return false
+
+
 func _update_buffs(delta: float) -> void:
 	for i in range(buffs.size() - 1, -1, -1):
 		buffs[i].t -= delta
@@ -1071,6 +1114,9 @@ func _update_buffs(delta: float) -> void:
 					df.dyn_range += float(b.value)
 				"rally":
 					df.dyn_speed += float(b.value)
+				"hot_corner":
+					if b.get("defender") == df:
+						df.dyn_damage += float(b.value)
 				"diamond_aura":
 					var src: Defender = b.get("defender")
 					if src and is_instance_valid(src) and Field.v2(df.global_position).distance_to(Field.v2(src.global_position)) <= float(b.radius):
@@ -1440,7 +1486,7 @@ func _preview_units(id: String, gp: Variant) -> Array:
 			return out2
 		"none":
 			match id:
-				"time_out", "changeup":
+				"time_out", "changeup", "perfect_game":
 					var all: Array = []
 					for e in enemies:
 						if e.targetable():

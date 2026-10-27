@@ -233,6 +233,49 @@ func _target_for(id: String) -> Dictionary:
 	var lead := battle.lead_runners(1)
 	if lead.is_empty() and id != "base_shield" and id != "seventh_inning_stretch":
 		return {}
+	match id:
+		"called_shot":
+			# Save it for the biggest target: the boss, else the toughest runner.
+			if battle.boss_alive and is_instance_valid(battle.boss_alive) and battle.boss_alive.targetable():
+				return {"enemy": battle.boss_alive, "point": battle.boss_alive.global_position, "valid": true}
+			var big: Enemy = null
+			for e: Enemy in battle.enemies:
+				if e.targetable() and e.id != "decoy" and (big == null or e.max_hp > big.max_hp):
+					big = e
+			if big == null or big.max_hp < 300.0:
+				return {}
+			return {"enemy": big, "point": big.global_position, "valid": true}
+		"tag_at_the_plate":
+			# Only when a runner is about to score and no tag is waiting.
+			if (lead[0] as Enemy).remaining() > 8.0 or battle.buff_active("plate_tag"):
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"bullpen_call":
+			if battle.cards.hand_count() > 3:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"hot_corner":
+			# The defender throwing at the toughest runner (armor / bosses), else the hardest hitter.
+			var pick: Defender = null
+			var best := -1.0
+			for df: Defender in battle.defenders:
+				var score := df.s_damage
+				if df.target and is_instance_valid(df.target):
+					score += 100.0 + df.target.armor * 200.0 + (300.0 if df.target.is_boss else 0.0)
+				if score > best:
+					best = score
+					pick = df
+			if pick == null or battle.hot_corner_on(pick):
+				return {}
+			return {"defender": pick, "point": pick.global_position, "valid": true}
+		"perfect_game":
+			var live := 0
+			for e: Enemy in battle.enemies:
+				if e.alive and e.id != "decoy":
+					live += 1
+			if live < 6 and battle.boss_alive == null and (lead[0] as Enemy).remaining() > 10.0:
+				return {}
+			return {"valid": true, "point": Field.HOME}
 	match c.target:
 		"enemy":
 			return {"enemy": lead[0], "point": lead[0].global_position, "valid": true}

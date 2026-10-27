@@ -18,6 +18,13 @@
     {"cards": ["diamond_aura", "rally_cry"], "text": "Attack-speed bonuses stack for a huge burst."},
     {"cards": ["power_throw", "pickoff"], "text": "Soften a runner with Power Throw, then pick it off."},
     {"cards": ["seventh_inning_stretch", "grand_slam_barrage"], "text": "Refill energy to afford your most expensive card."},
-    {"cards": ["changeup", "frost_field"], "text": "Stacked slows hold runners inside your kill zone."}
+    {"cards": ["changeup", "frost_field"], "text": "Stacked slows hold runners inside your kill zone."},
+    {"cards": ["curveball", "called_shot"], "text": "A curved runner takes extra damage from Called Shot."},
+    {"cards": ["called_shot", "pickoff"], "text": "Called Shot carves off health so Pickoff can finish the job."},
+    {"cards": ["magnet_glove", "line_drive"], "text": "Pull runners together, then burst them all with one Line Drive."},
+    {"cards": ["tag_at_the_plate", "base_shield"], "text": "Tag the first runner home; the shield stops the next one."},
+    {"cards": ["bullpen_call", "seventh_inning_stretch"], "text": "Chain the draws to dig straight to your best card."},
+    {"cards": ["hot_corner", "diamond_aura"], "text": "Stack both on one defender: armor-piercing throws with bonus damage and speed."},
+    {"cards": ["perfect_game", "grand_slam_barrage"], "text": "Stunned runners stand still under the barrage."}
   ]
 }

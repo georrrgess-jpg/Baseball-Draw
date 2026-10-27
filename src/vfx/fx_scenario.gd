@@ -8,6 +8,8 @@ extends Node
 ##   hits        a pack of normal runners in front of the infield; crits forced often, so hits,
 ##               crits and outs all show up.
 ##   runners     one of each runner type jogging past a close camera (defenders hold their throws).
+##   stealer     Base Stealers take off while nobody aims at them, a Shielded elite's bubble
+##               pops, and a slow catches a stealer stealing (--fx-hold, --fx-slow).
 ##   tag         Maya dash-tags a runner next to her post (catch + glove pop).
 ## Shots are seconds after the scenario starts; frames are saved as <dir>/<name>_<centiseconds>.png
 ## and the game quits after the last one. Run with --fixed-fps 30 so frames land on game time.
@@ -114,6 +116,30 @@ func _start() -> void:
 			df.attack_cd = 1.0e9
 		var p := route.position_at(d0 - 5.0)
 		_view(p, 70.0, -22.0, 17.0)
+	elif scenario == "stealer":
+		# Base Stealers and a Shielded elite in front of the infield; the defenders hold their
+		# throws for a moment (so the stealers take off), then a slow catches one stealing.
+		var d0 := route.length * 0.42
+		for i in 3:
+			battle.spawn_enemy("base_stealer", route, d0 - i * 1.4, {"lateral": randf_range(-0.8, 0.8), "speed_mult": 0.5, "hp_mult": 30.0})
+		battle.spawn_enemy("runner", route, d0 - 5.0, {"lateral": 0.0, "speed_mult": 0.4, "hp_mult": 30.0, "affix": "shielded"})
+		battle.spawn_enemy("armored", route, d0 - 6.5, {"lateral": 0.6, "speed_mult": 0.4, "hp_mult": 30.0, "affix": "shielded"})
+		var hold := _arg_f("--fx-hold", 2.0)
+		for df in battle.defenders:
+			# Nobody is aiming at first, so the stealers take off.
+			var rng := df.s_range
+			df.s_range = 0.1
+			df.target = null
+			get_tree().create_timer(hold, false).timeout.connect(func() -> void:
+				if is_instance_valid(df):
+					df.s_range = rng)
+		get_tree().create_timer(_arg_f("--fx-slow", 1.6), false).timeout.connect(func() -> void:
+			for e in battle.enemies:
+				if e.is_stealing():
+					e.apply_slow("curveball", 0.4, 2.0)
+					break)
+		var p := route.position_at(d0 - 2.0)
+		_view(p.lerp(Field.MOUND, 0.25), 30.0, -32.0, 20.0)
 	elif scenario == "tag":
 		var maya: Defender = null
 		for df in battle.defenders:

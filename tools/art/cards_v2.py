@@ -839,6 +839,185 @@ def seventh_inning_stretch(c: Card):
 
 
 # ---------------------------------------------------------------------------
+# Update 5 cards
+# ---------------------------------------------------------------------------
+def reticle_svg(cx, cy, r, col="#FFFFFF", w=14):
+    """Crosshair: outer ring, broken inner ring and four ticks."""
+    s = ring(cx, cy, r, r, w, col)
+    s += "".join(f'<path d="{taper(arc_pts(cx, cy, r * 0.62, r * 0.62, a + 12, a + 78), w * 0.55, w * 0.55)}" fill="{col}"/>'
+                 for a in (0, 90, 180, 270))
+    for a in (0, 90, 180, 270):
+        t = math.radians(a)
+        x0, y0 = cx + math.cos(t) * r * 0.78, cy + math.sin(t) * r * 0.78
+        x1, y1 = cx + math.cos(t) * r * 1.22, cy + math.sin(t) * r * 1.22
+        s += f'<path d="M{x0:.1f},{y0:.1f} L{x1:.1f},{y1:.1f}" stroke="{col}" stroke-width="{w:.1f}" stroke-linecap="round"/>'
+    return s
+
+
+@painter
+def called_shot(c: Card):
+    bx, by = 560, 430
+    backdrop(c, (bx, by), stops=[(0, "#FFE7A0"), (0.2, "#FF8A4A"), (0.5, "#9A2A2A"), (0.8, "#3A0E18"), (1.0, "#16060C")])
+    c.add(fx.light_rays(W, H, bx, by, 18, c.seed, GOLD, spread=0.7, opacity=(0.04, 0.12)), 1.0)
+    # the ball comes down out of the sky from the upper right
+    pts = props.bezier((1010, -40), (930, 60), (700, 250), (bx, by), 80)
+    trail(c, pts, 0, 210, col="#FFD27A", glow=1.1)
+    energy(c, lay(reticle_svg(bx, by, 250, "#FFFFFF", 16)), GOLD, core=0.95, glow=1.0)
+    speed(c, 60, n=16, col="#FFF2B0", k=0.4, region=(600, 0, 1024, 360))
+    subject(c, ball_layer(250, bx, by, rot=(0.5, 0.8, 0.3), base="#FFF4D6", rim="#FFF6D0", bounce=GOLD),
+            glow=1.2, glow_col=GOLD, rim_col="#FFF6D0")
+    # pointing hand in the lower left: "calling the shot"
+    hand = lay(f'<g transform="translate(150,640) rotate(-32)">'
+               f'<path d="{props.capsule_d(-40, 0, 150, 0, 58, 50)}" fill="#E9EEF5"/>'
+               f'<path d="{props.capsule_d(120, -12, 300, -12, 22, 19)}" fill="#F4D2B0"/>'
+               f'<path d="{props.capsule_d(110, 18, 170, 26, 26, 22)}" fill="#E2B790"/>'
+               f'<path d="{props.capsule_d(60, -30, 140, 40, 62, 56)}" fill="#F4D2B0"/>'
+               f'<rect x="-60" y="-60" width="34" height="120" rx="12" fill="#C2262E"/></g>')
+    subject(c, hand, glow=0.7, glow_col=GOLD, rim_col="#FFF2B0")
+    finish(c, bloom=1.1)
+
+
+@painter
+def line_drive(c: Card):
+    bx, by = 600, 380
+    backdrop(c, (bx + 140, by))
+    # flat, straight streak: the liner
+    trail(c, [(-40, by + 24), (bx, by)], 0, 190, col="#FFE0C0", glow=1.0)
+    speed(c, 0, n=26, k=0.6, region=(0, 220, 600, 560), width=(3, 8))
+    burst = lay(fx.comic_burst_svg(bx + 230, by, 230, seed=11, points=11,
+                                   colors=("#FF5A36", "#FF9A4A", "#FFE08A", "#FFFFFF"), squash=0.85))
+    energy(c, burst, "#FF8A4A", core=1.0, glow=0.9)
+    rng = c.rng(4)
+    bits = []
+    for i in range(12):
+        a = rng.uniform(-70, 70)
+        r0 = rng.uniform(170, 300)
+        x, y = bx + 230 + math.cos(math.radians(a)) * r0, by + math.sin(math.radians(a)) * r0 * 0.9
+        s = rng.uniform(12, 24)
+        bits.append(f'<path d="{props.poly_d([(x - s, y), (x, y - s * 0.8), (x + s, y + s * 0.2), (x - s * 0.2, y + s)])}" fill="#B87440"/>')
+    subject(c, lay("".join(bits)), glow=0.3, ow=7, rim_col="#FFE6C0", rim_w=6)
+    subject(c, ball_layer(230, bx, by, rot=(0.2, 1.2, 0.1), bounce=c.col))
+    finish(c)
+
+
+@painter
+def tag_at_the_plate(c: Card):
+    px, py = 512, 600
+    backdrop(c, (px, py - 120))
+    sw = lay(ring(px, py + 10, 330, 80, 16, "#FFFFFF") + ring(px, py + 15, 450, 110, 8, "#FFFFFF", 0.6))
+    energy(c, sw, "#7FF5E8", core=0.85, glow=0.9)
+    dust = lay(fx.comic_burst_svg(px, py - 10, 330, seed=6, points=13, colors=("#2EC4B6", "#9FF3EA", "#FFFFFF"), squash=0.3))
+    energy(c, dust, "#7FF5E8", core=0.7, glow=0.7)
+    plate = lay(f'<path d="M{px - 190},{py - 30} L{px + 190},{py - 30} L{px + 190},{py + 8} L{px},{py + 66} '
+                f'L{px - 190},{py + 8}Z" fill="#F4F1EA"/>'
+                f'<path d="M{px - 190},{py + 8} L{px},{py + 66} L{px + 190},{py + 8} L{px + 190},{py + 34} L{px},{py + 92} '
+                f'L{px - 190},{py + 34}Z" fill="#9AA3B5"/>')
+    subject(c, plate, glow=0.6, rim_col="#E8FFFB")
+    speed(c, 90, n=16, col="#FFFFFF", k=0.5, region=(240, 0, 790, 250), width=(4, 10))
+    defs, g = glove_svg(px + 10, py - 250, 0.95, 160, leather="#7A3A1A", dark="#3A1A0A", light="#C46A2C",
+                        trim="#2EC4B6", catcher=True)
+    gl = over(lay(g, defs), ball_layer(130, px - 30, py - 150, rot=(0.6, 0.4, 0.3)))
+    subject(c, gl, glow=1.1)
+    finish(c)
+
+
+@painter
+def bullpen_call(c: Card):
+    cx, cy = 470, 430
+    backdrop(c, (cx + 60, cy - 40))
+    # ringing arcs on both sides of the handset
+    rings = "".join(f'<path d="{taper(arc_pts(cx, cy - 20, r, r * 0.9, a0, a0 + 70), 14, 14)}" fill="#FFFFFF" '
+                    f'fill-opacity="{1.0 - i * 0.25:.2f}"/>' for i, r in enumerate((250, 320, 390)) for a0 in (-125, -55 + 180))
+    energy(c, lay(rings), "#9BFF7A", core=0.8, glow=0.9)
+    # two cards flying out to the upper right
+    cards = ""
+    for (x, y, rot, col) in ((690, 230, 18, "#3A8DFF"), (820, 300, 32, "#5BD75B")):
+        cards += (f'<g transform="translate({x},{y}) rotate({rot})">'
+                  f'<rect x="-80" y="-110" width="160" height="220" rx="16" fill="#F4F1EA"/>'
+                  f'<rect x="-66" y="-96" width="132" height="120" rx="10" fill="{col}"/>'
+                  f'<rect x="-66" y="36" width="132" height="14" rx="6" fill="#9AA3B5"/>'
+                  f'<rect x="-66" y="62" width="92" height="14" rx="6" fill="#9AA3B5"/></g>')
+    for (x, y) in ((690, 230), (820, 300)):
+        trail(c, [(cx + 60, cy - 60), (x - 40, y + 30)], 0, 70, col="#9BFF7A", glow=0.6)
+    subject(c, lay(cards), glow=0.9, glow_col="#9BFF7A", rim_col="#FFFFFF")
+    # the bullpen phone handset
+    hs = lay(f'<path d="M{cx - 190},{cy + 40} Q{cx},{cy - 150} {cx + 190},{cy + 40}" fill="none" stroke="url(#ph)" '
+             f'stroke-width="70" stroke-linecap="round"/>'
+             f'<ellipse cx="{cx - 200}" cy="{cy + 70}" rx="92" ry="58" fill="#C2262E" transform="rotate(-28 {cx - 200} {cy + 70})"/>'
+             f'<ellipse cx="{cx + 200}" cy="{cy + 70}" rx="92" ry="58" fill="#C2262E" transform="rotate(28 {cx + 200} {cy + 70})"/>'
+             f'<ellipse cx="{cx - 205}" cy="{cy + 84}" rx="60" ry="30" fill="#5A0A10" transform="rotate(-28 {cx - 205} {cy + 84})"/>'
+             f'<ellipse cx="{cx + 205}" cy="{cy + 84}" rx="60" ry="30" fill="#5A0A10" transform="rotate(28 {cx + 205} {cy + 84})"/>',
+             props.lin_grad("ph", [(0, "#FF6A5A"), (0.5, "#E0262F"), (1, "#8A0E16")], 0, 0, 0, 1))
+    subject(c, hs, glow=1.0, rim_col="#FFF2B0")
+    sparkles(c, 18, region=(560, 80, 1000, 460), col=["#FFFFFF", "#CFFFB8"])
+    finish(c)
+
+
+@painter
+def hot_corner(c: Card):
+    backdrop(c, (640, 360), col="#FF7A2A")
+    # steel plate on the right, punched through by the ball
+    px, py = 720, 360
+    plate = lay(f'<path d="{props.poly_d([(px - 120, py - 270), (px + 230, py - 230), (px + 250, py + 260), (px - 100, py + 300)])}" '
+                f'fill="url(#st)"/>'
+                + "".join(f'<circle cx="{x}" cy="{y}" r="14" fill="#5A6576"/>' for x, y in
+                          ((px - 80, py - 220), (px + 190, py - 185), (px + 205, py + 210), (px - 62, py + 245))),
+                props.lin_grad("st", [(0, "#B8C2D0"), (0.5, "#7A8698"), (1, "#3E4858")], 0, 0, 1, 1))
+    subject(c, plate, glow=0.4, glow_col="#FF8A3A", rim_col="#FFD0A0")
+    rng = c.rng(7)
+    cracks = []
+    for k in range(10):
+        a = k / 10 * 2 * math.pi + rng.uniform(-0.2, 0.2)
+        p = [(px + 40, py)]
+        for s in range(3):
+            r = 70 + s * 70
+            p.append((px + 40 + math.cos(a) * r + rng.uniform(-14, 14), py + math.sin(a) * r * 1.1 + rng.uniform(-14, 14)))
+        cracks.append(f'<path d="{taper(p, 16, 3)}" fill="#1A1E26"/>')
+    cr = lay("".join(cracks))
+    c.over(cr)
+    c.add(from_mask(blur(cr[..., 3], 6), "#FF7A2A"), 0.7)
+    hole = lay(fx.comic_burst_svg(px + 40, py, 130, seed=3, points=10, colors=("#FF5A1F", "#FFC93C", "#FFFFFF"), squash=1.0))
+    energy(c, hole, "#FF8A2A", core=1.0, glow=1.0)
+    flame_ball(c, px - 10, py + 4, 210, 0, length=4.6, n=24, spread=34, glow=1.2)
+    # the red-hot third-base glove
+    defs, g = glove_svg(210, 560, 0.66, -18, leather="#E0402A", dark="#7A1408", light="#FFB070", trim="#FFD23F")
+    subject(c, lay(g, defs), glow=1.2, glow_col="#FF6A2A", rim_col="#FFE0A0")
+    finish(c, bloom=1.1)
+
+
+@painter
+def perfect_game(c: Card):
+    cx, cy = 512, 470
+    backdrop(c, (cx, cy - 60), col="#FFC93C", bright=0.7, ray_k=1.4)
+    c.add(fx.light_rays(W, H, cx, cy - 60, 26, c.seed, "#FFF2B0", spread=0.9, opacity=(0.05, 0.13)), 1.0)
+    # the infield diamond in perspective, blazing gold
+    bases = [(cx, cy + 210), (cx + 330, cy), (cx, cy - 150), (cx - 330, cy)]
+    dia = lay(f'<path d="{props.poly_d(bases)}" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>'
+              f'<path d="{props.poly_d(bases)}" fill="#FFD86A" fill-opacity="0.08"/>')
+    energy(c, dia, GOLD, core=1.0, glow=0.8)
+    # pillars of light from every base
+    pil = "".join(f'<path d="{taper([(x, y), (x, y - 420)], 46, 4)}" fill="#FFF2C0"/>' for x, y in bases)
+    energy(c, lay(pil), GOLD, core=0.7, glow=1.0)
+    bags = "".join(f'<path d="{props.poly_d([(x - 44, y), (x, y - 22), (x + 44, y), (x, y + 22)])}" fill="#F4F1EA"/>' for x, y in bases[1:])
+    hx, hy = bases[0]
+    bags += f'<path d="{props.poly_d([(hx - 48, hy - 14), (hx + 48, hy - 14), (hx + 48, hy + 4), (hx, hy + 26), (hx - 48, hy + 4)])}" fill="#F4F1EA"/>'
+    subject(c, lay(bags), glow=0.6, glow_col=GOLD, rim_col="#FFFFFF", ow=9)
+    # crown over the plate
+    kx, ky = cx, 190
+    crown = lay(f'<path d="M{kx - 170},{ky + 80} L{kx - 190},{ky - 70} L{kx - 95},{ky + 5} L{kx},{ky - 110} L{kx + 95},{ky + 5} '
+                f'L{kx + 190},{ky - 70} L{kx + 170},{ky + 80}Z" fill="url(#cr)"/>'
+                f'<rect x="{kx - 175}" y="{ky + 60}" width="350" height="46" rx="12" fill="#C58A1A"/>'
+                + "".join(f'<circle cx="{x}" cy="{y}" r="20" fill="{col}"/>' for x, y, col in
+                          ((kx - 190, ky - 76, "#FF4A6A"), (kx, ky - 118, "#4AC8FF"), (kx + 190, ky - 76, "#5BD75B"),
+                           (kx - 90, ky + 83, "#B45CFF"), (kx + 90, ky + 83, "#FF4A6A"))),
+                props.lin_grad("cr", [(0, "#FFF2B0"), (0.5, "#FFC43D"), (1, "#B07210")], 0, 0, 0, 1))
+    subject(c, crown, glow=1.4, glow_col=GOLD, rim_col="#FFFFFF")
+    subject(c, ball_layer(120, kx, ky + 10, rot=(0.4, 0.6, 0.2), rim="#FFF6D0", bounce=GOLD), glow=0.8, glow_col=GOLD, ow=9)
+    finish(c, bloom=1.3)
+    final_sparkles(c)
+
+
+# ---------------------------------------------------------------------------
 def render(info, out_dir=OUT):
     fn = PAINTERS.get(info["id"])
     if fn is None:

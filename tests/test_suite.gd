@@ -6,6 +6,7 @@ extends Node
 var checks := 0
 var failures := 0
 var battle: Battle
+const NEW_CARDS := ["called_shot", "line_drive", "tag_at_the_plate", "bullpen_call", "hot_corner", "perfect_game"]
 
 
 func ok(cond: bool, what: String) -> void:
@@ -38,6 +39,7 @@ func _run() -> void:
 	test_economy()
 	test_tools()
 	await test_menus()
+	test_update5_content()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -47,7 +49,10 @@ func _run() -> void:
 
 func test_data() -> void:
 	section("data integrity")
-	ok(DB.cards.size() == 26, "26 cards defined (%d)" % DB.cards.size())
+	ok(DB.cards.size() == 32, "32 cards defined (%d)" % DB.cards.size())
+	for id in NEW_CARDS:
+		ok(DB.cards.has(id), "Update 5 card %s defined" % id)
+	ok(DB.cards.values().filter(func(c: Dictionary) -> bool: return c.rarity == "legendary").size() >= 3, "at least three Legendary cards")
 	for id in DB.card_order:
 		var c := DB.card(id)
 		ok(c.rarity in DB.RARITY_ORDER, "%s rarity valid" % id)
@@ -567,6 +572,8 @@ func test_battle_systems() -> void:
 	for cid in DB.card_order:
 		await _test_card(cid)
 	_clear()
+	await _test_update5_battle()
+	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
 	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
@@ -604,6 +611,233 @@ func test_tools() -> void:
 	ok(is_equal_approx(float(r.card_impact.power_throw.damage), 150.0) and int(r.card_impact.power_throw.outs) == 1 and r.card_impact.size() == 1,
 		"card impact accumulates per card and ignores uncredited damage")
 	ok(not r.to_dict().has("card_impact"), "card impact statistics are not saved with the run")
+
+
+func _hold_fire(on: bool) -> void:
+	for df in battle.defenders:
+		df.attack_cd = 1.0e9 if on else 0.5
+		df.target = null
+
+
+## Update 5 cards, the Base Stealer and the Shielded elite in a live battle. Defenders hold
+## their throws so each number below comes from the card alone.
+func _test_update5_battle() -> void:
+	section("update 5 cards, runner and elite (battle)")
+	var route := battle.routes[0]
+	_hold_fire(true)
+	await _wait(0.1)
+
+	# Called Shot: flat + % of max health through armor; capped on regular runners; slows bosses.
+	var boss := battle.spawn_enemy("iron_slugger", route, route.length * 0.35, {"lateral": 0.0, "hp_mult": 1.0})
+	boss.ability_t = 999.0
+	var tank := battle.spawn_enemy("armored", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0})
+	await _wait(0.1)
+	var b0 := boss.hp
+	var t0 := tank.hp
+	battle.effects.execute("called_shot", 1, {"enemy": boss, "point": boss.global_position, "valid": true})
+	await _wait(1.5)
+	battle.effects.execute("called_shot", 1, {"enemy": tank, "point": tank.global_position, "valid": true})
+	await _wait(1.5)
+	var want_boss := DB.card_param("called_shot", "damage", 1) + boss.max_hp * DB.card_param("called_shot", "percent", 1) / 100.0
+	var want_tank := DB.card_param("called_shot", "damage", 1) + DB.card_param("called_shot", "max_bonus", 1)
+	ok(absf((b0 - boss.hp) - want_boss) < 3.0, "called shot hits a boss for %d%% of its max health through 75%% armor (%.0f, want %.0f)"
+		% [int(DB.card_param("called_shot", "percent", 1)), b0 - boss.hp, want_boss])
+	ok(absf((t0 - tank.hp) - want_tank) < 3.0, "called shot's bonus is capped on regular runners and ignores armor (%.0f, want %.0f)" % [t0 - tank.hp, want_tank])
+	ok(boss.slows.has("called_shot"), "called shot slows a boss")
+	_clear()
+	await _wait(0.2)
+
+	# Line Drive: a small burst - runners in the circle are hit, one outside is not.
+	var near := _spawn_pack(3)
+	var far := battle.spawn_enemy("runner", battle.routes[battle.routes.size() - 1], 3.0, {"lateral": 0.0, "hp_mult": 40.0})
+	await _wait(0.1)
+	var near_hp: Array = near.map(func(en: Enemy) -> float: return en.hp)
+	var far_hp := far.hp
+	battle.effects.execute("line_drive", 1, {"point": near[1].global_position, "valid": true})
+	await _wait(1.6)
+	var hit_all := true
+	for i in near.size():
+		hit_all = hit_all and near[i].hp < float(near_hp[i]) - 1.0
+	ok(hit_all, "line drive hits every runner in its circle")
+	ok(is_equal_approx(far.hp, far_hp), "line drive leaves runners outside the circle alone")
+	_clear()
+	await _wait(0.2)
+
+	# Tag at the Plate: the next runner home is out (before shields); only one per card.
+	battle.run.shields = 1
+	var tags := int(battle.run.stats.get("plate_tags", 0))
+	battle.effects.execute("tag_at_the_plate", 1, {"valid": true})
+	var r1 := battle.spawn_enemy("runner", route, route.length - 0.3, {"lateral": 0.0})
+	await _wait(0.5)
+	ok(not r1.alive and r1.hp <= 0.0 and battle.run.shields == 1 and int(battle.run.stats.get("plate_tags", 0)) == tags + 1,
+		"tag at the plate tags out the next runner home, before the shield")
+	ok(not battle.buff_active("plate_tag"), "the plate tag is used up by one runner")
+	var r2 := battle.spawn_enemy("runner", route, route.length - 0.3, {"lateral": 0.0})
+	await _wait(0.5)
+	ok(not r2.alive and battle.run.shields == 0, "the next runner meets the Base Shield instead")
+	# A boss is stunned and shoved back instead of tagged.
+	battle.effects.execute("tag_at_the_plate", 1, {"valid": true})
+	var boss2 := battle.spawn_enemy("iron_slugger", route, route.length - 0.2, {"lateral": 0.0, "hp_mult": 1.0})
+	boss2.ability_t = 999.0
+	await _wait(0.4)
+	ok(boss2.alive and boss2.stun_t > 0.0 and boss2.remaining() > 2.5, "a boss at the plate is stunned and shoved back (%.1f m out)" % boss2.remaining())
+	_clear()
+	await _wait(0.2)
+
+	# Bullpen Call: draws cards and gives energy.
+	battle.cards.infinite_energy = false
+	battle.cards.energy = 2.0
+	for i in battle.cards.hand.size():
+		battle.cards.hand[i] = ""
+	var hand0 := battle.cards.hand_count()
+	battle.effects.execute("bullpen_call", 1, {"valid": true})
+	ok(battle.cards.hand_count() == hand0 + int(DB.card_param("bullpen_call", "draw", 1)), "bullpen call draws %d cards" % int(DB.card_param("bullpen_call", "draw", 1)))
+	ok(absf(battle.cards.energy - (2.0 + DB.card_param("bullpen_call", "energy", 1))) < 0.05, "bullpen call gives energy (%.2f)" % battle.cards.energy)
+	battle.cards.infinite_energy = true
+
+	# Hot Corner: the chosen defender's throws pierce armor, can't miss and hit harder.
+	var hot: Defender = battle.defenders[0]
+	var other: Defender = battle.defenders[1]
+	var armored := battle.spawn_enemy("armored", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0})
+	var dmg0 := hot.effective_damage()
+	battle.effects.execute("hot_corner", 1, {"defender": hot, "valid": true})
+	await _wait(0.1)
+	var pl: Dictionary = hot._build_payload(armored, false)
+	ok(float(pl.get("pierce", 0.0)) >= 1.0 and float(pl.get("accuracy", 0.0)) >= 200.0, "hot corner throws pierce armor and can't miss")
+	ok(hot.effective_damage() > dmg0 * 1.2, "hot corner raises the defender's damage (%.0f -> %.0f)" % [dmg0, hot.effective_damage()])
+	ok(float(other._build_payload(armored, false).get("pierce", 0.0)) < 1.0, "other defenders are not affected")
+	var ah := armored.hp
+	battle.projectiles.hit(armored, pl, armored.center())
+	ok(ah - armored.hp >= float(pl.damage) * 0.99, "a hot-corner throw deals full damage to an armored runner (%.0f of %.0f)" % [ah - armored.hp, float(pl.damage)])
+	_clear()
+	await _wait(0.2)
+
+	# Perfect Game: every runner stunned and damaged, bosses lose a share of max health, tag window.
+	var pack := _spawn_pack(4)
+	var boss3 := battle.spawn_enemy("phantom_captain", battle.routes[battle.routes.size() - 1], 6.0, {"lateral": 0.0, "hp_mult": 1.0})
+	boss3.ability_t = 999.0
+	await _wait(0.1)
+	var bhp := boss3.hp
+	var php: Array = pack.map(func(en: Enemy) -> float: return en.hp)
+	battle.effects.execute("perfect_game", 1, {"valid": true})
+	await _wait(1.2)
+	var all_hit := true
+	for i in pack.size():
+		all_hit = all_hit and pack[i].hp < float(php[i]) - 1.0 and pack[i].stun_t > 0.0
+	ok(all_hit, "perfect game damages and stuns every runner")
+	ok(bhp - boss3.hp >= boss3.max_hp * DB.card_param("perfect_game", "boss_percent", 1) / 100.0, "perfect game takes %d%% of a boss's health (%.0f)"
+		% [int(DB.card_param("perfect_game", "boss_percent", 1)), bhp - boss3.hp])
+	var r3 := battle.spawn_enemy("runner", route, route.length - 0.3, {"lateral": 0.0})
+	var r4 := battle.spawn_enemy("runner", route, route.length - 0.2, {"lateral": 0.6})
+	await _wait(0.5)
+	ok(not r3.alive and not r4.alive and r3.hp <= 0.0 and r4.hp <= 0.0, "during the Perfect Game window every runner home is tagged out")
+	_clear()
+	await _wait(0.2)
+
+	# Shielded elite: the bubble blocks the first hit only.
+	var sh := battle.spawn_enemy("runner", route, route.length * 0.4, {"lateral": 0.0, "hp_mult": 10.0, "affix": "shielded"})
+	await _wait(0.2)
+	ok(sh.shield_hits == 1, "a Shielded elite starts with a bubble")
+	var s0 := sh.hp
+	var d1 := battle.deal_damage(sh, 100.0, {"kind": "throw"})
+	ok(d1 == 0.0 and is_equal_approx(sh.hp, s0) and sh.shield_hits == 0, "the bubble blocks the first hit")
+	var d2 := battle.deal_damage(sh, 100.0, {"kind": "throw"})
+	ok(d2 > 0.0 and sh.hp < s0, "the second hit gets through")
+	_clear()
+	await _wait(0.2)
+
+	# Base Stealer: steals while unwatched; a slow mid-steal catches it stealing.
+	# Nobody can see it at first: shrink every defender's range.
+	var ranges: Array = battle.defenders.map(func(df: Defender) -> float: return df.s_range)
+	for df in battle.defenders:
+		df.s_range = 0.1
+	var st := battle.spawn_enemy("base_stealer", route, 2.0, {"lateral": 0.0, "hp_mult": 10.0})
+	await _wait(1.2)
+	ok(st.is_stealing() or st.steal_cd > 0.0, "an unwatched Base Stealer takes off")
+	var spd_steal := st.current_speed() if st.is_stealing() else 0.0
+	if not st.is_stealing():
+		st.steal_cd = 0.0
+		await _wait(0.8)
+		spd_steal = st.current_speed()
+	ok(st.is_stealing() and spd_steal > st.base_speed * 1.8, "stealing runs at steal speed (%.1f vs %.1f)" % [spd_steal, st.base_speed])
+	var caught := int(battle.run.stats.get("caught_stealing", 0))
+	st.apply_slow("curveball", 0.4, 2.0)
+	await _wait(0.1)
+	ok(not st.is_stealing() and st.stun_t > 0.0 and st.vulnerable_t > 0.0 and int(battle.run.stats.get("caught_stealing", 0)) == caught + 1,
+		"a slow mid-steal catches it stealing (stunned, vulnerable)")
+	# Watched: a defender aiming at it keeps it from stealing.
+	st.slows.clear()
+	st.stun_t = 0.0
+	st.vulnerable_t = 0.0
+	var watcher: Defender = battle.defenders[0]
+	var rng0 := watcher.s_range
+	watcher.s_range = 999.0
+	watcher.target = st
+	st.steal_cd = 0.0
+	await _wait(1.0)
+	ok(not st.is_stealing() and watcher.target == st, "a Base Stealer a defender is aiming at doesn't steal")
+	watcher.s_range = rng0
+	for i in battle.defenders.size():
+		battle.defenders[i].s_range = float(ranges[i])
+	_hold_fire(false)
+	_clear()
+
+
+## Update 5 content outside battle: collection, saves, packs, waves, the new runner data.
+func test_update5_content() -> void:
+	section("update 5 cards, runner and elite (data)")
+	# A fresh profile sees the new cards, not owned.
+	Profile.reset_profile()
+	for id in NEW_CARDS:
+		ok(Profile.data.cards.has(id) and not Profile.is_card_owned(id), "fresh profile lists %s, not owned" % id)
+		ok(DB.combos_for(id).size() > 0, "%s has a combo" % id)
+		var details := str(DB.card(id).get("details", ""))
+		for key in DB.card(id).params.keys():
+			details = details.replace("{%s}" % key, "1")
+		ok(details != "" and not "{" in details, "%s has details text with resolvable values" % id)
+	# An old save without the new cards loads them as not owned (and keeps what it had).
+	var old: Dictionary = Profile.data.duplicate(true)
+	for id in NEW_CARDS:
+		old.cards.erase(id)
+	old.cards.splitter.owned = true
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	var all_there := true
+	for id in NEW_CARDS:
+		all_there = all_there and Profile.data.cards.has(id) and not Profile.is_card_owned(id)
+	ok(all_there and Profile.is_card_owned("splitter"), "an existing save gains the new cards as not owned")
+	# Packs can roll them: every rarity pool holds its new card.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	var seen := {}
+	for i in 400:
+		for cid in Profile.roll_pack("champion", rng):
+			seen[cid] = true
+	for id in NEW_CARDS:
+		ok(seen.has(id), "packs can contain %s" % id)
+	Profile.reset_profile()
+	# The new runner and elite affix.
+	ok(int(DB.achievements.full_collection.goal) == DB.cards.size(), "the Full Deck achievement asks for every card")
+	ok(DB.enemies.has("base_stealer") and DB.portrait("base_stealer") != null, "Base Stealer defined with a portrait")
+	ok(DB.elite_affixes.any(func(a: Dictionary) -> bool: return a.id == "shielded"), "Shielded elite affix defined")
+	var cfg := Session.new_run_config("standard")
+	var early := false
+	var later := false
+	for s in 30:
+		cfg.seed = 100 + s
+		var r := RunState.create(cfg)
+		for inning in range(1, 10):
+			r.inning = inning
+			for w in 3:
+				var info := WaveGenerator.generate(r, w, 4)
+				if info.preview.has("base_stealer"):
+					if inning < 4:
+						early = true
+					else:
+						later = true
+	ok(later and not early, "Base Stealers appear from inning 4 (later %s, early %s)" % [later, early])
 
 
 func _clear() -> void:
@@ -694,5 +928,14 @@ func _test_card(cid: String) -> void:
 			ok(battle.cards.hand_count() >= mini(hand_before + 1, CardSystem.MAX_HAND) or battle.cards.energy >= energy_before, "stretch draws cards / gives energy")
 		"shadow_change":
 			ok(damaged, "shadow change damages runners")
+		"tag_at_the_plate":
+			ok(battle.buff_active("plate_tag"), "tag at the plate arms a plate tag")
+		"bullpen_call":
+			ok(battle.cards.hand_count() >= mini(hand_before + 1, CardSystem.MAX_HAND), "bullpen call draws cards")
+		"hot_corner":
+			ok(battle.hot_corner_on(battle.defenders[0]), "hot corner heats up the chosen defender")
+		"perfect_game":
+			ok(damaged, "perfect game damages every runner")
+			ok(battle.buff_active("perfect_tag"), "perfect game opens a tag window at the plate")
 		_:
 			ok(damaged, "%s deals damage (%.0f -> %.0f)" % [cid, hp_before, hp_after])

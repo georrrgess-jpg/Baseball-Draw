@@ -117,6 +117,10 @@ func anticipate(card_id: String, caster: Node3D, face_point: Vector3, windup: fl
 			col = Color(0.35, 1.0, 0.55)
 		"sky_hook":
 			col = CYAN
+		"called_shot":
+			col = GOLD
+		"line_drive":
+			col = Color(1.0, 0.92, 0.7)
 	if anim != "special":
 		# Quick throw: a spark of power gathering in the throwing hand.
 		vfx.emit_one("glow", hand, Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.3), 0.9), 1.2, windup * 2.0)
@@ -271,8 +275,209 @@ func ball_impact(kind: String, at: Vector3, color: Color, target: Node3D = null)
 					pts.append(start + back * (i * 0.75) + Vector3(0, -0.3 * i / 8.0, 0))
 				vfx.ribbon(pts, CYAN, 0.35, 0.5)
 				vfx.spray("streak", start, 14, Color(0.6, 0.95, 1.0), 10.0, back, 0.3, 1.0, 0.7)
+		"hot":
+			# Hot Corner throw: a fiery punch-through.
+			impact_flash(at, HOT, 1.1, 0.0, 12)
+			vfx.spray("fire", at, 4, HOT, 3.0, Vector3.UP, 0.8, 0.7, 0.6)
+			if target and is_instance_valid(target) and float(target.get("armor")) > 0.0:
+				vfx.spray("spark", at, 10, Color(1.0, 0.8, 0.5), 9.0, (at - vfx.camera_pos()).normalized(), 0.5, 0.9, 0.7)
+				vfx.emit_one("ring", at, Vector3.ZERO, Color(1.0, 0.7, 0.3), 1.2, 0.8)
 		_:
 			impact_flash(at, color, 1.0, 0.0, 10)
+
+
+# ---------------------------------------------------------------- Update 5 cards
+
+const HOT := Color(1.0, 0.42, 0.12)
+const TAG_TEAL := Color(0.35, 1.0, 0.85)
+const BULLPEN := Color(0.55, 1.0, 0.5)
+
+
+## Called Shot: the ball comes down out of the sky with a long golden streak; a light pillar
+## marks the landing spot during the fall.
+func called_shot_drop(sky: Vector3, land: Vector3, flight: float) -> void:
+	var g := _flat(land)
+	vfx.beam(g, 0.9, 16.0, Color(GOLD, 0.8), flight + 0.15)
+	vfx.zone_ring(g, 1.6, Color(1.0, 0.85, 0.35, 0.95), flight + 0.1, 0.25, 3.0, 12.0)
+	vfx.ribbon(PackedVector3Array([sky, sky.lerp(land, 0.5), land + Vector3(0, 1.0, 0)]), Color(1.0, 0.9, 0.5), 0.12, flight + 0.15, 0.0, false)
+	vfx.emit_one("flash", sky, Vector3.ZERO, Color(1.0, 0.95, 0.7, 0.9), 1.6, 0.8)
+
+
+## Called Shot impact: a golden starburst, crown icon, ground crack; bigger on a boss.
+func called_shot_impact(at: Vector3, boss: bool) -> void:
+	var s := 1.5 if boss else 1.0
+	impact_flash(at, GOLD, 1.9 * s, 8.0, int(26 * s))
+	vfx.emit_one("ring", at, Vector3.ZERO, Color(1.0, 0.95, 0.75), 2.6 * s, 1.2)
+	vfx.shockwave(_flat(at), 4.2 * s, GOLD, 0.55, 0.1)
+	vfx.shockwave(_flat(at), 2.4 * s, Color(1.0, 0.95, 0.8), 0.35, 0.06, 0.05)
+	vfx.sphere_pulse(_flat(at, 0.2), 2.6 * s, Color(GOLD, 0.6), 0.5)
+	vfx.burst("gold", at)
+	vfx.shake(0.2 * s)
+	vfx.decal("crater", _flat(at), 1.6 * s, Color(0.25, 0.16, 0.08, 0.7), GOLD, 2.5)
+	vfx.beam(_flat(at), 1.1 * s, 12.0, GOLD, 0.45)
+	vfx.spray("debris", _flat(at, 0.3), 8, Color(0.5, 0.37, 0.27), 7.0, Vector3.UP, 0.8, 0.8, 1.0)
+	vfx.glyph(at + Vector3(0, 1.6 * s, 0), 0, 1.5 * s, GOLD, 0.9, 0.0, 0.8)
+	if boss:
+		vfx.glyph(at + Vector3(0, 0.6, 0), 6, 1.6, Color(0.55, 0.75, 1.0), 1.1, 0.25, -0.6)
+
+
+## Line Drive: a muzzle-flash crack at the bat / hand and a flat white streak.
+func line_drive_release(from: Vector3, to: Vector3) -> void:
+	var dir := (to - from).normalized()
+	vfx.emit_one("flash", from, Vector3.ZERO, Color(1.0, 0.95, 0.8, 0.9), 0.8, 0.8)
+	vfx.emit_one("ring", from + dir * 0.8, dir * 6.0, Color(1.0, 0.95, 0.8), 1.1, 0.8)
+	vfx.spray("streak", from, 12, Color(1.0, 0.95, 0.8), 16.0, dir, 0.15, 1.0, 0.5)
+
+
+## Line Drive impact: a comic starburst, a ring the size of the hit area and a dirt spray.
+func line_drive_impact(point: Vector3, r: float, dir: Vector3) -> void:
+	var g := _flat(point)
+	var col := Color(1.0, 0.9, 0.6)
+	impact_flash(g + Vector3(0, 0.7, 0), col, 1.5, 6.0, 20)
+	vfx.burst("explosion", g + Vector3(0, 0.6, 0), Color(1.0, 0.75, 0.4))
+	vfx.shockwave(g, r, col, 0.3, 0.09)
+	vfx.shockwave(g, r * 1.25, Color(1.0, 0.75, 0.4, 0.8), 0.45, 0.04, 0.06)
+	dir.y = 0.0
+	dir = dir.normalized() if dir.length() > 0.01 else Vector3.FORWARD
+	vfx.spray("dust", g + Vector3(0, 0.3, 0), 12, Color(0.62, 0.46, 0.33, 0.7), 6.0, (dir + Vector3(0, 0.8, 0)).normalized(), 0.7, 1.2, 0.9)
+	vfx.spray("debris", g + Vector3(0, 0.3, 0), 6, Color(0.5, 0.37, 0.27), 7.0, (dir + Vector3(0, 1.0, 0)).normalized(), 0.6, 0.7, 1.0)
+	vfx.decal("scorch", g, r * 0.7, Color(0.12, 0.08, 0.05, 0.55), Color(1.0, 0.6, 0.2), 1.8)
+
+
+## Tag at the Plate: the plate lights up teal and stays armed (a pulsing ring and a glove
+## icon) until a runner is tagged or the window ends.
+func tag_plate(dur: float) -> void:
+	var h := Field.HOME
+	vfx.ground_fx("hexdisc", h, 2.6, Color(TAG_TEAL, 0.8), Color.WHITE, 0.9)
+	vfx.shockwave(h, 3.6, TAG_TEAL, 0.45, 0.07)
+	vfx.beam(h, 1.4, 6.0, TAG_TEAL, 0.6)
+	vfx.ring_emit("magic", h + Vector3(0, 0.2, 0), 1.8, 16, TAG_TEAL, 0.5, 3.5, 1.0, 0.9)
+	vfx.dust(h, 1.2)
+	var ring: MeshInstance3D = vfx._take("ring")
+	ring.global_position = Vector3(h.x, 0.08, h.z)
+	ring.scale = Vector3(2.3, 1, 2.3)
+	ring.set_instance_shader_parameter("color", Color(TAG_TEAL, 0.95))
+	ring.set_instance_shader_parameter("mode", 1.0)
+	ring.set_instance_shader_parameter("params", Vector4(0.06, 0.1, 1.2, 10.0))
+	ring.set_instance_shader_parameter("progress", 0.0)
+	var icon := vfx.glyph(h + Vector3(0, 2.4, 0), 13, 1.2, TAG_TEAL, dur, 0.0, 0.0)
+	var fade := [1.0]
+	vfx.animate(ring, dur, func(n: Node3D, k: float) -> void:
+		var tt := k * dur
+		var armed := battle.buff_active("plate_tag")
+		fade[0] = move_toward(fade[0], 1.0 if armed else 0.0, _dt() * 4.0)
+		var vis := smoothstep(0.0, 0.15, tt) * float(fade[0]) * (1.0 - smoothstep(dur - 0.4, dur, tt))
+		var pulse := 0.75 + 0.25 * sin(tt * 7.0)
+		(n as MeshInstance3D).set_instance_shader_parameter("progress", vis * pulse)
+		if is_instance_valid(icon):
+			icon.visible = float(fade[0]) > 0.05)
+
+
+## A runner reaching home is tagged out (or a boss is blocked and shoved back).
+func plate_tag(e: Node3D, tagged: bool) -> void:
+	var c: Vector3 = e.center()
+	impact_flash(c, TAG_TEAL, 1.6, 6.0, 20)
+	vfx.burst("out", c)
+	vfx.shockwave(_flat(Field.HOME), 3.8, TAG_TEAL, 0.45, 0.08)
+	vfx.dust(Field.HOME, 2.0)
+	vfx.glyph(c + Vector3(0, 1.4, 0), 14, 1.6, TAG_TEAL, 0.9, 0.0, 0.8)
+	vfx.text_popup(Field.HOME + Vector3(0, 2.8, 0), "TAGGED OUT!" if tagged else "BLOCKED!", Color(0.5, 1.0, 0.9), 1.2, 1.1)
+	var catcher: Node3D = null
+	var best := INF
+	for df in battle.defenders:
+		var dd := Field.v2(df.global_position).distance_to(Field.v2(Field.HOME))
+		if dd < best:
+			best = dd
+			catcher = df
+	if catcher and best < 14.0:
+		vfx.ribbon(vfx.arc_points(catcher.model.glove_position(), c, 0.8, 10), TAG_TEAL, 0.14, 0.35)
+
+
+## Bullpen Call: the bullpen gate in the outfield lights up and a stream of green light
+## (the fresh arm) arcs in to the mound, where two card icons pop.
+func bullpen_call() -> void:
+	var gate := Field.wall_point(-38.0, 29.0)
+	var mound := Field.MOUND
+	vfx.beam(gate, 1.6, 8.0, BULLPEN, 0.8)
+	vfx.shockwave(_flat(gate), 4.0, BULLPEN, 0.5, 0.06)
+	vfx.flash_light(gate + Vector3(0, 3.0, 0), BULLPEN, 4.0, 14.0, 0.5)
+	var pts := vfx.arc_points(gate + Vector3(0, 1.5, 0), mound + Vector3(0, 1.2, 0), 7.0, 18)
+	vfx.ribbon(pts, BULLPEN, 0.3, 0.7)
+	vfx.ribbon(pts, Color(0.9, 1.0, 0.85), 0.08, 0.55)
+	for i in 10:
+		var t := float(i) / 9.0
+		var p: Vector3 = pts[int(t * (pts.size() - 1))]
+		vfx.after(t * 0.35, func() -> void:
+			vfx.emit_one("glow", p, Vector3(0, 0.5, 0), Color(BULLPEN, 0.8), 1.0, 0.6)
+			vfx.emit_one("magic", p, Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1)), BULLPEN, 1.0, 0.7))
+	vfx.after(0.4, func() -> void:
+		impact_flash(mound + Vector3(0, 1.0, 0), BULLPEN, 1.2, 4.0, 14)
+		vfx.shockwave(mound, 5.0, BULLPEN, 0.5, 0.05)
+		vfx.glyph(mound + Vector3(-0.8, 2.6, 0), 12, 1.4, BULLPEN, 1.0, 0.0, 0.8)
+		vfx.glyph(mound + Vector3(0.8, 2.6, 0), 8, 1.4, Color(1.0, 0.9, 0.4), 1.0, 0.08, 0.8)
+		vfx.ring_emit("magic", mound + Vector3(0, 0.3, 0), 1.2, 14, BULLPEN, 0.8, 4.0, 1.0, 0.9))
+
+
+## Hot Corner: the defender bursts into flame, then keeps a fiery ground ring and embers
+## rising from the throwing hand for the duration (its throws trail fire).
+func hot_corner(df: Node3D, dur: float) -> void:
+	if df == null or not is_instance_valid(df):
+		return
+	var feet := _flat(df.global_position)
+	impact_flash(df.model.chest_position(), HOT, 1.5, 6.0, 18)
+	vfx.shockwave(feet, 3.2, HOT, 0.4, 0.07)
+	for i in 5:
+		var a := i * TAU / 5.0
+		vfx.flame_sheet(feet + Vector3(cos(a), 0, sin(a)) * 0.9, 1.0, randf_range(2.0, 2.8), 0.7, i * 0.03)
+	vfx.glyph(df.model.head_position() + Vector3(0, 1.1, 0), 15, 1.3, Color(1.0, 0.6, 0.25), 1.2, 0.1, 0.7)
+	defender_aura(df, Color(HOT, 0.9), dur, 1.35)
+	vfx.every_frame(dur, func(_k: float) -> void:
+		if not is_instance_valid(df):
+			return
+		if _rate(14.0):
+			vfx.emit_one("fire", df.model.hand_position(), Vector3(0, 1.2, 0), HOT, 0.45, 0.6)
+		if _rate(6.0):
+			vfx.emit_one("ember", _flat(df.global_position) + Vector3(randf_range(-0.8, 0.8), 0.3, randf_range(-0.8, 0.8)),
+				Vector3(0, 1.5, 0), Color(1.0, 0.55, 0.2), 1.0, 0.9))
+
+
+## Perfect Game: the whole diamond lights up gold, a pillar rises at every base and a crown
+## shines over the mound; home plate keeps a gold tag ring while the window lasts.
+func perfect_game(tag_time: float) -> void:
+	var m := Field.MOUND
+	vfx.ground_fx("diamond", m, 19.0, Color(GOLD, 0.85), Color.WHITE, 1.6)
+	vfx.shockwave(m, 30.0, GOLD, 0.9, 0.04)
+	vfx.shockwave(m, 18.0, Color(1.0, 0.95, 0.8, 0.9), 0.6, 0.06, 0.1)
+	var bases := [Field.HOME, Field.FIRST, Field.SECOND, Field.THIRD]
+	for i in bases.size():
+		var b: Vector3 = bases[i]
+		vfx.beam(b, 1.3, 14.0, GOLD, 1.1, i * 0.06)
+		vfx.after(i * 0.06, func() -> void:
+			impact_flash(b + Vector3(0, 0.6, 0), GOLD, 1.3, 0.0, 14))
+	vfx.glyph(m + Vector3(0, 6.0, 0), 0, 4.0, GOLD, 1.6, 0.0, 1.2)
+	vfx.flash_light(m + Vector3(0, 8.0, 0), GOLD, 6.0, 40.0, 0.9)
+	vfx.burst("confetti", Field.HOME + Vector3(0, 7, -6))
+	vfx.burst("confetti", m + Vector3(0, 8, 0))
+	# Gold tag ring at the plate while the tag window is open.
+	var ring: MeshInstance3D = vfx._take("ring")
+	ring.global_position = Vector3(Field.HOME.x, 0.08, Field.HOME.z)
+	ring.scale = Vector3(2.6, 1, 2.6)
+	ring.set_instance_shader_parameter("color", Color(GOLD, 0.95))
+	ring.set_instance_shader_parameter("mode", 1.0)
+	ring.set_instance_shader_parameter("params", Vector4(0.06, 0.1, 1.2, 10.0))
+	ring.set_instance_shader_parameter("progress", 0.0)
+	vfx.animate(ring, tag_time, func(n: Node3D, k: float) -> void:
+		var tt := k * tag_time
+		var vis := smoothstep(0.0, 0.2, tt) * (1.0 - smoothstep(tag_time - 0.5, tag_time, tt))
+		(n as MeshInstance3D).set_instance_shader_parameter("progress", vis * (0.75 + 0.25 * sin(tt * 6.0))))
+
+
+## One runner struck by Perfect Game: a bolt of gold light from above.
+func perfect_strike(e: Node3D) -> void:
+	var c: Vector3 = e.center()
+	vfx.bolt(c + Vector3(randf_range(-1.0, 1.0), 14.0, randf_range(-1.0, 1.0)), c, Color(1.0, 0.88, 0.45), 0.16, 0.3, 2, 0.14, 2)
+	impact_flash(c, GOLD, 1.0, 0.0, 10)
+	vfx.shockwave(_flat(c), 1.6, GOLD, 0.35, 0.06)
 
 
 ## Splitter: the ball bursts in mid-air and fans out.
@@ -821,9 +1026,19 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 		"seventh_inning_stretch":
 			focus = Field.MOUND + Vector3(0, 6, -10)
 			view = Vector3(0.0, -18.0, 52.0)
-		"heat_wave", "grand_relay", "thunderbolt", "pickoff", "sky_hook", "diving_catch", "power_catch":
+		"heat_wave", "grand_relay", "thunderbolt", "pickoff", "sky_hook", "diving_catch", "power_catch", "called_shot", "line_drive":
 			focus = target.lerp(Field.MOUND, 0.35)
 			view = Vector3(25.0, -42.0, 34.0)
+		"tag_at_the_plate":
+			# A runner arrives at the plate shortly after the cast and is tagged out.
+			focus = Field.HOME + Vector3(0, 0, -1.5)
+			view = Vector3(160.0, -32.0, 19.0)
+		"perfect_game", "bullpen_call":
+			focus = Field.MOUND + Vector3(0, 0, 2)
+			view = Vector3(0.0, -46.0, 50.0)
+		"hot_corner":
+			focus = target.lerp(Field.MOUND, 0.5)
+			view = Vector3(25.0, -40.0, 28.0)
 	if cam_arg != "":
 		var v := cam_arg.split(",")
 		view = Vector3(float(v[0]), float(v[1]), float(v[2]))
@@ -847,6 +1062,10 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 			df_target = df
 	battle.effects.execute(card_id, level, {"point": target, "enemy": lead[0] if not lead.is_empty() else null, "defender": df_target, "valid": true})
 	print("[VFX] cast %s" % card_id)
+	if card_id in ["tag_at_the_plate", "perfect_game"]:
+		# A runner reaches the plate during the tag window.
+		var home_route: Route = battle.routes[battle.routes.size() - 1]
+		battle.spawn_enemy("runner", home_route, home_route.length - 2.4, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 1.0})
 	if times.is_empty() or out_dir == "":
 		return
 	DirAccess.make_dir_recursive_absolute(out_dir)
