@@ -283,12 +283,21 @@ def clip_idle(c, t):
     sw = wave(t, L, 1, 0.25)        # weight shift
     heavy = c.style["heavy"]
     hunch = 6 + 8 * heavy if c.kind != "defender" else 0
+    look = 0.0
+    nod = 0.0
+    if c.kind == "defender":
+        # livelier idle: a look around the field (right, then left) with
+        # the chest following a little, a small nod, more weight shift
+        look = K(t, [(0, 0), (0.30, 0), (0.60, 22), (0.95, 20), (1.20, -15), (1.50, -14),
+                     (1.80, 0), (2.0, 0)], loop=L)
+        nod = K(t, [(0, 0), (0.55, 0), (0.68, 4), (0.85, 0), (2.0, 0)], loop=L)
+        sw = sw * 1.4
     c.torso(P, hips=(0.012 * sw, 0.0, -0.018 + 0.004 * br),
             hips_rot=(2, -2.0 * sw, 2.5 * sw),
-            spine=(1 + hunch * 0.4, 1.0 * sw, -1.0 * sw),
-            chest=(-1.5 * br + hunch * 0.6, 0.5 * sw, -1.5 * sw),
-            neck=(-hunch * 0.5, 0, 2 * wave(t, L, 1, 0.6)),
-            head=(-hunch * 0.4 + 1.5 * br, 0, 3 * wave(t, L, 1, 0.6)),
+            spine=(1 + hunch * 0.4, 1.0 * sw, -1.0 * sw + 0.08 * look),
+            chest=(-1.5 * br + hunch * 0.6, 0.5 * sw, -1.5 * sw + 0.15 * look),
+            neck=(-hunch * 0.5 + 0.4 * nod, 0, 2 * wave(t, L, 1, 0.6) + 0.30 * look),
+            head=(-hunch * 0.4 + 1.5 * br + 0.6 * nod, 0, 3 * wave(t, L, 1, 0.6) + 0.45 * look),
             sh_L=(0, 0, 0), sh_R=(0, 0, 0))
     base_stand(c, P, width=1.3 + 0.25 * heavy)
     if c.kind == "defender":
@@ -594,26 +603,55 @@ def clip_celebrate(c, t):
     s = c.s
     L = 1.0
     P = c.new()
-    ph = t / L
-    # hop: crouch -> jump -> land (loop)
-    hz = K(t, [(0, -0.05), (0.18, -0.10), (0.30, 0.02), (0.42, 0.10), (0.55, 0.03),
-               (0.68, -0.10), (0.85, -0.06), (1.0, -0.05)], loop=L)
+    defender = c.kind == "defender"
+    # hop: deep crouch -> explosive jump -> squash on landing (loop)
+    if defender:
+        hz = K(t, [(0, -0.06), (0.17, -0.14), (0.27, 0.0), (0.40, 0.13), (0.52, 0.04),
+                   (0.62, -0.13), (0.78, -0.08), (1.0, -0.06)], loop=L)
+    else:
+        hz = K(t, [(0, -0.05), (0.18, -0.10), (0.30, 0.02), (0.42, 0.10), (0.55, 0.03),
+                   (0.68, -0.10), (0.85, -0.06), (1.0, -0.05)], loop=L)
     air = max(0.0, hz - (-0.03))
+    lean = K(t, [(0, 4), (0.17, 10), (0.40, -6), (0.62, 8), (1, 4)], loop=L) if defender else \
+        K(t, [(0, 4), (0.42, -4), (0.7, 6), (1, 4)], loop=L)
     c.torso(P, hips=(0, 0, hz), hips_rot=(4, 0, 0),
-            spine=(K(t, [(0, 4), (0.42, -4), (0.7, 6), (1, 4)], loop=L), 0, 0),
-            chest=(K(t, [(0, 2), (0.42, -8), (0.7, 4), (1, 2)], loop=L), 0, -6),
-            neck=(-4, 0, 0), head=(K(t, [(0, 0), (0.42, -12), (0.7, 0), (1, 0)], loop=L), 0, 6))
+            spine=(lean, 0, 0),
+            chest=(K(t, [(0, 2), (0.42, -8), (0.7, 4), (1, 2)], loop=L) +
+                   ((lean - 4) * 0.4 if defender else 0.0), 0, -6),
+            neck=(-4, 0, 0),
+            head=(K(t, [(0, 0), (0.40, -16), (0.62, 4), (0.8, 0), (1, 0)], loop=L) if defender else
+                  K(t, [(0, 0), (0.42, -12), (0.7, 0), (1, 0)], loop=L), 0, 6))
     for side in ("L", "R"):
         sx = 1 if side == "L" else -1
         if air > 0:
             a = c.ankle_of(side, c.fx * 1.25 * sx, c.fy, yaw=sx * 8)
             a = a + Vector((0, 0.02 * s, air * s * 0.9))
+            # knees tuck a little at the top of the jump
             c.free_foot(P, side, a, pitch=12 * min(1, air / 0.12), yaw=sx * 8)
         else:
             c.plant(P, side, c.fx * 1.25 * sx, c.fy, yaw=sx * 8)
+    S = c.S["R"]
+    if defender:
+        # "yes!" fist pump: punch up at the top of the jump, yank the elbow
+        # down hard on the landing, glove arm thrown up with it
+        pump = K(t, [(0, 0.15), (0.17, 0.05), (0.36, 1.0), (0.46, 0.95), (0.62, -0.25),
+                     (0.78, 0.05), (1.0, 0.15)], loop=L)
+        low = S + c.v(-0.02, -0.16, -0.24)
+        high = S + c.v(-0.04, -0.08, 0.50)
+        pump = min(pump, 1.0)
+        tgt = low.lerp(high, max(pump, 0.0)) + c.v(0, 0, 0.10 * min(pump, 0.0))
+        c.arm(P, "R", tgt, pole=(-1, 0.4, -0.5),
+              fingers=Vector((0, -0.6, 1)).lerp(Vector((0, -0.2, 1)), max(pump, 0.0)),
+              palm=Vector((0.8, -0.3, 0)))
+        up = K(t, [(0, 0.1), (0.17, 0.0), (0.38, 1.0), (0.55, 0.7), (0.66, 0.15), (1.0, 0.1)], loop=L)
+        SL = c.S["L"]
+        gl = (SL + c.v(0.14, -0.10, -0.30)).lerp(SL + c.v(0.18, -0.12, 0.42), up)
+        c.arm(P, "L", gl, pole=(1, 0.3, -0.6),
+              fingers=Vector((0.1, -0.5, -0.6)).lerp(Vector((0.1, -0.1, 1)), up),
+              palm=Vector((0.3, -0.9, 0.0)).lerp(Vector((0.0, -1.0, 0.1)), up))
+        return P
     # right fist pump overhead, left arm out
     pump = K(t, [(0, 0.2), (0.25, 0.35), (0.42, 1.0), (0.6, 0.8), (0.8, 0.25), (1.0, 0.2)], loop=L)
-    S = c.S["R"]
     low = S + c.v(-0.05, -0.12, -0.20)
     high = S + c.v(-0.04, -0.08, 0.52)
     tgt = low.lerp(high, pump)
@@ -659,7 +697,10 @@ def clip_ready(c, t):
     P = c.new()
     b = 0.010 * math.sin(2 * math.pi * 2 * t / L)
     ready_pose(c, P, t, bounce=b)
-    P.rot["head"] = body_rot(-14, 0, 3 * wave(t, L))
+    # eyes on the field: a slow scan side to side
+    P.rot["chest"] = body_rot(6, 0, 2.5 * wave(t, L))
+    P.rot["neck"] = body_rot(-12, 0, 3 * wave(t, L))
+    P.rot["head"] = body_rot(-14, 0, 5 * wave(t, L))
     return P
 
 
@@ -670,10 +711,12 @@ def _throw_core(c, P, t, keys_t, stride_y=0.30, stride_lift=0.16, jump=0.0):
     T0, Tg, Tc, Tr, Tf, Ts, Te = (keys_t[k] for k in
                                   ("start", "gather", "cock", "release", "follow", "settle", "end"))
     # torso yaw (- = closed/turned right), pitch forward
-    yaw_h = K(t, [(T0, 0), (Tg, -30), (Tc, -55), (Tr, 5), (Tf, 30), (Ts, 10), (Te, 0)])
-    yaw_c = K(t, [(T0, 0), (Tg, -25), (Tc, -45), (Tr, 18), (Tf, 30), (Ts, 8), (Te, 0)])
-    fwd = K(t, [(T0, 18), (Tg, 6), (Tc, -4), (Tr, 16), (Tf, 32), (Ts, 20), (Te, 18)])
-    hz = K(t, [(T0, -0.13), (Tg, -0.10), (Tc, -0.11), (Tr, -0.13 + jump), (Tf, -0.15), (Ts, -0.14),
+    # anticipation: sink + coil further back (shoulders past the hips) before the
+    # drive; follow-through: shoulders rotate through and the chest bends over
+    yaw_h = K(t, [(T0, 0), (Tg, -32), (Tc, -60), (Tr, 6), (Tf, 36), (Ts, 12), (Te, 0)])
+    yaw_c = K(t, [(T0, 0), (Tg, -30), (Tc, -56), (Tr, 20), (Tf, 44), (Ts, 10), (Te, 0)])
+    fwd = K(t, [(T0, 18), (Tg, 8), (Tc, -8), (Tr, 18), (Tf, 40), (Ts, 22), (Te, 18)])
+    hz = K(t, [(T0, -0.13), (Tg, -0.15), (Tc, -0.12), (Tr, -0.13 + jump), (Tf, -0.17), (Ts, -0.145),
                (Te, -0.13)])
     hy = K(t, [(T0, 0.045), (Tg, 0.05), (Tc, 0.04), (Tr, -0.06), (Tf, -0.10), (Ts, -0.02),
                (Te, 0.045)])
@@ -688,7 +731,7 @@ def _throw_core(c, P, t, keys_t, stride_y=0.30, stride_lift=0.16, jump=0.0):
     rx_ = -c.fx * wR
     c.plant(P, "R", rx_, c.fy + 0.02 * s,
             yaw=K(t, [(T0, -14), (Tc, -40), (Tr, -30), (Tf, -10), (Te, -14)]),
-            heel=K(t, [(T0, 0), (Tc, 0), (Tr, 25), (Tf, 50), (Ts, 15), (Te, 0)]),
+            heel=K(t, [(T0, 0), (Tc, 0), (Tr, 28), (Tf, 62), (Ts, 18), (Te, 0)]),
             knee_out=0.35, knee_yaw=K(t, [(T0, -14), (Tc, -45), (Tr, 10), (Te, -14)]))
     lx = c.fx * 2.1
     ly_ready = c.fy - 0.02 * s
@@ -725,8 +768,8 @@ def _throw_core(c, P, t, keys_t, stride_y=0.30, stride_lift=0.16, jump=0.0):
         (Tc - (Tc - Tg) * 0.4, S + c.v(-0.12, 0.14, -0.10)),  # arm swings down/back
         (Tc, S + c.v(-0.14, 0.20, 0.22)),            # cocked: hand up behind head
         (Tr, S + c.v(0.02, -0.30, 0.40)),            # release: high and forward
-        (Tf, S + c.v(0.30, -0.36, -0.28)),           # across body
-        (Ts, S + c.v(0.22, -0.30, -0.34)),
+        (Tf, S + c.v(0.31, -0.25, -0.36)),           # across body, toward the left knee
+        (Ts, S + c.v(0.23, -0.28, -0.37)),
         (Te, S + c.v(*READY_R["pos"])),
     ]
     tgt = KV(t, keysR)
@@ -742,8 +785,8 @@ def _throw_core(c, P, t, keys_t, stride_y=0.30, stride_lift=0.16, jump=0.0):
     keysL = [
         (T0, SL + c.v(*READY_GL["pos"])),
         (Tg, SL + c.v(-0.22, -0.26, -0.12)),
-        (Tc, SL + c.v(0.05, -0.42, -0.02)),
-        (Tr, SL + c.v(0.06, -0.10, -0.24)),
+        (Tc, SL + c.v(0.06, -0.46, 0.02)),       # glove arm reaches at the target
+        (Tr, SL + c.v(0.04, -0.08, -0.22)),      # ... and pulls into the chest
         (Tf, SL + c.v(0.12, 0.05, -0.30)),
         (Ts, SL + c.v(-0.08, -0.28, -0.38)),
         (Te, SL + c.v(*READY_GL["pos"])),
@@ -919,13 +962,18 @@ def clip_pitch(c, t):
 
 
 def clip_catch(c, t):
+    """Glove up to the ball (pocket on it at 0.25 = the catch event), then a
+    sharp "pop": the glove snaps back with the ball's impact, the wrist
+    flicks, chest and head jolt, the free hand covers the ball, back to ready."""
     s = c.s
     P = c.new()
     k = K(t, [(0, 0), (0.25, 1.0), (0.32, 0.92), (0.45, 0.45), (0.6, 0.0)])
-    give = K(t, [(0, 0), (0.25, 0), (0.33, 1), (0.45, 0.6), (0.6, 0)])
-    c.torso(P, hips=(0.02 * k, 0.045 - 0.04 * k, -0.13 + 0.08 * k), hips_rot=(18 - 14 * k, 2 * k, 6 * k),
-            spine=(8 - 8 * k - 3 * give, 2 * k, 4 * k), chest=(6 - 10 * k - 4 * give, 3 * k, 8 * k),
-            neck=(-12 + 2 * k, 0, -6 * k), head=(-14 - 6 * k, 0, -6 * k))
+    # impact: fast rise right after the catch, slower settle
+    give = K(t, [(0, 0), (0.25, 0), (0.285, 1), (0.36, 0.55), (0.47, 0.15), (0.6, 0)])
+    c.torso(P, hips=(0.02 * k, 0.045 - 0.04 * k + 0.012 * give, -0.13 + 0.08 * k - 0.018 * give),
+            hips_rot=(18 - 14 * k, 2 * k, 6 * k),
+            spine=(8 - 8 * k - 4 * give, 2 * k, 4 * k), chest=(6 - 10 * k - 7 * give, 3 * k, 8 * k),
+            neck=(-12 + 2 * k + 3 * give, 0, -6 * k), head=(-14 - 6 * k + 6 * give, 0, -6 * k))
     c.plant(P, "L", c.fx * 2.1, c.fy - 0.02 * s, yaw=14, knee_out=0.35,
             heel=8 * k)
     c.plant(P, "R", -c.fx * 2.1, c.fy + 0.02 * s, yaw=-14, knee_out=0.35)
@@ -935,18 +983,24 @@ def clip_catch(c, t):
     g0 = SL + c.v(*READY_GL["pos"])
     g1 = SL + c.v(-0.06, -0.40, 0.22)
     gc = SL + c.v(-0.18, -0.26, -0.18)
-    gl = KV(t, [(0, g0), (0.25, g1), (0.33, g1 + c.v(0, 0.06, -0.03)), (0.45, gc), (0.6, g0)])
+    gl = KV(t, [(0, g0), (0.12, g0.lerp(g1, 0.42) + c.v(0, 0.02, 0)), (0.25, g1),
+                (0.285, g1 + c.v(0.01, 0.07, -0.08)), (0.36, g1.lerp(gc, 0.45) + c.v(0, 0.05, 0)),
+                (0.47, gc), (0.6, g0)])
     c.arm(P, "L", gl, pole=(0.9, 0.4, -0.7),
-          fingers=KV(t, [(0, READY_GL["fingers"]), (0.25, (0.0, -0.3, 1.0)), (0.45, (-0.3, -0.2, 1.0)),
-                         (0.6, READY_GL["fingers"])]),
-          palm=KV(t, [(0, READY_GL["palm"]), (0.25, (0.05, -1.0, 0.1)), (0.45, (-0.5, -0.8, 0.0)),
-                      (0.6, READY_GL["palm"])]))
+          fingers=KV(t, [(0, READY_GL["fingers"]), (0.25, (0.0, -0.3, 1.0)), (0.285, (0.0, 0.1, 1.0)),
+                         (0.45, (-0.3, -0.2, 1.0)), (0.6, READY_GL["fingers"])]),
+          palm=KV(t, [(0, READY_GL["palm"]), (0.25, (0.05, -1.0, 0.1)), (0.285, (0.05, -0.9, -0.35)),
+                      (0.45, (-0.5, -0.8, 0.0)), (0.6, READY_GL["palm"])]))
+    # free hand follows the glove and covers the ball after the pop
     r0 = SR + c.v(*READY_R["pos"])
     r1 = SR + c.v(0.18, -0.34, 0.05)
-    rc = SR + c.v(0.22, -0.26, -0.20)
-    c.arm(P, "R", KV(t, [(0, r0), (0.25, r1), (0.45, rc), (0.6, r0)]), pole=(-0.9, 0.5, -0.6),
-          fingers=KV(t, [(0, READY_R["fingers"]), (0.25, (0.2, -0.6, 0.75)), (0.6, READY_R["fingers"])]),
-          palm=KV(t, [(0, READY_R["palm"]), (0.25, (0.8, -0.3, -0.4)), (0.6, READY_R["palm"])]))
+    rc = SR + c.v(0.24, -0.27, -0.17)
+    c.arm(P, "R", KV(t, [(0, r0), (0.25, r1), (0.31, r1 + c.v(0.03, 0.04, -0.04)), (0.43, rc),
+                         (0.6, r0)]), pole=(-0.9, 0.5, -0.6),
+          fingers=KV(t, [(0, READY_R["fingers"]), (0.25, (0.2, -0.6, 0.75)), (0.43, (0.45, -0.5, 0.5)),
+                         (0.6, READY_R["fingers"])]),
+          palm=KV(t, [(0, READY_R["palm"]), (0.25, (0.8, -0.3, -0.4)), (0.43, (0.9, 0.0, -0.3)),
+                      (0.6, READY_R["palm"])]))
     return P
 
 

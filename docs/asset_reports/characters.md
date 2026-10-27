@@ -35,6 +35,13 @@ material names, origin, heights) is unchanged.
   only, `hero.axial_weights`), so a sock point and the pant point radially outside it always get the same bone
   matrix and the sock cannot poke through the cuff in any clip (it used to, by 4–7 cm at the back of the cuff /
   knee crease in run, ready, throw, pitch, catch). The sock inside the cleat follows the foot like the cleat.
+* **Uniform layering (Update 5)**: layered clothing shares skin weights (`hero.share_weights`): the undershirt
+  arm under the jersey sleeve, the waistband over the tucked jersey, the forearm skin under an elbow cuff and
+  the neck base inside the collar take the outer garment's weights and blend back to their own past its edge.
+  The tucked jersey is pulled 1.4 cm inside the pants below the waistband and ends 7 cm under it. Measured
+  with `check_layers.py` (worst poke-through over the gameplay clips: sleeves 2–6.4 cm → ≤ 1.3 cm in the blend
+  band below the hem, waist up to 3.1 cm → 0). Review strips: `review_frames.py`. Findings in
+  `docs/plans/review/characters.md`.
 * **Budget** raised to 20 000 triangles; every defender is built under it without decimation. Build time ≈ 10 s per
   defender + portrait.
 * **Animation**: same clips/lengths/events. Because the legs are shorter relative to the global scale, defender hip

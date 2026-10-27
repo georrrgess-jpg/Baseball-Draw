@@ -474,9 +474,65 @@ def tessellate(loops2d):
         offs = []
         for g in group:
             offs += list(range(starts[g], starts[g] + len(loops2d[g])))
+        if len(group) == 1:
+            # single loop: ear clipping (scanfill leaves holes in concave
+            # glyphs with collinear runs, e.g. the crossbar of a "4")
+            ears = ear_clip(loops2d[i])
+            if ears is not None:
+                tris += [tuple(offs[k] for k in t) for t in ears]
+                continue
         for t in mg.tessellate_polygon(vl):
             tris.append(tuple(offs[k] for k in t))
     return np.concatenate(loops2d, 0), tris
+
+
+def ear_clip(P):
+    """Ear-clipping triangulation of a simple 2D polygon (either winding).
+    Returns index triangles, or None if it gets stuck (self-intersecting)."""
+    P = A(P)
+    n = len(P)
+    sgn = 1.0 if _loop_area(P) > 0 else -1.0
+    idx = list(range(n))
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    out = []
+    guard = 0
+    while len(idx) > 3 and guard < 4 * n * n:
+        guard += 1
+        m = len(idx)
+        clipped = False
+        for k in range(m):
+            a, b, c = idx[k - 1], idx[k], idx[(k + 1) % m]
+            if cross(P[a], P[b], P[c]) * sgn <= 1e-14:
+                continue        # reflex or degenerate corner
+            ok = True
+            for j in idx:
+                if j in (a, b, c):
+                    continue
+                p = P[j]
+                if (cross(P[a], P[b], p) * sgn >= 0 and cross(P[b], P[c], p) * sgn >= 0 and
+                        cross(P[c], P[a], p) * sgn >= 0):
+                    ok = False
+                    break
+            if ok:
+                out.append((a, b, c))
+                idx.pop(k)
+                clipped = True
+                break
+        if not clipped:
+            # drop a collinear / degenerate vertex if there is one, else give up
+            for k in range(m):
+                a, b, c = idx[k - 1], idx[k], idx[(k + 1) % m]
+                if abs(cross(P[a], P[b], P[c])) <= 1e-12:
+                    idx.pop(k)
+                    clipped = True
+                    break
+            if not clipped:
+                return None
+    if len(idx) == 3:
+        out.append(tuple(idx))
+    return out
 
 
 def subdivide_tris(p2, tris, boundary, levels):
@@ -762,7 +818,51 @@ def offset_loop(loop, d):
             continue
         cosh = max(np.dot(m, n1), 0.5)
         out.append(b + m * d / cosh)
-    return A(out)
+    return untangle_loop(A(out), sgn)
+
+
+def _seg_hit(a, b, c, d):
+    r, s = b - a, d - c
+    den = r[0] * s[1] - r[1] * s[0]
+    if abs(den) < 1e-14:
+        return None
+    q = c - a
+    t = (q[0] * s[1] - q[1] * s[0]) / den
+    u = (q[0] * r[1] - q[1] * r[0]) / den
+    if 1e-9 < t < 1 - 1e-9 and 1e-9 < u < 1 - 1e-9:
+        return a + r * t
+    return None
+
+
+def _loop_area(P):
+    return 0.5 * np.sum(P[:, 0] * np.roll(P[:, 1], -1) - np.roll(P[:, 0], -1) * P[:, 1])
+
+
+def untangle_loop(P, sgn, depth=0):
+    """Remove the swallowtails an offset makes where it is wider than a slit
+    or a thin notch (e.g. the open counter of a "4"): split the loop at its
+    first self-intersection and keep the parts that wind like the input
+    (the reversed ones are the inverted swallowtail loops)."""
+    n = len(P)
+    if n < 4 or depth > 40:
+        return P
+    for i in range(n):
+        a, b = P[i], P[(i + 1) % n]
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue
+            x = _seg_hit(a, b, P[j], P[(j + 1) % n])
+            if x is None:
+                continue
+            l1 = np.concatenate([P[:i + 1], [x], P[j + 1:]], 0)
+            l2 = np.concatenate([[x], P[i + 1:j + 1]], 0)
+            keep = [l for l in (l1, l2) if len(l) >= 3 and _loop_area(l) * sgn > 0]
+            if not keep:
+                return P
+            # one outline per input loop: keep the largest correctly-wound part
+            best = max(keep, key=lambda l: abs(_loop_area(l)))
+            return untangle_loop(best, sgn, depth + 1)
+    return P
 
 
 # ---------------------------------------------------------------------------
