@@ -506,7 +506,8 @@ func _show_benchmark_result(r: Dictionary) -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(b)
-		var vl := UITheme.label("%d fps · %.1f ms" % [int(round(fps)), float(res.get("ms", 0.0))], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
+		var fps_txt := ("%d" % int(round(fps))) if fps >= 10.0 else ("%.1f" % fps)
+		var vl := UITheme.label("%s fps · %.1f ms" % [fps_txt, float(res.get("ms", 0.0))], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
 		vl.custom_minimum_size = Vector2(150, 0)
 		vl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(vl)

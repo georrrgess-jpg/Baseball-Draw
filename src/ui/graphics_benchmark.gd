@@ -120,7 +120,7 @@ func _run() -> void:
 	if float(results[rec].ms) <= TARGET_MS:
 		msg = "%s keeps the game above 60 fps on this PC. Lower presets leave headroom for big moments." % names[rec]
 	else:
-		msg = "Even Low stays under 60 fps here (%d fps). Low plus a lower 3D render scale is the smoothest option." % int(round(float(results[0].fps)))
+		msg = "Even Low stays under 60 fps here (%.1f fps). Low plus a lower 3D render scale is the smoothest option." % float(results[0].fps)
 	# Restore the player's settings before handing back.
 	for k in saved.keys():
 		Settings.data.graphics[k] = saved[k]
