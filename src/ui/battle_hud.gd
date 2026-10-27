@@ -340,6 +340,8 @@ func _build_controls() -> void:
 		refresh())
 	_speed_btn.get_child(0).queue_free()   # the speed button shows its icon next to the text
 	_speed_btn.icon = DB.icon("fast_forward")
+	_speed_btn.expand_icon = true
+	_speed_btn.add_theme_constant_override("icon_max_width", 22)
 	_speed_btn.text = "1x"
 	_speed_btn.custom_minimum_size = Vector2(84, 46)
 	tl.add_child(_speed_btn)
