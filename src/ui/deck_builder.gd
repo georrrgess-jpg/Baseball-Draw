@@ -56,6 +56,7 @@ var _press_from := -1
 
 func _ready() -> void:
 	CardUpgradesScreen.apply_debug_args()
+	MasteryUI.apply_demo_args()
 	collection_mode = Session.menu_tab == "collection"
 	setup_screen("COLLECTION" if collection_mode else "CARDS & DECK",
 		"Every ability card. New cards and upgrade copies come from card packs." if collection_mode
@@ -79,6 +80,11 @@ func _ready() -> void:
 		_update_deck_info()
 	_refresh_collection()
 	_refresh_detail()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--claim-set="):   # screenshot helper: the set-complete moment
+			get_tree().create_timer(1.5).timeout.connect(_claim_set.bind(a.split("=")[1]))
+		if a.begins_with("--inspect="):   # screenshot helper: show a card in the inspector
+			_inspect.call_deferred(a.split("=")[1])
 
 
 # ================================================================ deck panel
@@ -1041,9 +1047,10 @@ class _Rays extends Control:
 			var a := _t * 0.35 + TAU * i / 12.0
 			var w := 0.12
 			var r := maxf(size.x, size.y) * 0.62
-			draw_colored_polygon(PackedVector2Array([c, c + Vector2(cos(a - w), sin(a - w)) * r, c + Vector2(cos(a + w), sin(a + w)) * r]),
-				Color(1.0, 0.82, 0.3, 0.16))
-		draw_circle(c, 70.0, Color(1.0, 0.85, 0.4, 0.12))
+			var g := Color(1.0, 0.82, 0.3, 0.32)
+			draw_polygon(PackedVector2Array([c, c + Vector2(cos(a - w), sin(a - w)) * r, c + Vector2(cos(a + w), sin(a + w)) * r]),
+				PackedColorArray([g, Color(g, 0.0), Color(g, 0.0)]))
+		draw_circle(c, 60.0, Color(1.0, 0.85, 0.4, 0.1))
 
 
 # ================================================================ inspector

@@ -472,7 +472,7 @@ func _build_daily_panel() -> void:
 	head.add_child(hv)
 	hv.add_child(UITheme.label("DAILY CHALLENGE", 30, ACCENT.lightened(0.25), UITheme.font_display()))
 	var md := DailyChallenge.modifier_def(str(rules.modifier))
-	var sub := UITheme.label("%s · %s · %s" % [DB.difficulty(str(rules.difficulty)).name, str(rules.format_name), str(md.get("name", ""))],
+	var sub := UITheme.label("%s · %d innings · %s" % [DB.difficulty(str(rules.difficulty)).name, int(rules.innings), str(md.get("name", ""))],
 		UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
 	sub.clip_text = true
 	hv.add_child(sub)

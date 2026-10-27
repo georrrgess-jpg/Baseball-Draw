@@ -354,14 +354,8 @@ func _build_highlights() -> Control:
 			hv.add_child(_late(row, T_TEAM))
 	var mastery: Array = result.get("mastery", [])
 	if not mastery.is_empty():
-		hv.add_child(_late(UITheme.section_header("CARD MASTERY", "star", UITheme.GOLD, UITheme.FS_H3), T_TEAM))
-		var k := 0
-		for m in mastery.slice(0, 4):
-			hv.add_child(_mastery_row(m, T_TEAM + 0.2 + k * 0.35))
-			k += 1
-		if mastery.size() > 4:
-			var more := UITheme.label("+%d more card%s played" % [mastery.size() - 4, "" if mastery.size() == 5 else "s"], UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
-			hv.add_child(_late(more, T_TEAM + 1.6))
+		var ms := _mastery_strip(mastery, T_TEAM)
+		hv.add_child(_late(ms, T_TEAM - 0.2))
 	return p
 
 
@@ -383,7 +377,7 @@ func _daily_tile(d: Dictionary) -> Control:
 		nb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		head.add_child(_late(nb, T_BODY + 1.0))
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
+	row.add_theme_constant_override("separation", 30)
 	vb.add_child(row)
 	var sc := VBoxContainer.new()
 	sc.add_theme_constant_override("separation", -6)
@@ -398,81 +392,91 @@ func _daily_tile(d: Dictionary) -> Control:
 	var sv := VBoxContainer.new()
 	sv.add_theme_constant_override("separation", -6)
 	var streak := int(d.get("streak", 0))
-	sv.add_child(UITheme.label("%d" % streak, 44, DAILY_ACCENT.lightened(0.2), UITheme.font_display()))
+	var sh := HBoxContainer.new()
+	sh.add_theme_constant_override("separation", 4)
+	var fi := UITheme.icon_rect("fire", 30, DAILY_ACCENT.lightened(0.2))
+	fi.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sh.add_child(fi)
+	sh.add_child(UITheme.label("%d" % streak, 44, DAILY_ACCENT.lightened(0.2), UITheme.font_display()))
+	sv.add_child(sh)
 	sv.add_child(UITheme.label("DAY STREAK", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
 	sv.tooltip_text = "Best streak: %d days" % int(d.get("best_streak", 0))
 	row.add_child(sv)
-	var lines: Array = []
+	var parts: Array = []
 	if bool(d.get("first_today", false)):
-		lines.append("First game today: +%d coins" % int(d.get("bonus_coins", 0)))
+		parts.append("+%d coins" % int(d.get("bonus_coins", 0)))
 	for pk in d.get("bonus_packs", []):
-		lines.append("Daily bonus: %s" % DB.pack(str(pk)).get("name", str(pk)))
-	if lines.is_empty():
-		lines.append("Attempt %d today. Next challenge in %s." % [int(d.get("attempts", 1)), DailyChallenge.countdown_text()])
-	for t in lines:
-		var l := UITheme.label(t, UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vb.add_child(l)
+		parts.append(str(DB.pack(str(pk)).get("name", str(pk))))
+	var txt := "Daily bonus: " + " · ".join(parts) if not parts.is_empty() \
+		else "Attempt %d today. Next challenge in %s." % [int(d.get("attempts", 1)), DailyChallenge.countdown_text()]
+	var l := UITheme.label(txt, UITheme.FS_SMALL, UITheme.GOLD if not parts.is_empty() else UITheme.OFFWHITE, UITheme.font_body_bold())
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(l)
 	return p
 
 
-## One card's mastery gain: plays added, the bar fills, and a "MASTERY ★2!" pop when a star is earned.
-func _mastery_row(m: Dictionary, delay: float) -> Control:
-	var cid := str(m.get("id", ""))
-	var c := DB.card(cid)
-	var sb := int(m.get("stars_before", 0))
-	var sa := int(m.get("stars_after", 0))
-	var earned := sa > sb
-	var p := UITheme.tile_panel(Color(UITheme.GOLD, 0.6 if earned else 0.18), 8, earned)
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 10)
-	p.add_child(hb)
-	var art := TextureRect.new()
-	art.texture = DB.card_texture(cid)
-	art.custom_minimum_size = Vector2(44, 44)
-	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	hb.add_child(art)
+## Card mastery gains in one compact row: each card played shows its art, stars and plays
+## added; a star earned fills with a sound and a "MASTERY ★2!" caption.
+func _mastery_strip(mastery: Array, delay: float) -> Control:
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 2)
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(vb)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 8)
-	vb.add_child(top)
-	var nm := UITheme.label(str(c.get("name", cid)), UITheme.FS_BODY, DB.category_color(str(c.get("category", ""))).lightened(0.35), UITheme.font_header())
-	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	nm.clip_text = true
-	top.add_child(nm)
-	var stars := MasteryUI.Stars.new(sb, 18.0)
-	stars.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(stars)
-	var before := int(m.get("before", 0))
-	var after := int(m.get("after", 0))
-	var bar := UITheme.bar(UITheme.GOLD, 8, 1.0, CardMastery.progress(before))
-	vb.add_child(bar)
-	var info := UITheme.label("+%d mastery" % int(m.get("plays", 0)), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
-	vb.add_child(info)
-	var tw := create_tween()
-	tw.tween_interval(delay)
-	if earned:
-		tw.tween_property(bar, "value", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		tw.tween_callback(func() -> void:
-			Audio.play("achievement", -4.0)
-			stars.set_filled(sa)
-			info.text = "MASTERY %s!" % "★".repeat(sa) + ("  Gold frame unlocked" if sa >= CardMastery.MAX_STARS else "")
-			info.add_theme_color_override("font_color", UITheme.GOLD)
-			info.add_theme_font_size_override("font_size", UITheme.FS_SMALL)
-			p.modulate = Color(1.5, 1.4, 1.1)
-			p.pivot_offset = p.size * 0.5
-			p.scale = Vector2(1.06, 1.06)
-			bar.value = 0.0)
-		tw.tween_property(p, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(p, "modulate", Color.WHITE, 0.4)
-	tw.tween_property(bar, "value", CardMastery.progress(after), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	p.tooltip_text = CardMastery.status_text(after)
-	UITheme.animate_in(p, delay - 0.15)
-	return p
+	vb.add_theme_constant_override("separation", 6)
+	vb.add_child(UITheme.section_header("CARD MASTERY", "star", UITheme.GOLD, UITheme.FS_H3))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	vb.add_child(row)
+	var caption := UITheme.label("", UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_body_bold())
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var shown := mastery.slice(0, 5)
+	var k := 0
+	for m in shown:
+		var cid := str(m.get("id", ""))
+		var sb := int(m.get("stars_before", 0))
+		var sa := int(m.get("stars_after", 0))
+		var earned := sa > sb
+		var chip := UITheme.tile_panel(Color(UITheme.GOLD, 0.55 if earned else 0.15), 6, earned)
+		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		chip.tooltip_text = "%s: %s" % [DB.card(cid).get("name", cid), CardMastery.status_text(int(m.get("after", 0)))]
+		var cv := VBoxContainer.new()
+		cv.add_theme_constant_override("separation", 3)
+		cv.alignment = BoxContainer.ALIGNMENT_CENTER
+		chip.add_child(cv)
+		var art := TextureRect.new()
+		art.texture = DB.card_texture(cid)
+		art.custom_minimum_size = Vector2(46, 40)
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		cv.add_child(art)
+		var stars := MasteryUI.Stars.new(sb, 14.0)
+		stars.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		cv.add_child(stars)
+		var plus := UITheme.label("+%d" % int(m.get("plays", 0)), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+		plus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cv.add_child(plus)
+		row.add_child(chip)
+		UITheme.animate_in(chip, delay + k * 0.12)
+		if earned:
+			var nm := str(DB.card(cid).get("name", cid))
+			var tw := create_tween()
+			tw.tween_interval(delay + 0.6 + k * 0.45)
+			tw.tween_callback(func() -> void:
+				Audio.play("achievement", -4.0)
+				stars.set_filled(sa)
+				plus.text = "★%d!" % sa
+				plus.add_theme_color_override("font_color", UITheme.GOLD)
+				caption.text = "%s: MASTERY %s!%s" % [nm, "★".repeat(sa), "  Gold frame unlocked." if sa >= CardMastery.MAX_STARS else ""]
+				chip.modulate = Color(1.6, 1.45, 1.1)
+				chip.pivot_offset = chip.size * 0.5
+				chip.scale = Vector2(1.12, 1.12))
+			tw.tween_property(chip, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tw.parallel().tween_property(chip, "modulate", Color.WHITE, 0.45)
+		k += 1
+	if mastery.size() > shown.size():
+		var more := UITheme.label("+%d" % (mastery.size() - shown.size()), UITheme.FS_LEAD, UITheme.MUTED, UITheme.font_header())
+		more.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		more.tooltip_text = "More cards played this game"
+		row.add_child(more)
+	vb.add_child(caption)
+	return vb
 
 
 func _highlight_card(art: Control, kind: String, title: String, caption: String, col: Color) -> PanelContainer:

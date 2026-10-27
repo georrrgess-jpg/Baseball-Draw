@@ -142,6 +142,8 @@ func _ready() -> void:
 	var last := str(Profile.data.flags.get("last_mode", "standard"))
 	if last == "practice" or last == "ranked" or not _mode_buttons.has(last):
 		last = "standard"
+	if "--play-mode=daily" in OS.get_cmdline_user_args():   # screenshot helper
+		Session.menu_tab = "daily"
 	if Session.menu_tab == "daily":   # opened from the main menu's Daily Challenge tile
 		Session.menu_tab = ""
 		last = "daily"
@@ -323,8 +325,11 @@ func _select_mode(id: String, quiet := false) -> void:
 
 func _after_mode_change(id: String, quiet: bool) -> void:
 	for k in _diff_buttons.keys():
-		_diff_buttons[k].disabled = id in ["practice", "ranked", "daily"]
-		_diff_buttons[k].button_pressed = k == (str(_daily.difficulty) if id == "daily" else str(Profile.data.difficulty))
+		var b: Button = _diff_buttons[k]
+		var fixed: bool = id == "daily" and k == str(_daily.difficulty)   # shown selected, not clickable
+		b.disabled = id in ["practice", "ranked", "daily"] and not fixed
+		b.mouse_filter = Control.MOUSE_FILTER_IGNORE if id == "daily" else Control.MOUSE_FILTER_STOP
+		b.button_pressed = k == (str(_daily.difficulty) if id == "daily" else str(Profile.data.difficulty))
 	_refresh_difficulty_info()
 	_fill_arenas()
 	if _summary:
@@ -364,37 +369,45 @@ func _fill_daily_info(accent: Color) -> void:
 	]
 	for f in facts:
 		_mode_info.add_child(_fact_row(f[0], f[1], accent))
-	_mode_info.add_child(UITheme.hsep())
-	# Record, streak and bonus.
+	var note := UITheme.label("Daily games are not saved mid-game." + (" Your saved run is kept." if Profile.has_saved_run() else ""), UITheme.FS_MIN, UITheme.MUTED)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_mode_info.add_child(note)
+
+
+## Under today's stadium: best score today, the streak, the countdown and the daily bonus.
+func _daily_record_block() -> Control:
+	var p := UITheme.tile_panel(Color(DAILY_ACCENT, 0.45), 12)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.custom_minimum_size = Vector2(560, 0)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 8)
+	p.add_child(vb)
 	var rec := HBoxContainer.new()
 	rec.add_theme_constant_override("separation", 8)
-	_mode_info.add_child(rec)
-	var best := DailyChallenge.best_score()
-	var streak := DailyChallenge.current_streak()
-	for tile in [["trophy", UITheme.format_int(best) if DailyChallenge.played() else "-", "BEST TODAY", UITheme.GOLD],
-			["fire", "%d" % streak, "DAY STREAK", accent.lightened(0.2)]]:
-		var st := UITheme.stat_tile(tile[0], tile[1], tile[2], tile[3], 0)
+	vb.add_child(rec)
+	var played := DailyChallenge.played()
+	var tiles := [["trophy", UITheme.format_int(DailyChallenge.best_score()) if played else "-", "BEST TODAY", UITheme.GOLD],
+		["fire", "%d" % DailyChallenge.current_streak(), "DAY STREAK (BEST %d)" % int(Profile.data.daily.best_streak), DAILY_ACCENT.lightened(0.2)],
+		["cooldown", DailyChallenge.countdown_text(), "NEXT CHALLENGE", UITheme.OFFWHITE]]
+	for t in tiles:
+		var st := UITheme.stat_tile(t[0], t[1], t[2], t[3], 0)
 		st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		rec.add_child(st)
+		if t[0] == "cooldown":
+			var vl: Label = st.get_child(0).get_child(1).get_child(0)
+			vl.set_meta("fmt", "%s")
+			_countdown_labels.append(vl)
 	var day := DailyChallenge.day_record(DailyChallenge.today())
 	var rw := DailyChallenge.rewards()
 	var bonus := ""
 	if not bool(day.get("rewarded", false)):
-		bonus = "First game today: +%d coins and a %s. Win for a %s." % [int(rw.first_coins), DB.pack(str(rw.first_pack)).name, DB.pack(str(rw.win_pack)).name]
+		bonus = "Daily bonus: your first game today gives +%d coins and a %s. A win adds a %s." % [int(rw.first_coins), DB.pack(str(rw.first_pack)).name, DB.pack(str(rw.win_pack)).name]
 	elif not bool(day.get("win_rewarded", false)):
-		bonus = "Win today's challenge for a %s." % DB.pack(str(rw.win_pack)).name
+		bonus = "Daily bonus: win today's challenge for a %s." % DB.pack(str(rw.win_pack)).name
 	else:
-		bonus = "Today's bonus collected. Play again to beat your best score."
-	_mode_info.add_child(_fact_row("gift", bonus, UITheme.GOLD))
-	var cd := _fact_row("cooldown", "", accent)
-	var cl: Label = cd.get_child(1)
-	cl.set_meta("fmt", "Next challenge in %s")
-	cl.text = "Next challenge in %s" % DailyChallenge.countdown_text()
-	_countdown_labels.append(cl)
-	_mode_info.add_child(cd)
-	var note := UITheme.label("Daily games are not saved mid-game." + (" Your saved run is kept." if Profile.has_saved_run() else ""), UITheme.FS_MIN, UITheme.MUTED)
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_mode_info.add_child(note)
+		bonus = "Today's bonus is collected. Play again to beat your best score."
+	vb.add_child(_fact_row("gift", bonus, UITheme.GOLD))
+	return p
 
 
 func _fact_row(icon: String, text: String, accent: Color) -> HBoxContainer:
@@ -486,6 +499,7 @@ func _fill_arenas() -> void:
 		c.queue_free()
 	if mode_id == "daily":   # the challenge sets the stadium (locked ones too)
 		_arena_flow.add_child(_arena_tile(str(_daily.arena), true))
+		_arena_flow.add_child(_daily_record_block())
 		return
 	for id in DB.arena_order:
 		_arena_flow.add_child(_arena_tile(id))
@@ -596,7 +610,7 @@ func _arena_tile(id: String, daily := false) -> Button:
 		if not b.disabled:
 			Audio.ui("ui_hover", -8.0))
 	if daily:
-		b.custom_minimum_size = Vector2(266, 300)
+		b.custom_minimum_size = Vector2(560, 250)
 		b.tooltip_text = "Today's stadium, set by the Daily Challenge. %s" % str(a.text)
 		b.pressed.connect(func() -> void: b.button_pressed = true)
 		return b

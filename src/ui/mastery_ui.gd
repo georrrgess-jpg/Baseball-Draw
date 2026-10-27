@@ -92,3 +92,24 @@ static func strip(card_id: String) -> Control:
 	hb.add_child(info)
 	p.tooltip_text = "Card mastery is cosmetic: play the card in games for stars at %d / %d / %d plays; three stars give it a gold mastered frame." % [CardMastery.THRESHOLDS[0], CardMastery.THRESHOLDS[1], CardMastery.THRESHOLDS[2]]
 	return p
+
+
+## Screenshot helper: `-- --demo-collection` gives owned cards a spread of mastery (one of them
+## mastered) and completes the Defense set with its reward still to claim.
+static func apply_demo_args() -> void:
+	if not "--demo-collection" in OS.get_cmdline_user_args() or Profile.data.flags.get("demo_collection", false):
+		return
+	Profile.data.flags["demo_collection"] = true
+	var pattern := [130, 45, 12, 3, 0, 62, 125, 18, 0, 41]
+	var i := 0
+	for cid in Profile.data.deck:
+		Profile.data.cards[cid]["plays"] = pattern[i % pattern.size()]
+		i += 1
+	for cid in DB.card_order:
+		if Profile.is_card_owned(cid) and not cid in Profile.data.deck:
+			Profile.data.cards[cid]["plays"] = pattern[i % pattern.size()]
+			i += 1
+	for cid in CollectionSets.cards_in("defense"):
+		if not Profile.is_card_owned(cid):
+			Profile.data.cards[cid].owned = true
+	Profile.data.sets_claimed.erase("defense")

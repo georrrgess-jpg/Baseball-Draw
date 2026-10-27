@@ -103,6 +103,10 @@ func _run() -> void:
 		await _test_card_clicks()
 		_finish()
 		return
+	if "--ui-test-section=daily" in OS.get_cmdline_user_args():
+		await _test_daily()
+		_finish()
+		return
 	if "--ui-test-section=packs" in OS.get_cmdline_user_args():
 		await _test_packs()
 		await _test_multi_packs()
@@ -320,6 +324,7 @@ func _run() -> void:
 	await _test_packs()
 	await _test_multi_packs()
 	await _test_deck_menus()
+	await _test_daily()
 	await _test_tutorial()
 	_finish()
 
@@ -529,6 +534,86 @@ func _test_deck_menus() -> void:
 	await _wait(0.5)
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+## 16. Daily Challenge: the main-menu tile opens Play with the Daily selected, START plays
+## today's fixed rules, the game leaves the saved run alone, and Results records it.
+func _test_daily() -> void:
+	Profile.data.flags["battle_help"] = true
+	Profile.data.flags["battle_tutorial_done"] = true
+	var fake_run := not Profile.has_saved_run()
+	if fake_run:   # a saved regular run to prove the daily game leaves it alone
+		Profile.data.current_run = {"config": {"mode": "standard"}, "mode_id": "standard", "inning": 5, "arena_id": "steel_yard", "saved_at": "test"}
+	var saved_before: String = JSON.stringify(Profile.data.current_run)
+	var rules := DailyChallenge.today_rules()
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(1.0)
+	var tile: Button = get_tree().current_scene.find_child("DailyButton", true, false)
+	_check(tile != null and tile.is_visible_in_tree(), "main menu highlights the Daily Challenge")
+	if tile == null:
+		return
+	await _click(_button_center(tile))
+	_check(await _wait_scene("play_menu"), "the Daily tile opens the Play screen")
+	await _wait(1.0)
+	var pm: Node = get_tree().current_scene
+	_check(pm.mode_id == "daily", "Play opens with the Daily Challenge selected (%s)" % pm.mode_id)
+	# Select another mode, then click the Daily card itself.
+	await _click(_button_center(pm._mode_buttons["quick"]))
+	await _wait(0.3)
+	await _click(_button_center(pm._mode_buttons["daily"]))
+	await _wait(0.4)
+	_check(pm.mode_id == "daily", "clicking the DAILY CHALLENGE card selects it")
+	var texts: Array = []
+	for l in pm._mode_info.find_children("*", "Label", true, false):
+		texts.append((l as Label).text)
+	var shows_rules := false
+	for t in texts:
+		if str(t).begins_with("Next challenge in"):
+			shows_rules = true
+	_check("DAILY CHALLENGE" in texts and shows_rules, "the Daily card shows today's rules and a countdown")
+	_check(pm._start.text.begins_with("PLAY DAILY"), "START becomes PLAY DAILY")
+	var plays_before := {}
+	for cid in DB.card_order:
+		plays_before[cid] = Profile.card_plays(cid)
+	await _click(_button_center(pm._start))
+	battle = null
+	for i in 300:
+		await _wait(0.1)
+		var sc := get_tree().current_scene
+		if sc is Battle and (sc as Battle).state == "setup":
+			battle = sc
+			break
+	_check(battle != null, "the Daily Challenge battle starts")
+	if battle == null:
+		return
+	_check(battle.run.is_daily() and str(battle.run.config.daily) == str(rules.date), "the battle is today's daily (%s)" % str(battle.run.config.get("daily", "")))
+	_check(battle.run.deck == rules.deck and battle.run.arena_id == rules.arena and battle.run.difficulty_id == rules.difficulty, "the battle uses the fixed deck, stadium and difficulty")
+	_check(rules.modifier in battle.run.modifiers, "the daily modifier is active (%s)" % rules.modifier)
+	# A card cast in the daily game counts towards mastery.
+	var cid: String = battle.run.deck[0]
+	battle.card_cast.emit(cid)
+	await _wait(0.2)
+	_check(int(battle.run.stats.get("card_casts", {}).get(cid, 0)) == 1, "card casts are counted for mastery")
+	_check(JSON.stringify(Profile.data.current_run) == saved_before, "the daily game does not touch the saved run")
+	battle.abandon()
+	var retry: Button = null
+	for i in 80:
+		await _wait(0.1)
+		retry = _find_button(get_tree().current_scene, "RETRY DAILY")
+		if retry:
+			break
+	_check(retry != null, "Results offer RETRY DAILY")
+	var res: Dictionary = Session.last_result
+	_check(not res.get("daily", {}).is_empty() and DailyChallenge.played(), "Results record today's daily game (best %d)" % DailyChallenge.best_score())
+	_check(DailyChallenge.current_streak() >= 1, "the daily streak counts today (%d)" % DailyChallenge.current_streak())
+	_check(Profile.card_plays(cid) == int(plays_before[cid]) + 1, "mastery saved for %s (%d plays)" % [cid, Profile.card_plays(cid)])
+	_check(JSON.stringify(Profile.data.current_run) == saved_before, "the saved run survives the daily game")
+	await _wait(1.0)
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	if fake_run:
+		Profile.data.current_run = null
 
 
 func _ctl_center(c: Control) -> Vector2:

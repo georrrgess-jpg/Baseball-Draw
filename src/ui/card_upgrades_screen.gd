@@ -40,6 +40,7 @@ var _d_button: Button
 
 func _ready() -> void:
 	apply_debug_args()
+	MasteryUI.apply_demo_args()
 	_back_to = return_to
 	return_to = "main_menu"
 	setup_screen("CARD UPGRADES", "Level up your cards to make them stronger in every game.")
@@ -77,6 +78,9 @@ func _ready() -> void:
 		if Profile.can_upgrade_card(cid) and not DB.card(cid).get("growth", []).is_empty():
 			selected = cid
 			break
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--select-card=") and Profile.is_card_owned(a.split("=")[1]):   # screenshot helper
+			selected = a.split("=")[1]
 	_rebuild()
 
 
