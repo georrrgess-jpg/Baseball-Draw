@@ -52,6 +52,10 @@ static func build(parent: Node3D, theme: Dictionary, routes: Array) -> ShaderMat
 	mat.set_shader_parameter("dirt_color", dirt)
 	mat.set_shader_parameter("track_color", dirt.darkened(0.3))
 	mat.set_shader_parameter("route_color", Color(theme.get("accent", "#ff7a1a")))
+	var uni: Dictionary = DB.uniforms.get(Profile.data.get("uniform", "home"), DB.uniforms.get("home", {})).get("colors", {})
+	var dim := {"night": 1.0, "storm": 0.6, "twilight": 0.45, "dusk_snow": 0.35}
+	mat.set_shader_parameter("surround_dim", float(dim.get(str(theme.get("time", "")), 0.0)))
+	mat.set_shader_parameter("team_color", Color(uni.get("Jersey", "#1c2e4a")))
 	var noise := FastNoiseLite.new()
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = 0.02

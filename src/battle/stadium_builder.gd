@@ -16,7 +16,12 @@ var env: Environment
 var world_env: WorldEnvironment
 var sun: DirectionalLight3D
 var gates: Dictionary = {}          # gate id -> Node3D (with doors)
-var crowd_materials: Array[ShaderMaterial] = []
+var crowd: StadiumCrowd
+var life: StadiumLife
+var jumbotron: StadiumJumbotron
+var mascot: StadiumMascot
+var fireworks: StadiumFireworks
+var with_gameplay := true
 var scoreboard_viewport: SubViewport
 var scoreboard_ui: Control
 var rng := RandomNumberGenerator.new()
@@ -35,14 +40,19 @@ static func prop(name: String) -> Node3D:
 	return packed.instantiate() as Node3D
 
 
-func build(parent: Node3D, arena: Dictionary, p_layout: Dictionary, with_gameplay := true) -> Node3D:
+func build(parent: Node3D, arena: Dictionary, p_layout: Dictionary, p_with_gameplay := true) -> Node3D:
 	theme = arena.get("theme", {})
 	arena_name = str(arena.get("name", ""))
 	layout = p_layout
 	rng.seed = hash(arena.get("id", "x"))
+	with_gameplay = p_with_gameplay
 	root = Node3D.new()
 	root.name = "Stadium"
 	parent.add_child(root)
+	crowd = StadiumCrowd.new()
+	crowd.name = "CrowdLife"
+	crowd.setup(theme)
+	root.add_child(crowd)
 	_build_environment()
 	_build_ground()
 	_build_outfield_wall()
@@ -54,7 +64,33 @@ func build(parent: Node3D, arena: Dictionary, p_layout: Dictionary, with_gamepla
 	_build_banners()
 	_build_background()
 	_build_ambient_particles()
+	_build_life(parent)
 	return root
+
+
+## Stadium life: crowd reactions, jumbotron moments, the mascot and fireworks (src/stadium/).
+func _build_life(parent: Node3D) -> void:
+	jumbotron = StadiumJumbotron.new()
+	jumbotron.name = "Jumbotron"
+	root.add_child(jumbotron)
+	jumbotron.setup(scoreboard_ui as ScoreboardDisplay)
+	fireworks = StadiumFireworks.new()
+	fireworks.name = "Fireworks"
+	root.add_child(fireworks)
+	if with_gameplay:
+		var u := _home_uniform()
+		mascot = StadiumMascot.new()
+		mascot.name = "Mascot"
+		mascot.build(u.team, u.trim, Color(0.95, 0.94, 0.9))
+		root.add_child(mascot)
+		mascot.home = _dugout_door
+		mascot.spot = Vector3(-9.4, 0, 6.2)
+	life = StadiumLife.new()
+	life.name = "StadiumLife"
+	root.add_child(life)
+	life.setup(crowd, jumbotron, mascot, fireworks)
+	if with_gameplay and parent.has_signal("state_changed"):
+		life.attach_battle(parent)
 
 
 func _c(key: String, fallback := "#ffffff") -> Color:
@@ -149,6 +185,12 @@ func _build_environment() -> void:
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.08
 	env.adjustment_saturation = 1.12
+	if theme.get("time", "") == "dusk_snow":
+		# Snow arenas washed out to grey from the battle camera: thinner haze, a little more contrast.
+		env.fog_density *= 0.5
+		env.volumetric_fog_density *= 0.5
+		env.adjustment_contrast = 1.16
+		env.adjustment_saturation = 1.2
 	Settings.configure_environment(env)
 	world_env.environment = env
 	root.add_child(world_env)
@@ -206,6 +248,9 @@ func _build_outfield_wall() -> void:
 	var seg_len := 6.0
 	var step_deg := rad_to_deg(seg_len / r)
 	var a := -span
+	var ads := SurfaceTool.new()
+	ads.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ad_i := rng.randi() % 8
 	while a < span - 0.01:
 		var mid := a + step_deg * 0.5
 		var pos := Field.wall_point(mid, r)
@@ -219,7 +264,11 @@ func _build_outfield_wall() -> void:
 				seg = _fallback_wall(seg_len, wall_col)
 			root.add_child(seg)
 			_face(seg, pos, Field.HOME)
+			_add_ad_board(ads, seg.transform, ad_i % 8)
+			ad_i += 1
 		a += step_deg
+	_finish_ad_boards(ads)
+	_build_foul_poles(gate_list)
 	# Pillars at regular intervals hide the joins between straight segments.
 	var b := -span
 	while b <= span + 0.01:
@@ -261,6 +310,72 @@ func _build_outfield_wall() -> void:
 		light.shadow_enabled = false
 		gate.add_child(light)
 		gate.set_meta("light", light)
+
+
+## An advertising board (fictional brands, tools/art/stadium_signs.py) on the field side of a wall segment.
+func _add_ad_board(st: SurfaceTool, xf: Transform3D, idx: int) -> void:
+	var u0 := float(idx % 2) * 0.5
+	var v0 := float(idx / 2) * 0.25
+	var hw := 2.55
+	var y0 := 2.55
+	var y1 := y0 + hw * 2.0 / 4.0
+	var z := 0.64
+	var corners := [Vector3(-hw, y0, z), Vector3(hw, y0, z), Vector3(hw, y1, z), Vector3(-hw, y1, z)]
+	var uvs := [Vector2(u0, v0 + 0.25), Vector2(u0 + 0.5, v0 + 0.25), Vector2(u0 + 0.5, v0), Vector2(u0, v0)]
+	var n := (xf.basis * Vector3(0, 0, 1)).normalized()
+	for k in [0, 2, 1, 0, 3, 2]:
+		st.set_normal(n)
+		st.set_uv(uvs[k])
+		st.add_vertex(xf * corners[k])
+
+
+func _finish_ad_boards(st: SurfaceTool) -> void:
+	var path := "res://assets/textures/stadium/ad_boards.png"
+	if not ResourceLoader.exists(path):
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = "AdBoards"
+	mi.mesh = st.commit()
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(path)
+	m.roughness = 0.55
+	# Boards are lit from behind at night so they read against the dark wall.
+	var night: bool = theme.get("time", "") in ["night", "storm", "twilight", "dusk_snow"]
+	m.emission_enabled = true
+	m.emission_texture = m.albedo_texture
+	m.emission_energy_multiplier = 0.55 if night else 0.12
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mi)
+
+
+## Yellow foul poles where the foul lines meet the wall (skipped where a gate stands).
+func _build_foul_poles(gate_list: Array) -> void:
+	for side in [-1.0, 1.0]:
+		var p := Field.wall_point(45.0 * side, Field.WALL_RADIUS + 0.9)
+		var blocked := false
+		for g in gate_list:
+			if Field.v2(g.pos).distance_to(Field.v2(p)) < 7.0:
+				blocked = true
+		if blocked:
+			continue
+		var k := MeshKit.new()
+		k.color = Color(1.0, 0.82, 0.12)
+		k.cyl(Vector3.ZERO, Vector3(0, 15.0, 0), 0.2, 8)
+		# Screen fin on the fair side.
+		k.box_mm(Vector3(-0.03, 5.2, -0.05), Vector3(0.03, 14.6, 0.75))
+		k.color = Color(0.25, 0.25, 0.28)
+		k.cyl(Vector3.ZERO, Vector3(0, 0.6, 0), 0.32, 8)
+		var mi := MeshInstance3D.new()
+		mi.name = "FoulPole"
+		mi.mesh = k.commit()
+		mi.material_override = StadiumDugout.vc_material()
+		root.add_child(mi)
+		mi.position = p
+		# Fin points toward centre field.
+		var to := Field.wall_point(0.0) - p
+		mi.rotation.y = atan2(to.x, to.z)
 
 
 func _fallback_wall(length: float, col: Color) -> Node3D:
@@ -400,8 +515,7 @@ func _build_stands() -> void:
 			var canopy := stand.find_child("Canopy", true, false) as Node3D
 			if canopy:
 				canopy.visible = false
-		if density > 0.05:
-			_add_crowd(stand, crowd_cols, density)
+		crowd.fill_stand(stand, crowd_cols, density, rng)
 
 
 func _fallback_stand() -> Node3D:
@@ -414,70 +528,9 @@ func _fallback_stand() -> Node3D:
 	return n
 
 
-static var _crowd_mesh: ArrayMesh
-
-static func crowd_mesh() -> ArrayMesh:
-	if _crowd_mesh:
-		return _crowd_mesh
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# Body (tapered box), head (octahedron-ish), arms (thin boxes flagged with UV.x = 1).
-	_add_box(st, Vector3(0, 0.45, 0), Vector3(0.36, 0.55, 0.24), 0.0, 0.92)
-	_add_box(st, Vector3(0, 0.88, 0), Vector3(0.2, 0.22, 0.2), 0.0, 1.0)
-	_add_box(st, Vector3(-0.23, 0.62, 0), Vector3(0.08, 0.36, 0.1), 1.0, 0.92)
-	_add_box(st, Vector3(0.23, 0.62, 0), Vector3(0.08, 0.36, 0.1), 1.0, 0.92)
-	st.generate_normals()
-	_crowd_mesh = st.commit()
-	return _crowd_mesh
-
-
-static func _add_box(st: SurfaceTool, c: Vector3, s: Vector3, uvx: float, shade: float) -> void:
-	var h := s * 0.5
-	var v := [Vector3(-h.x, -h.y, -h.z), Vector3(h.x, -h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(-h.x, h.y, -h.z),
-		Vector3(-h.x, -h.y, h.z), Vector3(h.x, -h.y, h.z), Vector3(h.x, h.y, h.z), Vector3(-h.x, h.y, h.z)]
-	var faces := [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]]
-	for f in faces:
-		for tri in [[0, 2, 1], [0, 3, 2]]:
-			for k in tri:
-				st.set_uv(Vector2(uvx, 0))
-				st.set_color(Color(shade, shade, shade))
-				st.add_vertex(c + v[f[k]])
-
-
-func _add_crowd(stand: Node3D, cols: Array, density: float) -> void:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.use_custom_data = true
-	mm.mesh = crowd_mesh()
-	var positions: Array[Vector3] = []
-	for r in 10:
-		for s in 20:
-			if rng.randf() > 0.8 * density:
-				continue
-			positions.append(Vector3(-5.7 + s * 0.6 + rng.randf_range(-0.05, 0.05), 1.28 + r * 0.45, 3.86 - r * 0.9))
-	mm.instance_count = positions.size()
-	for i in positions.size():
-		var t := Transform3D(Basis().scaled(Vector3.ONE * rng.randf_range(0.9, 1.1)), positions[i])
-		mm.set_instance_transform(i, t)
-		var c := Color(cols[rng.randi() % cols.size()])
-		c = c.lightened(rng.randf_range(-0.1, 0.15)) if rng.randf() < 0.8 else Color(0.15, 0.15, 0.18)
-		mm.set_instance_color(i, c)
-		mm.set_instance_custom_data(i, Color(rng.randf(), rng.randf(), 0, 0))
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	var m := ShaderMaterial.new()
-	m.shader = load("res://assets/shaders/crowd.gdshader")
-	m.set_shader_parameter("time_offset", rng.randf() * 10.0)
-	mmi.material_override = m
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	stand.add_child(mmi)
-	crowd_materials.append(m)
-
-
 func set_excitement(v: float) -> void:
-	for m in crowd_materials:
-		m.set_shader_parameter("excitement", v)
+	if crowd:
+		crowd.set_excitement(v)
 
 
 # ---------------------------------------------------------------- lights, dugouts, scoreboard
@@ -502,6 +555,8 @@ func _build_light_towers() -> void:
 					nm.emission = Color(1.0, 0.95, 0.85)
 					nm.emission_energy_multiplier = 2.0 + lamp_energy * 2.0
 					mi.set_surface_override_material(s, nm)
+		if night:
+			_add_lamp_halo(tower, lamp_energy)
 		if night and spot_count < 4 and p.z < 20:
 			var sl := SpotLight3D.new()
 			sl.light_color = Color(1.0, 0.95, 0.85)
@@ -514,6 +569,46 @@ func _build_light_towers() -> void:
 			sl.position = p + Vector3(0, 22.6, 0)
 			sl.look_at_from_position(sl.position, Vector3(p.x * 0.15, 0, p.z * 0.15 - 4.0), Vector3.UP)
 			spot_count += 1
+
+
+static var _halo_tex: GradientTexture2D
+
+
+## A soft additive glow around a light tower's lamp bank (night arenas).
+func _add_lamp_halo(tower: Node3D, lamp_energy: float) -> void:
+	if _halo_tex == null:
+		var g := Gradient.new()
+		g.offsets = PackedFloat32Array([0.0, 0.18, 0.5, 1.0])
+		g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 0.95, 0.85, 0.55), Color(1, 0.9, 0.75, 0.12), Color(1, 0.9, 0.75, 0)])
+		_halo_tex = GradientTexture2D.new()
+		_halo_tex.gradient = g
+		_halo_tex.fill = GradientTexture2D.FILL_RADIAL
+		_halo_tex.fill_from = Vector2(0.5, 0.5)
+		_halo_tex.fill_to = Vector2(1.0, 0.5)
+		_halo_tex.width = 64
+		_halo_tex.height = 64
+	var anchor := tower.find_child("LightAnchor", true, false) as Node3D
+	var q := MeshInstance3D.new()
+	q.name = "LampHalo"
+	var qm := QuadMesh.new()
+	qm.size = Vector2(9.0, 7.0)
+	q.mesh = qm
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_texture = _halo_tex
+	m.albedo_color = Color(1.0, 0.93, 0.8, clampf(0.25 + lamp_energy * 0.06, 0.3, 0.6))
+	m.disable_fog = true
+	q.material_override = m
+	q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if anchor:
+		anchor.add_child(q)
+		q.position = Vector3(0, 0.3, 0.6)
+	else:
+		tower.add_child(q)
+		q.position = Vector3(0, 23.0, 0.8)
 
 
 func _all_meshes(n: Node) -> Array[MeshInstance3D]:
@@ -540,27 +635,38 @@ func _fallback_tower() -> Node3D:
 	return n
 
 
+var _dugout_door := Vector3(-12.0, 0, 6.0)
+
+
+## Colours of the player's team uniform (home dugout, mascot).
+func _home_uniform() -> Dictionary:
+	var u: Dictionary = DB.uniforms.get(Profile.data.get("uniform", "home"), DB.uniforms.get("home", {})).get("colors", {})
+	return {"team": Color(u.get("Jersey", "#1c2e4a")), "trim": Color(u.get("JerseyTrim", "#d7262e")),
+		"pants": Color(u.get("Pants", "#edebe6")), "cap": Color(u.get("Cap", "#1c2e4a"))}
+
+
 func _build_dugouts() -> void:
+	var home := _home_uniform()
+	var visitor_team := _c("wall").lerp(Color(0.25, 0.25, 0.28), 0.25)
 	for side in [-1.0, 1.0]:
-		var d := prop("dugout")
-		var pos := Vector3(side * 13.5, 0, 4.5)
-		if d == null:
-			d = Node3D.new()
-			_box(Vector3(9, 0.3, 3), Vector3(0, 2.6, -1.2), _mat(_c("wall"), 0.6, 0.3), d)
-			_box(Vector3(9, 2.6, 0.3), Vector3(0, 1.3, -2.6), _mat(_c("steel"), 0.6, 0.4), d)
-			_box(Vector3(8, 0.45, 0.6), Vector3(0, 0.45, -2.0), _mat(Color(0.45, 0.3, 0.18), 0.8), d)
+		var is_home: bool = side < 0.0
+		var colors := {}
+		if is_home:
+			colors = {"team": home.team, "trim": home.trim, "roof": home.team.darkened(0.1), "jersey": home.team}
+		else:
+			colors = {"team": visitor_team, "trim": _c("trim"), "roof": visitor_team.darkened(0.1), "jersey": Color(0.62, 0.64, 0.68)}
+		var cap: Color = home.cap if is_home else visitor_team
+		var pants: Color = home.pants if is_home else Color(0.78, 0.78, 0.8)
+		var seated := crowd.make_bench_material(cap, pants, false)
+		var standing := crowd.make_bench_material(cap, pants, true)
+		# Steps at the end nearest home plate.
+		var d := StadiumDugout.build(colors, "DEFENDERS" if is_home else "VISITORS", side > 0.0, rng, seated, standing)
 		root.add_child(d)
+		var pos := Vector3(side * 13.6, 0, 4.6)
 		_face(d, pos, Vector3(0, 0, 1.5))
-		d.scale = Vector3.ONE * 0.8
-		d.position.y = 0.75 * 0.8
-		var rack := prop("bat_rack")
-		if rack:
-			root.add_child(rack)
-			_face(rack, pos + Vector3(side * -1.5, 0, 2.6), Vector3(0, 0, 2))
-		var bucket := prop("ball_bucket")
-		if bucket:
-			root.add_child(bucket)
-			bucket.position = pos + Vector3(side * -3.4, 0, 2.2)
+		if is_home:
+			var door_x := -StadiumDugout.W * 0.5 + 0.7
+			_dugout_door = d.transform * Vector3(door_x, 0, 1.6)
 
 
 func _build_scoreboard() -> void:
