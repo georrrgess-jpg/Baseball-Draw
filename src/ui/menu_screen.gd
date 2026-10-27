@@ -115,6 +115,7 @@ func setup_screen(title: String, subtitle := "") -> void:
 	Profile.changed.connect(refresh_currency)
 	Audio.play_music("menu_theme")
 	_play_enter.call_deferred()
+	UITheme.apply_debug_ui_scale(self)
 
 
 ## Shared screen-enter motion: the header, then each top-level block of the content, fade and

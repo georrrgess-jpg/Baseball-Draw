@@ -189,6 +189,16 @@ static func build() -> Theme:
 	# Check boxes
 	t.set_font_size("font_size", "CheckBox", 22)
 	t.set_font_size("font_size", "CheckButton", 22)
+	# Toggle switches sit on the row's panel; without this they inherit the filled Button styles.
+	for st in ["normal", "pressed", "hover", "hover_pressed", "disabled"]:
+		var cs := panel_style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 6)
+		if st.begins_with("hover"):
+			cs.bg_color = Color(1, 1, 1, 0.05)
+		t.set_stylebox(st, "CheckButton", cs)
+	t.set_stylebox("focus", "CheckButton", panel_style(Color(0, 0, 0, 0), Color(GOLD, 0.6), 1, 6, 6))
+	t.set_color("font_pressed_color", "CheckButton", GREEN)
+	t.set_color("font_hover_pressed_color", "CheckButton", GREEN)
+	t.set_font("font", "CheckButton", font_body_bold())
 
 	# Scrollbars
 	var sb := panel_style(Color(0, 0, 0, 0.25), Color(0, 0, 0, 0), 0, 4, 0)
@@ -211,6 +221,7 @@ static func build() -> Theme:
 	t.set_stylebox("tab_hovered", "TabContainer", button_style(Color(0.13, 0.2, 0.33, 1), SCARLET))
 	t.set_font("font", "TabContainer", font_header())
 	t.set_font_size("font_size", "TabContainer", 26)
+	t.set_constant("icon_separation", "TabContainer", 8)
 
 	_theme = t
 	return t
@@ -477,6 +488,14 @@ static func hsep(alpha := 0.12) -> ColorRect:
 	c.custom_minimum_size = Vector2(0, 2)
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return c
+
+
+## Screenshot helper: `-- --ui-scale=1.25` overrides the UI scale setting for this session
+## (used to check layouts at UI scale 0.8–1.25 without touching the player's settings file).
+static func apply_debug_ui_scale(n: Node) -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--ui-scale="):
+			n.get_tree().root.content_scale_factor = float(a.split("=")[1])
 
 
 ## Picture of a stadium rendered offline (assets/textures/arenas/<id>.jpg), or null.

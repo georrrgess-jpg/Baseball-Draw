@@ -56,6 +56,7 @@ func _ready() -> void:
 	add_child(_ball)
 
 	_build_ui()
+	UITheme.apply_debug_ui_scale(self)
 	Audio.play_music("menu_theme")
 	Audio.play_ambience(["stadium_crowd", ""])
 

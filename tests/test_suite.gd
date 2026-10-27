@@ -35,6 +35,7 @@ func _run() -> void:
 	test_waves()
 	test_rewards_and_progression()
 	test_packs()
+	await test_menus()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -408,6 +409,44 @@ func test_pack_bundles() -> void:
 	var owned_id: String = res.cards[0].id
 	Profile.load_profile()
 	ok(int(Profile.data.packs_opened) == opened and Profile.is_card_owned(owned_id), "multi-open results survive save and load")
+
+
+func test_menus() -> void:
+	section("menus")
+	# Settings search filters rows across every category.
+	var sp := SettingsPanel.new()
+	add_child(sp)
+	await get_tree().process_frame
+	sp._search.text = "shadow"
+	sp._apply_filter()
+	var shown: Array = []
+	for r in sp._rows:
+		if (r.row as Control).visible:
+			shown.append(r.text)
+	ok(shown.size() >= 1 and shown.size() < sp._rows.size(), "settings search narrows the rows (%d of %d)" % [shown.size(), sp._rows.size()])
+	ok(sp._sections.graphics.visible and not sp._sections.audio.visible, "search shows only categories with matches")
+	sp._search.text = "zzzz"
+	sp._apply_filter()
+	ok(sp._empty.visible, "search with no match shows the empty message")
+	sp.queue_free()
+	# Results screen builds from a result with timeline + highlights, without a battle.
+	var res: Control = load("res://src/ui/results_screen.gd").new()
+	res.result = {"won": true, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "coins": 120, "xp": 200, "rp": 10,
+		"levels": 0, "innings_cleared": 3, "outs": 40, "runs": 1, "run_limit": 5, "score": 4000, "mvp": "ace",
+		"defender_xp": {}, "packs": [{"type": "rookie", "source": "test"}],
+		"stats": {"cards_played": 6, "max_combo": 3, "outs_by": {"ace": 9}, "damage_by": {"ace": 1200},
+			"timeline": [{"inning": 1, "runs": 0, "energy_avg": 5.0}, {"inning": 2, "runs": 1, "energy_avg": 7.5}],
+			"highlights": {"best_combo": {"n": 3, "inning": 2}, "best_play": {"card": DB.card_order[0], "outs": 3, "inning": 1}}}}
+	add_child(res)
+	await get_tree().process_frame
+	var graphs := res.find_children("*", "RunGraph", true, false)
+	ok(graphs.size() == 1 and (graphs[0] as RunGraph).timeline.size() == 2, "results shows the game-flow graph")
+	var texts := []
+	for l in res.find_children("*", "Label", true, false):
+		texts.append((l as Label).text)
+	ok("TRIPLE PLAY" in texts and "BEST CARD PLAY" in texts and "MVP" in texts, "results shows the three highlights")
+	res.queue_free()
+	await get_tree().process_frame
 
 
 func test_battle_systems() -> void:
