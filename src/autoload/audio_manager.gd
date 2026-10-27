@@ -24,13 +24,13 @@ const VOICE_LIMITS := {
 	"swing_whoosh": 2, "footstep_dirt": 2, "card_flip": 4, "card_draw": 2, "barrage_impact": 3,
 	"lightning_zap": 3, "shadow_cast": 2, "aura_hum": 2, "shield_block": 2, "boss_slam": 2,
 	"crowd_cheer": 2, "crowd_small": 2, "crowd_big": 2, "crowd_roar": 1, "crowd_groan": 2,
-	"crowd_ooh": 1, "crowd_chant": 1, "crowd_stomp": 1,
+	"crowd_ooh": 1, "crowd_chant": 1, "crowd_stomp": 1, "firework": 3,
 }
 ## Frequent sounds get a little level randomisation and back off when they pile up.
 const FREQUENT := {
 	"ball_hit": 1.5, "crit_hit": 1.0, "throw": 1.5, "glove_catch": 1.5, "enemy_out": 1.0, "coin": 1.0,
 	"swing_whoosh": 2.0, "footstep_dirt": 2.0, "card_flip": 1.0, "barrage_impact": 1.5,
-	"card_draw": 1.0, "lightning_zap": 1.0,
+	"card_draw": 1.0, "lightning_zap": 1.0, "firework": 2.0,
 }
 const DENSITY_WINDOW_MS := 450
 const DENSITY_DB_PER_HIT := 1.5

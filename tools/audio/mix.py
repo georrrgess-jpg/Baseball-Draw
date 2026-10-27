@@ -31,7 +31,7 @@ CATEGORIES = {
                  "energy_full": -19},
     "card_effects": {"fire_cast": -18, "frost_cast": -18, "shadow_cast": -18, "lightning_zap": -18.5,
                      "magnet_pull": -18, "earth_rumble": -17.5, "barrage_impact": -18.5, "time_out_whistle": -18,
-                     "rally_horn": -18, "aura_hum": -18.5, "heal_chime": -18, "explosion_small": -19,
+                     "rally_horn": -18, "aura_hum": -18.5, "heal_chime": -18, "explosion_small": -19, "firework": -18,
                      "card_play": -19, "card_draw": -22, "fire_loop": -24},
     "hits": {"ball_hit": -20, "crit_hit": -18, "glove_catch": -21, "throw": -22, "bat_crack": -18,
              "enemy_out": -19.5, "swing_whoosh": -21, "footstep_dirt": -34, "defender_stunned": -21,
@@ -62,9 +62,9 @@ def apply_targets(files: list) -> None:
         if key in TARGETS and e.get("loudness") is not None:
             by_key.setdefault(key, []).append(e)
     for key, entries in by_key.items():
-        mean = sum(e["loudness"] for e in entries) / len(entries)
-        vol = round(TARGETS[key] - mean, 1)
+        # Each file (each variant too) is levelled to the target on its own; the audio manager
+        # uses the volume of the variant it picks, the group name gets the first member's.
         for e in entries:
-            e["volume_db"] = vol
+            e["volume_db"] = round(TARGETS[key] - e["loudness"], 1)
             e["mix_target"] = TARGETS[key]
             e["mix_category"] = category_of(key)

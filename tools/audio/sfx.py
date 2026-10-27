@@ -1051,6 +1051,38 @@ def crowd_ooh(rng):
     return finish(x, -3.0, 0.03, 0.4, shave_db=1.0)
 
 
+def firework(rng, v):
+    """Distant stadium firework: a short launch whistle/whoosh, the burst (low boom with a
+    bright air blast) and a falling crackle tail.  Played when the shell bursts, so the
+    whoosh is only a 0.12 s lead-in."""
+    pitch = [1.0, 0.85, 1.15][v]
+    total = [2.1, 2.4, 1.9][v]
+    b = buf(total)
+    # launch whoosh (rising band-passed noise + faint whistle)
+    n = ns(0.14)
+    t = tarr(n)
+    wh = tvfilt(white(n, rng), "bp", 900 + 2600 * (t / 0.14) * pitch, 2.0)
+    at(b, wh * (t / 0.14) ** 1.5, 0.0, 0.35)
+    at(b, sine(1800 * pitch * (1 + 0.6 * t / 0.14), n) * (t / 0.14) ** 2 * 0.08, 0.0, 1.0)
+    # burst
+    t0 = 0.12
+    at(b, thump(1.0, 85 * pitch, 38 * pitch, 0.03, 0.28), t0, 1.0)
+    n = ns(0.9)
+    t = tarr(n)
+    blast = tvfilt(white(n, rng), "lp", 300 + 5200 * np.exp(-t / 0.05), 0.8)
+    at(b, blast * np.clip(t / 0.001, 0, 1) * np.exp(-t / 0.18), t0, 0.9)
+    # crackle: dense at first, thinning out, slowly falling in pitch
+    k = [70, 95, 55][v]
+    times = np.sort(t0 + 0.25 + rng.exponential(0.45, k))
+    times = times[times < total - 0.1]
+    amps = np.exp(-(times - t0) / 0.9) * rng.uniform(0.25, 1.0, len(times))
+    cr = grains(rng, total, times, 1800 * pitch, 6500 * pitch, 0.002, 0.007, 1.5, 3.5, amps)
+    at(b, cr, 0, 0.55)
+    x = saturate(b, 1.6)
+    x = wet(x, STADIUM, 0.35)
+    return finish(x, -3.0, 0.002, 0.25, shave_db=2.0)
+
+
 # ---------------------------------------------------------------- crowd reactions (Update 5)
 def crowd_small(rng, v):
     """A short "yeah!" from part of the crowd: single outs."""
@@ -1299,6 +1331,8 @@ _reg("rally_horn", rally_horn, -5.0)
 _reg("aura_hum", aura_hum, -6.0)
 _reg("heal_chime", heal_chime, -5.0)
 _reg("explosion_small", explosion_small, -4.0)
+for _i in range(3):
+    _reg(f"firework_{_i + 1}", _v(firework, _i), -6.0, group="firework")
 
 _reg("wave_start", wave_start, -2.0)
 _reg("wave_clear", wave_clear, -3.0)

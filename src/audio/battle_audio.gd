@@ -236,8 +236,10 @@ func _on_boss_spawned(e: Node) -> void:
 	_boss_hp = float(e.get("hp"))
 	_boss_hit_acc = 0.0
 	_boss_defeat_handled = false
-	if not battle.has_signal("boss_intro_started"):
-		_play_boss_intro()
+	# battle.gd emits boss_intro_started right after boss_spawned, but skips the intro in
+	# auto tests, the tutorial and repeat Practice bosses: the deferred call covers those
+	# (the 3 s gate in _play_boss_intro stops a double sting).
+	_play_boss_intro.call_deferred()
 
 
 func _on_boss_intro_signal(_a: Variant = null, _b: Variant = null) -> void:
