@@ -462,3 +462,29 @@ Plan: `docs/plans/UPDATE_5_PLAN.md`. Scored review findings for each area are in
 **Tech**
 * Leaks at exit cut from 84 to about 22 objects; an orphan HUD label is now freed.
 * Per-frame battle-loop cost is about 1 ms (CPU) in a boss wave at 3x speed.
+
+**Verification**
+* Script check: 76 scripts, 0 failed.
+* System test suite: 1,261–1,283 checks (a few battle checks depend on the run), 0 failed.
+* Full UI flow test on the merged game: 127 checks, 0 failed. It covers battle, tutorial, dugout, packs, bundles
+  and multi-open, Cards & Deck, Upgrade Cards and the Daily Challenge.
+* Card hit map: 0 of 175 dead points, 0 dropped fast clicks.
+* Autopilot balance after the final tuning (small samples):
+
+  | Mode | Difficulty | Result |
+  |---|---|---|
+  | Quick Defense | Rookie | 3 of 3 |
+  | Quick Defense | Standard | 2–3 of 4 with cards, about 1 of 4 without cards |
+  | Quick Defense | Veteran | 2 of 3 |
+  | Standard Siege | Standard | 0 of 2 (one reached the final boss in inning 9) |
+
+  The autopilot spams cards and never saves them for bosses, so human results should be better. Standard
+  Siege may still be on the hard side; the multipliers are in `data/difficulties.json`.
+* Before/after comparison: `docs/screenshots/update5_before_after.jpg`.
+
+**Known limitations**
+* Frame rates were not measured on a real GPU. The crowd (about 0.43 M triangles on High) and the live jumbotron
+  feed are the new costs; both scale with the quality preset.
+* The graphics benchmark could not be checked for real numbers here.
+* Audio was checked by measurement, not by listening.
+* The Windows smoke test runs in CI on the first `[build]` after this update; it has not run before.

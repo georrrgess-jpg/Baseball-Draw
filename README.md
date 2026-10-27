@@ -14,7 +14,7 @@ and play ability cards to stop waves of rival runners — and their bosses — f
 | ![Pack reveal](docs/screenshots/packs_reveal.jpg) | ![Grand Slam Barrage](docs/screenshots/vfx_grand_slam_barrage.jpg) |
 | ![Deck builder](docs/screenshots/deck_builder.jpg) | ![Guided first game](docs/screenshots/tutorial.jpg) |
 
-All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`); more in `docs/screenshots/`.
+What Update 5 changed: [before/after](docs/screenshots/update5_before_after.jpg). All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`); more in `docs/screenshots/`.
 
 ## Features
 
