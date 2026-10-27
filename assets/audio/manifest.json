@@ -10,15 +10,20 @@
   "ball_hit": [
    "ball_hit_1",
    "ball_hit_2",
-   "ball_hit_3"
+   "ball_hit_3",
+   "ball_hit_4",
+   "ball_hit_5"
   ],
   "glove_catch": [
    "glove_catch_1",
-   "glove_catch_2"
+   "glove_catch_2",
+   "glove_catch_3",
+   "glove_catch_4"
   ],
   "enemy_out": [
    "enemy_out_1",
-   "enemy_out_2"
+   "enemy_out_2",
+   "enemy_out_3"
   ],
   "footstep_dirt": [
    "footstep_dirt_1",
@@ -27,97 +32,216 @@
   "crowd_cheer": [
    "crowd_cheer_1",
    "crowd_cheer_2"
+  ],
+  "crowd_small": [
+   "crowd_small_1",
+   "crowd_small_2",
+   "crowd_small_3"
+  ],
+  "crowd_big": [
+   "crowd_big_1",
+   "crowd_big_2"
+  ],
+  "crowd_groan_small": [
+   "crowd_groan_small_1",
+   "crowd_groan_small_2"
   ]
  },
  "volume_db_by_name": {
-  "menu_theme": -6.0,
+  "menu_theme": -7.0,
   "battle_theme": -7.0,
   "boss_theme": -7.0,
-  "dugout_theme": -6.0,
-  "practice_theme": -6.0,
-  "victory": -4.0,
+  "dugout_theme": -6.5,
+  "practice_theme": -5.5,
+  "victory": -5.6,
   "defeat": -4.0,
+  "sting_boss_intro": -5.0,
+  "sting_boss_defeat": -5.0,
+  "steel_yard_calm": -7.0,
+  "steel_yard_wave": -7.0,
+  "steel_yard_boss": -7.0,
+  "steel_yard_tense": -7.0,
+  "sunset_grounds_calm": -7.0,
+  "sunset_grounds_wave": -7.0,
+  "sunset_grounds_boss": -7.0,
+  "sunset_grounds_tense": -7.0,
+  "neon_diamond_calm": -7.0,
+  "neon_diamond_wave": -7.0,
+  "neon_diamond_boss": -7.0,
+  "neon_diamond_tense": -7.0,
+  "iron_fortress_calm": -7.0,
+  "iron_fortress_wave": -7.0,
+  "iron_fortress_boss": -7.0,
+  "iron_fortress_tense": -7.0,
+  "frostpark_calm": -7.0,
+  "frostpark_wave": -7.0,
+  "frostpark_boss": -7.0,
+  "frostpark_tense": -7.0,
+  "champions_citadel_calm": -7.0,
+  "champions_citadel_wave": -7.0,
+  "champions_citadel_boss": -7.0,
+  "champions_citadel_tense": -7.0,
   "stadium_crowd": -6.0,
   "wind_industrial": -6.0,
-  "throw_1": -8.0,
-  "throw_2": -8.0,
-  "throw_3": -8.0,
-  "ball_hit_1": -5.0,
-  "ball_hit_2": -5.0,
-  "ball_hit_3": -5.0,
-  "crit_hit": -3.0,
-  "glove_catch_1": -6.0,
-  "glove_catch_2": -6.0,
-  "bat_crack": -3.0,
-  "enemy_out_1": -5.0,
-  "enemy_out_2": -5.0,
-  "defender_stunned": -5.0,
-  "swing_whoosh": -5.0,
-  "wall_break": -4.0,
-  "shield_block": -5.0,
-  "run_scored": -3.0,
-  "gate_open": -4.0,
-  "footstep_dirt_1": -10.0,
-  "footstep_dirt_2": -10.0,
-  "card_draw": -6.0,
-  "card_hover": -6.0,
-  "card_play": -4.0,
-  "card_denied": -4.0,
-  "energy_full": -5.0,
-  "fire_cast": -3.0,
-  "fire_loop": -10.0,
-  "frost_cast": -3.0,
-  "shadow_cast": -3.0,
-  "lightning_zap": -4.0,
-  "magnet_pull": -5.0,
-  "earth_rumble": -3.0,
-  "barrage_impact": -3.0,
-  "time_out_whistle": -6.0,
-  "rally_horn": -5.0,
-  "aura_hum": -6.0,
-  "heal_chime": -5.0,
-  "explosion_small": -4.0,
-  "wave_start": -2.0,
-  "wave_clear": -3.0,
+  "throw_1": -7.3,
+  "throw_2": -7.3,
+  "throw_3": -7.3,
+  "ball_hit_1": -4.6,
+  "ball_hit_2": -4.6,
+  "ball_hit_3": -4.6,
+  "ball_hit_4": -4.6,
+  "ball_hit_5": -4.6,
+  "crit_hit": -3.8,
+  "glove_catch_1": -5.0,
+  "glove_catch_2": -5.0,
+  "glove_catch_3": -5.0,
+  "glove_catch_4": -5.0,
+  "bat_crack": -3.8,
+  "enemy_out_1": -4.8,
+  "enemy_out_2": -4.8,
+  "enemy_out_3": -4.8,
+  "defender_stunned": -3.6,
+  "swing_whoosh": -5.7,
+  "wall_break": -3.2,
+  "shield_block": -2.4,
+  "run_scored": -1.5,
+  "gate_open": -5.0,
+  "footstep_dirt_1": -8.5,
+  "footstep_dirt_2": -8.5,
+  "card_draw": -5.4,
+  "card_hover": 4.4,
+  "card_play": -3.6,
+  "card_denied": -1.4,
+  "energy_full": -10.1,
+  "fire_cast": -2.8,
+  "fire_loop": -6.8,
+  "frost_cast": -5.5,
+  "shadow_cast": -3.5,
+  "lightning_zap": -1.8,
+  "magnet_pull": -6.7,
+  "earth_rumble": -3.4,
+  "barrage_impact": -2.9,
+  "time_out_whistle": -11.4,
+  "rally_horn": -5.3,
+  "aura_hum": -5.6,
+  "heal_chime": -6.9,
+  "explosion_small": -1.4,
+  "wave_start": -0.6,
+  "wave_clear": -3.6,
   "inning_end": -3.0,
-  "combo_double": -4.0,
-  "combo_triple": -3.0,
-  "combo_grand": -2.0,
-  "boss_warning": -2.0,
-  "boss_slam": -2.0,
-  "boss_roar": -3.0,
-  "victory_fanfare": -3.0,
-  "defeat_sting": -3.0,
-  "level_up": -4.0,
-  "achievement": -4.0,
-  "coin": -6.0,
-  "purchase": -4.0,
-  "ui_hover": -6.0,
-  "ui_click": -4.0,
-  "ui_back": -4.0,
-  "ui_confirm": -4.0,
-  "ui_error": -4.0,
-  "ui_tab": -4.0,
-  "ui_slide": -5.0,
-  "ui_toggle": -4.0,
-  "crowd_cheer_1": -6.0,
-  "crowd_cheer_2": -6.0,
+  "combo_double": -5.2,
+  "combo_triple": -3.5,
+  "combo_grand": -0.5,
+  "boss_warning": -2.7,
+  "boss_slam": -1.0,
+  "boss_roar": -1.9,
+  "victory_fanfare": -2.9,
+  "defeat_sting": -3.4,
+  "level_up": -4.1,
+  "achievement": -3.6,
+  "coin": -5.4,
+  "purchase": -4.8,
+  "ui_hover": -0.4,
+  "ui_click": 1.8,
+  "ui_back": -1.8,
+  "ui_confirm": 0.3,
+  "ui_error": -1.0,
+  "ui_tab": 1.5,
+  "ui_slide": 0.2,
+  "ui_toggle": 2.0,
+  "crowd_cheer_1": -5.9,
+  "crowd_cheer_2": -5.9,
   "crowd_groan": -6.0,
   "crowd_ooh": -6.0,
-  "pack_shake": -4.0,
-  "pack_tear": -3.0,
-  "card_whoosh": -5.0,
-  "card_flip": -4.0,
-  "reveal_common": -6.0,
-  "reveal_rare": -4.0,
-  "reveal_epic": -3.0,
-  "reveal_legendary": -2.0,
-  "throw": -8.0,
-  "ball_hit": -5.0,
-  "glove_catch": -6.0,
-  "enemy_out": -5.0,
-  "footstep_dirt": -10.0,
-  "crowd_cheer": -6.0
+  "crowd_small_1": -9.0,
+  "crowd_small_2": -9.0,
+  "crowd_small_3": -9.0,
+  "crowd_big_1": -6.8,
+  "crowd_big_2": -6.8,
+  "crowd_groan_small_1": -7.8,
+  "crowd_groan_small_2": -7.8,
+  "crowd_roar": -4.3,
+  "crowd_chant": -9.7,
+  "crowd_stomp": -8.2,
+  "pack_shake": -3.0,
+  "pack_tear": -2.6,
+  "card_whoosh": -3.1,
+  "card_flip": -3.9,
+  "reveal_common": -5.3,
+  "reveal_rare": -4.8,
+  "reveal_epic": -0.3,
+  "reveal_legendary": -1.0,
+  "throw": -7.3,
+  "ball_hit": -4.6,
+  "glove_catch": -5.0,
+  "enemy_out": -4.8,
+  "footstep_dirt": -8.5,
+  "crowd_cheer": -5.9,
+  "crowd_small": -9.0,
+  "crowd_big": -6.8,
+  "crowd_groan_small": -7.8
+ },
+ "arenas": {
+  "steel_yard": {
+   "layers": {
+    "calm": "res://assets/audio/music/arena/steel_yard_calm.ogg",
+    "wave": "res://assets/audio/music/arena/steel_yard_wave.ogg",
+    "boss": "res://assets/audio/music/arena/steel_yard_boss.ogg",
+    "tense": "res://assets/audio/music/arena/steel_yard_tense.ogg"
+   },
+   "bpm": 134,
+   "bars": 16
+  },
+  "sunset_grounds": {
+   "layers": {
+    "calm": "res://assets/audio/music/arena/sunset_grounds_calm.ogg",
+    "wave": "res://assets/audio/music/arena/sunset_grounds_wave.ogg",
+    "boss": "res://assets/audio/music/arena/sunset_grounds_boss.ogg",
+    "tense": "res://assets/audio/music/arena/sunset_grounds_tense.ogg"
+   },
+   "bpm": 118,
+   "bars": 16
+  },
+  "neon_diamond": {
+   "layers": {
+    "calm": "res://assets/audio/music/arena/neon_diamond_calm.ogg",
+    "wave": "res://assets/audio/music/arena/neon_diamond_wave.ogg",
+    "boss": "res://assets/audio/music/arena/neon_diamond_boss.ogg",
+    "tense": "res://assets/audio/music/arena/neon_diamond_tense.ogg"
+   },
+   "bpm": 124,
+   "bars": 16
+  },
+  "iron_fortress": {
+   "layers": {
+    "calm": "res://assets/audio/music/arena/iron_fortress_calm.ogg",
+    "wave": "res://assets/audio/music/arena/iron_fortress_wave.ogg",
+    "boss": "res://assets/audio/music/arena/iron_fortress_boss.ogg",
+    "tense": "res://assets/audio/music/arena/iron_fortress_tense.ogg"
+   },
+   "bpm": 144,
+   "bars": 16
+  },
+  "frostpark": {
+   "layers": {
+    "calm": "res://assets/audio/music/arena/frostpark_calm.ogg",
+    "wave": "res://assets/audio/music/arena/frostpark_wave.ogg",
+    "boss": "res://assets/audio/music/arena/frostpark_boss.ogg",
+    "tense": "res://assets/audio/music/arena/frostpark_tense.ogg"
+   },
+   "bpm": 104,
+   "bars": 16
+  },
+  "champions_citadel": {
+   "layers": {
+    "calm": "res://assets/audio/music/arena/champions_citadel_calm.ogg",
+    "wave": "res://assets/audio/music/arena/champions_citadel_wave.ogg",
+    "boss": "res://assets/audio/music/arena/champions_citadel_boss.ogg",
+    "tense": "res://assets/audio/music/arena/champions_citadel_tense.ogg"
+   },
+   "bpm": 128,
+   "bars": 16
+  }
  },
  "files": [
   {
@@ -126,11 +250,14 @@
    "category": "music",
    "duration": 91.034,
    "loop": true,
-   "volume_db": -6.0,
+   "volume_db": -7.0,
+   "loudness": -16.0,
    "bpm": 116,
    "bars": 44,
    "beats_per_bar": 4,
-   "key": "D major"
+   "key": "D major",
+   "mix_target": -23,
+   "mix_category": "music"
   },
   {
    "name": "battle_theme",
@@ -139,6 +266,7 @@
    "duration": 107.463,
    "loop": true,
    "volume_db": -7.0,
+   "loudness": -16.0,
    "bpm": 134,
    "bars": 60,
    "beats_per_bar": 4,
@@ -152,7 +280,9 @@
     "breakdown": 36,
     "A3": 44,
     "outro": 52
-   }
+   },
+   "mix_target": -23,
+   "mix_category": "music"
   },
   {
    "name": "boss_theme",
@@ -161,10 +291,13 @@
    "duration": 78.904,
    "loop": true,
    "volume_db": -7.0,
+   "loudness": -16.0,
    "bpm": 146,
    "bars": 48,
    "beats_per_bar": 4,
-   "key": "C minor"
+   "key": "C minor",
+   "mix_target": -23,
+   "mix_category": "music"
   },
   {
    "name": "dugout_theme",
@@ -172,11 +305,14 @@
    "category": "music",
    "duration": 58.776,
    "loop": true,
-   "volume_db": -6.0,
+   "volume_db": -6.5,
+   "loudness": -17.0,
    "bpm": 98,
    "bars": 24,
    "beats_per_bar": 4,
-   "key": "A dorian"
+   "key": "A dorian",
+   "mix_target": -23.5,
+   "mix_category": "music"
   },
   {
    "name": "practice_theme",
@@ -184,11 +320,14 @@
    "category": "music",
    "duration": 60.0,
    "loop": true,
-   "volume_db": -6.0,
+   "volume_db": -5.5,
+   "loudness": -18.0,
    "bpm": 80,
    "bars": 20,
    "beats_per_bar": 4,
-   "key": "F major"
+   "key": "F major",
+   "mix_target": -23.5,
+   "mix_category": "music"
   },
   {
    "name": "victory",
@@ -196,9 +335,12 @@
    "category": "music",
    "duration": 12.5,
    "loop": false,
-   "volume_db": -4.0,
+   "volume_db": -5.6,
+   "loudness": -14.9,
    "bpm": 120,
-   "key": "C major"
+   "key": "C major",
+   "mix_target": -20.5,
+   "mix_category": "music"
   },
   {
    "name": "defeat",
@@ -207,8 +349,421 @@
    "duration": 8.4,
    "loop": false,
    "volume_db": -4.0,
+   "loudness": -17.47,
    "bpm": 72,
-   "key": "A minor"
+   "key": "A minor",
+   "mix_target": -21.5,
+   "mix_category": "music"
+  },
+  {
+   "name": "sting_boss_intro",
+   "path": "res://assets/audio/music/sting_boss_intro.ogg",
+   "category": "music",
+   "duration": 6.21,
+   "loop": false,
+   "volume_db": -5.0,
+   "loudness": -15.0,
+   "bpm": 100,
+   "key": "E minor",
+   "mix_target": -20,
+   "mix_category": "music"
+  },
+  {
+   "name": "sting_boss_defeat",
+   "path": "res://assets/audio/music/sting_boss_defeat.ogg",
+   "category": "music",
+   "duration": 6.46,
+   "loop": false,
+   "volume_db": -5.0,
+   "loudness": -15.0,
+   "bpm": 132,
+   "key": "G major",
+   "mix_target": -20,
+   "mix_category": "music"
+  },
+  {
+   "name": "steel_yard_calm",
+   "path": "res://assets/audio/music/arena/steel_yard_calm.ogg",
+   "category": "music_layer",
+   "duration": 28.657,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "calm",
+   "samples": 1263761,
+   "bpm": 134,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "E minor",
+   "arena": "steel_yard",
+   "genre": "rock"
+  },
+  {
+   "name": "steel_yard_wave",
+   "path": "res://assets/audio/music/arena/steel_yard_wave.ogg",
+   "category": "music_layer",
+   "duration": 28.657,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "wave",
+   "samples": 1263761,
+   "bpm": 134,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "E minor",
+   "arena": "steel_yard",
+   "genre": "rock"
+  },
+  {
+   "name": "steel_yard_boss",
+   "path": "res://assets/audio/music/arena/steel_yard_boss.ogg",
+   "category": "music_layer",
+   "duration": 28.657,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "boss",
+   "samples": 1263761,
+   "bpm": 134,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "E minor",
+   "arena": "steel_yard",
+   "genre": "rock"
+  },
+  {
+   "name": "steel_yard_tense",
+   "path": "res://assets/audio/music/arena/steel_yard_tense.ogg",
+   "category": "music_layer",
+   "duration": 28.657,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "tense",
+   "samples": 1263761,
+   "bpm": 134,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "E minor",
+   "arena": "steel_yard",
+   "genre": "rock"
+  },
+  {
+   "name": "sunset_grounds_calm",
+   "path": "res://assets/audio/music/arena/sunset_grounds_calm.ogg",
+   "category": "music_layer",
+   "duration": 32.542,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "calm",
+   "samples": 1435119,
+   "bpm": 118,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D major",
+   "arena": "sunset_grounds",
+   "genre": "ballpark"
+  },
+  {
+   "name": "sunset_grounds_wave",
+   "path": "res://assets/audio/music/arena/sunset_grounds_wave.ogg",
+   "category": "music_layer",
+   "duration": 32.542,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "wave",
+   "samples": 1435119,
+   "bpm": 118,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D major",
+   "arena": "sunset_grounds",
+   "genre": "ballpark"
+  },
+  {
+   "name": "sunset_grounds_boss",
+   "path": "res://assets/audio/music/arena/sunset_grounds_boss.ogg",
+   "category": "music_layer",
+   "duration": 32.542,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "boss",
+   "samples": 1435119,
+   "bpm": 118,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D major",
+   "arena": "sunset_grounds",
+   "genre": "ballpark"
+  },
+  {
+   "name": "sunset_grounds_tense",
+   "path": "res://assets/audio/music/arena/sunset_grounds_tense.ogg",
+   "category": "music_layer",
+   "duration": 32.542,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "tense",
+   "samples": 1435119,
+   "bpm": 118,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D major",
+   "arena": "sunset_grounds",
+   "genre": "ballpark"
+  },
+  {
+   "name": "neon_diamond_calm",
+   "path": "res://assets/audio/music/arena/neon_diamond_calm.ogg",
+   "category": "music_layer",
+   "duration": 30.968,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "calm",
+   "samples": 1365677,
+   "bpm": 124,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "A minor",
+   "arena": "neon_diamond",
+   "genre": "synthwave"
+  },
+  {
+   "name": "neon_diamond_wave",
+   "path": "res://assets/audio/music/arena/neon_diamond_wave.ogg",
+   "category": "music_layer",
+   "duration": 30.968,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "wave",
+   "samples": 1365677,
+   "bpm": 124,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "A minor",
+   "arena": "neon_diamond",
+   "genre": "synthwave"
+  },
+  {
+   "name": "neon_diamond_boss",
+   "path": "res://assets/audio/music/arena/neon_diamond_boss.ogg",
+   "category": "music_layer",
+   "duration": 30.968,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "boss",
+   "samples": 1365677,
+   "bpm": 124,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "A minor",
+   "arena": "neon_diamond",
+   "genre": "synthwave"
+  },
+  {
+   "name": "neon_diamond_tense",
+   "path": "res://assets/audio/music/arena/neon_diamond_tense.ogg",
+   "category": "music_layer",
+   "duration": 30.968,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "tense",
+   "samples": 1365677,
+   "bpm": 124,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "A minor",
+   "arena": "neon_diamond",
+   "genre": "synthwave"
+  },
+  {
+   "name": "iron_fortress_calm",
+   "path": "res://assets/audio/music/arena/iron_fortress_calm.ogg",
+   "category": "music_layer",
+   "duration": 26.667,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "calm",
+   "samples": 1176000,
+   "bpm": 144,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D minor",
+   "arena": "iron_fortress",
+   "genre": "metal"
+  },
+  {
+   "name": "iron_fortress_wave",
+   "path": "res://assets/audio/music/arena/iron_fortress_wave.ogg",
+   "category": "music_layer",
+   "duration": 26.667,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "wave",
+   "samples": 1176000,
+   "bpm": 144,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D minor",
+   "arena": "iron_fortress",
+   "genre": "metal"
+  },
+  {
+   "name": "iron_fortress_boss",
+   "path": "res://assets/audio/music/arena/iron_fortress_boss.ogg",
+   "category": "music_layer",
+   "duration": 26.667,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "boss",
+   "samples": 1176000,
+   "bpm": 144,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D minor",
+   "arena": "iron_fortress",
+   "genre": "metal"
+  },
+  {
+   "name": "iron_fortress_tense",
+   "path": "res://assets/audio/music/arena/iron_fortress_tense.ogg",
+   "category": "music_layer",
+   "duration": 26.667,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "tense",
+   "samples": 1176000,
+   "bpm": 144,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "D minor",
+   "arena": "iron_fortress",
+   "genre": "metal"
+  },
+  {
+   "name": "frostpark_calm",
+   "path": "res://assets/audio/music/arena/frostpark_calm.ogg",
+   "category": "music_layer",
+   "duration": 36.923,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "calm",
+   "samples": 1628308,
+   "bpm": 104,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "F# minor",
+   "arena": "frostpark",
+   "genre": "ice"
+  },
+  {
+   "name": "frostpark_wave",
+   "path": "res://assets/audio/music/arena/frostpark_wave.ogg",
+   "category": "music_layer",
+   "duration": 36.923,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "wave",
+   "samples": 1628308,
+   "bpm": 104,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "F# minor",
+   "arena": "frostpark",
+   "genre": "ice"
+  },
+  {
+   "name": "frostpark_boss",
+   "path": "res://assets/audio/music/arena/frostpark_boss.ogg",
+   "category": "music_layer",
+   "duration": 36.923,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "boss",
+   "samples": 1628308,
+   "bpm": 104,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "F# minor",
+   "arena": "frostpark",
+   "genre": "ice"
+  },
+  {
+   "name": "frostpark_tense",
+   "path": "res://assets/audio/music/arena/frostpark_tense.ogg",
+   "category": "music_layer",
+   "duration": 36.923,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "tense",
+   "samples": 1628308,
+   "bpm": 104,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "F# minor",
+   "arena": "frostpark",
+   "genre": "ice"
+  },
+  {
+   "name": "champions_citadel_calm",
+   "path": "res://assets/audio/music/arena/champions_citadel_calm.ogg",
+   "category": "music_layer",
+   "duration": 30.0,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "calm",
+   "samples": 1323000,
+   "bpm": 128,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "C minor",
+   "arena": "champions_citadel",
+   "genre": "epic"
+  },
+  {
+   "name": "champions_citadel_wave",
+   "path": "res://assets/audio/music/arena/champions_citadel_wave.ogg",
+   "category": "music_layer",
+   "duration": 30.0,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "wave",
+   "samples": 1323000,
+   "bpm": 128,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "C minor",
+   "arena": "champions_citadel",
+   "genre": "epic"
+  },
+  {
+   "name": "champions_citadel_boss",
+   "path": "res://assets/audio/music/arena/champions_citadel_boss.ogg",
+   "category": "music_layer",
+   "duration": 30.0,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "boss",
+   "samples": 1323000,
+   "bpm": 128,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "C minor",
+   "arena": "champions_citadel",
+   "genre": "epic"
+  },
+  {
+   "name": "champions_citadel_tense",
+   "path": "res://assets/audio/music/arena/champions_citadel_tense.ogg",
+   "category": "music_layer",
+   "duration": 30.0,
+   "loop": true,
+   "volume_db": -7.0,
+   "layer": "tense",
+   "samples": 1323000,
+   "bpm": 128,
+   "bars": 16,
+   "beats_per_bar": 4,
+   "key": "C minor",
+   "arena": "champions_citadel",
+   "genre": "epic"
   },
   {
    "name": "stadium_crowd",
@@ -232,9 +787,12 @@
    "category": "sfx",
    "duration": 0.19,
    "loop": false,
-   "volume_db": -8.0,
+   "volume_db": -7.3,
    "group": "throw",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -15.04,
+   "mix_target": -22,
+   "mix_category": "hits"
   },
   {
    "name": "throw_2",
@@ -242,9 +800,12 @@
    "category": "sfx",
    "duration": 0.23,
    "loop": false,
-   "volume_db": -8.0,
+   "volume_db": -7.3,
    "group": "throw",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -15.24,
+   "mix_target": -22,
+   "mix_category": "hits"
   },
   {
    "name": "throw_3",
@@ -252,9 +813,12 @@
    "category": "sfx",
    "duration": 0.27,
    "loop": false,
-   "volume_db": -8.0,
+   "volume_db": -7.3,
    "group": "throw",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -13.72,
+   "mix_target": -22,
+   "mix_category": "hits"
   },
   {
    "name": "ball_hit_1",
@@ -262,9 +826,12 @@
    "category": "sfx",
    "duration": 0.24,
    "loop": false,
-   "volume_db": -5.0,
+   "volume_db": -4.6,
    "group": "ball_hit",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -15.65,
+   "mix_target": -20,
+   "mix_category": "hits"
   },
   {
    "name": "ball_hit_2",
@@ -272,9 +839,12 @@
    "category": "sfx",
    "duration": 0.24,
    "loop": false,
-   "volume_db": -5.0,
+   "volume_db": -4.6,
    "group": "ball_hit",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -14.69,
+   "mix_target": -20,
+   "mix_category": "hits"
   },
   {
    "name": "ball_hit_3",
@@ -282,9 +852,38 @@
    "category": "sfx",
    "duration": 0.24,
    "loop": false,
-   "volume_db": -5.0,
+   "volume_db": -4.6,
    "group": "ball_hit",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -15.18,
+   "mix_target": -20,
+   "mix_category": "hits"
+  },
+  {
+   "name": "ball_hit_4",
+   "path": "res://assets/audio/sfx/ball_hit_4.wav",
+   "category": "sfx",
+   "duration": 0.24,
+   "loop": false,
+   "volume_db": -4.6,
+   "group": "ball_hit",
+   "peak_dbfs": -3.0,
+   "loudness": -15.52,
+   "mix_target": -20,
+   "mix_category": "hits"
+  },
+  {
+   "name": "ball_hit_5",
+   "path": "res://assets/audio/sfx/ball_hit_5.wav",
+   "category": "sfx",
+   "duration": 0.24,
+   "loop": false,
+   "volume_db": -4.6,
+   "group": "ball_hit",
+   "peak_dbfs": -3.0,
+   "loudness": -16.16,
+   "mix_target": -20,
+   "mix_category": "hits"
   },
   {
    "name": "crit_hit",
@@ -292,8 +891,11 @@
    "category": "sfx",
    "duration": 0.9,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.8,
+   "peak_dbfs": -3.0,
+   "loudness": -14.23,
+   "mix_target": -18,
+   "mix_category": "hits"
   },
   {
    "name": "glove_catch_1",
@@ -301,9 +903,12 @@
    "category": "sfx",
    "duration": 0.2,
    "loop": false,
-   "volume_db": -6.0,
+   "volume_db": -5.0,
    "group": "glove_catch",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -16.26,
+   "mix_target": -21,
+   "mix_category": "hits"
   },
   {
    "name": "glove_catch_2",
@@ -311,9 +916,38 @@
    "category": "sfx",
    "duration": 0.2,
    "loop": false,
-   "volume_db": -6.0,
+   "volume_db": -5.0,
    "group": "glove_catch",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -15.45,
+   "mix_target": -21,
+   "mix_category": "hits"
+  },
+  {
+   "name": "glove_catch_3",
+   "path": "res://assets/audio/sfx/glove_catch_3.wav",
+   "category": "sfx",
+   "duration": 0.2,
+   "loop": false,
+   "volume_db": -5.0,
+   "group": "glove_catch",
+   "peak_dbfs": -3.0,
+   "loudness": -16.67,
+   "mix_target": -21,
+   "mix_category": "hits"
+  },
+  {
+   "name": "glove_catch_4",
+   "path": "res://assets/audio/sfx/glove_catch_4.wav",
+   "category": "sfx",
+   "duration": 0.2,
+   "loop": false,
+   "volume_db": -5.0,
+   "group": "glove_catch",
+   "peak_dbfs": -3.0,
+   "loudness": -15.73,
+   "mix_target": -21,
+   "mix_category": "hits"
   },
   {
    "name": "bat_crack",
@@ -321,8 +955,11 @@
    "category": "sfx",
    "duration": 0.6,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.8,
+   "peak_dbfs": -3.0,
+   "loudness": -14.22,
+   "mix_target": -18,
+   "mix_category": "hits"
   },
   {
    "name": "enemy_out_1",
@@ -330,9 +967,12 @@
    "category": "sfx",
    "duration": 0.621,
    "loop": false,
-   "volume_db": -5.0,
+   "volume_db": -4.8,
    "group": "enemy_out",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -14.74,
+   "mix_target": -19.5,
+   "mix_category": "hits"
   },
   {
    "name": "enemy_out_2",
@@ -340,9 +980,25 @@
    "category": "sfx",
    "duration": 0.685,
    "loop": false,
-   "volume_db": -5.0,
+   "volume_db": -4.8,
    "group": "enemy_out",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -14.59,
+   "mix_target": -19.5,
+   "mix_category": "hits"
+  },
+  {
+   "name": "enemy_out_3",
+   "path": "res://assets/audio/sfx/enemy_out_3.wav",
+   "category": "sfx",
+   "duration": 0.619,
+   "loop": false,
+   "volume_db": -4.8,
+   "group": "enemy_out",
+   "peak_dbfs": -3.0,
+   "loudness": -14.8,
+   "mix_target": -19.5,
+   "mix_category": "hits"
   },
   {
    "name": "defender_stunned",
@@ -350,8 +1006,11 @@
    "category": "sfx",
    "duration": 1.093,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.6,
+   "peak_dbfs": -3.0,
+   "loudness": -17.36,
+   "mix_target": -21,
+   "mix_category": "hits"
   },
   {
    "name": "swing_whoosh",
@@ -359,8 +1018,11 @@
    "category": "sfx",
    "duration": 0.46,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -3.0
+   "volume_db": -5.7,
+   "peak_dbfs": -3.0,
+   "loudness": -15.31,
+   "mix_target": -21,
+   "mix_category": "hits"
   },
   {
    "name": "wall_break",
@@ -368,8 +1030,11 @@
    "category": "sfx",
    "duration": 1.293,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.2,
+   "peak_dbfs": -3.0,
+   "loudness": -15.83,
+   "mix_target": -19,
+   "mix_category": "hits"
   },
   {
    "name": "shield_block",
@@ -377,8 +1042,11 @@
    "category": "sfx",
    "duration": 0.85,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -3.0
+   "volume_db": -2.4,
+   "peak_dbfs": -3.0,
+   "loudness": -17.09,
+   "mix_target": -19.5,
+   "mix_category": "hits"
   },
   {
    "name": "run_scored",
@@ -386,8 +1054,11 @@
    "category": "sfx",
    "duration": 2.5,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -1.5,
+   "peak_dbfs": -3.0,
+   "loudness": -14.0,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "gate_open",
@@ -395,8 +1066,11 @@
    "category": "sfx",
    "duration": 2.6,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -5.0,
+   "peak_dbfs": -3.0,
+   "loudness": -12.53,
+   "mix_target": -17.5,
+   "mix_category": "stingers"
   },
   {
    "name": "footstep_dirt_1",
@@ -404,9 +1078,12 @@
    "category": "sfx",
    "duration": 0.108,
    "loop": false,
-   "volume_db": -10.0,
+   "volume_db": -8.5,
    "group": "footstep_dirt",
-   "peak_dbfs": -12.0
+   "peak_dbfs": -12.0,
+   "loudness": -25.53,
+   "mix_target": -34,
+   "mix_category": "hits"
   },
   {
    "name": "footstep_dirt_2",
@@ -414,9 +1091,12 @@
    "category": "sfx",
    "duration": 0.108,
    "loop": false,
-   "volume_db": -10.0,
+   "volume_db": -8.5,
    "group": "footstep_dirt",
-   "peak_dbfs": -12.0
+   "peak_dbfs": -12.0,
+   "loudness": -25.56,
+   "mix_target": -34,
+   "mix_category": "hits"
   },
   {
    "name": "card_draw",
@@ -424,8 +1104,11 @@
    "category": "sfx",
    "duration": 0.115,
    "loop": false,
-   "volume_db": -6.0,
-   "peak_dbfs": -6.0
+   "volume_db": -5.4,
+   "peak_dbfs": -6.0,
+   "loudness": -16.56,
+   "mix_target": -22,
+   "mix_category": "card_effects"
   },
   {
    "name": "card_hover",
@@ -433,8 +1116,11 @@
    "category": "sfx",
    "duration": 0.04,
    "loop": false,
-   "volume_db": -6.0,
-   "peak_dbfs": -15.0
+   "volume_db": 4.4,
+   "peak_dbfs": -15.0,
+   "loudness": -28.45,
+   "mix_target": -24,
+   "mix_category": "ui"
   },
   {
    "name": "card_play",
@@ -442,8 +1128,11 @@
    "category": "sfx",
    "duration": 1.1,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.6,
+   "peak_dbfs": -3.0,
+   "loudness": -15.42,
+   "mix_target": -19,
+   "mix_category": "card_effects"
   },
   {
    "name": "card_denied",
@@ -451,8 +1140,11 @@
    "category": "sfx",
    "duration": 0.277,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -6.0
+   "volume_db": -1.4,
+   "peak_dbfs": -6.0,
+   "loudness": -18.13,
+   "mix_target": -19.5,
+   "mix_category": "ui"
   },
   {
    "name": "energy_full",
@@ -460,8 +1152,11 @@
    "category": "sfx",
    "duration": 1.3,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -3.0
+   "volume_db": -10.1,
+   "peak_dbfs": -3.0,
+   "loudness": -8.95,
+   "mix_target": -19,
+   "mix_category": "stingers"
   },
   {
    "name": "fire_cast",
@@ -469,8 +1164,11 @@
    "category": "sfx",
    "duration": 1.35,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -2.8,
+   "peak_dbfs": -3.0,
+   "loudness": -15.24,
+   "mix_target": -18,
+   "mix_category": "card_effects"
   },
   {
    "name": "fire_loop",
@@ -478,8 +1176,11 @@
    "category": "sfx",
    "duration": 2.0,
    "loop": true,
-   "volume_db": -10.0,
-   "peak_dbfs": -6.0
+   "volume_db": -6.8,
+   "peak_dbfs": -6.0,
+   "loudness": -17.19,
+   "mix_target": -24,
+   "mix_category": "card_effects"
   },
   {
    "name": "frost_cast",
@@ -487,8 +1188,11 @@
    "category": "sfx",
    "duration": 1.5,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -5.5,
+   "peak_dbfs": -3.0,
+   "loudness": -12.54,
+   "mix_target": -18,
+   "mix_category": "card_effects"
   },
   {
    "name": "shadow_cast",
@@ -496,8 +1200,11 @@
    "category": "sfx",
    "duration": 1.15,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.5,
+   "peak_dbfs": -3.0,
+   "loudness": -14.51,
+   "mix_target": -18,
+   "mix_category": "card_effects"
   },
   {
    "name": "lightning_zap",
@@ -505,8 +1212,11 @@
    "category": "sfx",
    "duration": 0.984,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -1.8,
+   "peak_dbfs": -3.0,
+   "loudness": -16.74,
+   "mix_target": -18.5,
+   "mix_category": "card_effects"
   },
   {
    "name": "magnet_pull",
@@ -514,8 +1224,11 @@
    "category": "sfx",
    "duration": 1.25,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -3.0
+   "volume_db": -6.7,
+   "peak_dbfs": -3.0,
+   "loudness": -11.33,
+   "mix_target": -18,
+   "mix_category": "card_effects"
   },
   {
    "name": "earth_rumble",
@@ -523,8 +1236,11 @@
    "category": "sfx",
    "duration": 1.8,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.4,
+   "peak_dbfs": -3.0,
+   "loudness": -14.08,
+   "mix_target": -17.5,
+   "mix_category": "card_effects"
   },
   {
    "name": "barrage_impact",
@@ -532,8 +1248,11 @@
    "category": "sfx",
    "duration": 1.6,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -2.9,
+   "peak_dbfs": -3.0,
+   "loudness": -15.63,
+   "mix_target": -18.5,
+   "mix_category": "card_effects"
   },
   {
    "name": "time_out_whistle",
@@ -541,8 +1260,11 @@
    "category": "sfx",
    "duration": 1.1,
    "loop": false,
-   "volume_db": -6.0,
-   "peak_dbfs": -3.0
+   "volume_db": -11.4,
+   "peak_dbfs": -3.0,
+   "loudness": -6.6,
+   "mix_target": -18,
+   "mix_category": "card_effects"
   },
   {
    "name": "rally_horn",
@@ -550,8 +1272,11 @@
    "category": "sfx",
    "duration": 1.9,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -3.0
+   "volume_db": -5.3,
+   "peak_dbfs": -3.0,
+   "loudness": -12.73,
+   "mix_target": -18,
+   "mix_category": "card_effects"
   },
   {
    "name": "aura_hum",
@@ -559,8 +1284,11 @@
    "category": "sfx",
    "duration": 2.2,
    "loop": false,
-   "volume_db": -6.0,
-   "peak_dbfs": -3.0
+   "volume_db": -5.6,
+   "peak_dbfs": -3.0,
+   "loudness": -12.89,
+   "mix_target": -18.5,
+   "mix_category": "card_effects"
   },
   {
    "name": "heal_chime",
@@ -568,8 +1296,11 @@
    "category": "sfx",
    "duration": 1.5,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -3.0
+   "volume_db": -6.9,
+   "peak_dbfs": -3.0,
+   "loudness": -11.13,
+   "mix_target": -18,
+   "mix_category": "card_effects"
   },
   {
    "name": "explosion_small",
@@ -577,8 +1308,11 @@
    "category": "sfx",
    "duration": 0.674,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -1.4,
+   "peak_dbfs": -3.0,
+   "loudness": -17.57,
+   "mix_target": -19,
+   "mix_category": "card_effects"
   },
   {
    "name": "wave_start",
@@ -586,8 +1320,11 @@
    "category": "sfx",
    "duration": 2.2,
    "loop": false,
-   "volume_db": -2.0,
-   "peak_dbfs": -3.0
+   "volume_db": -0.6,
+   "peak_dbfs": -3.0,
+   "loudness": -15.36,
+   "mix_target": -16,
+   "mix_category": "stingers"
   },
   {
    "name": "wave_clear",
@@ -595,8 +1332,11 @@
    "category": "sfx",
    "duration": 1.6,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.6,
+   "peak_dbfs": -3.0,
+   "loudness": -11.95,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "inning_end",
@@ -605,7 +1345,10 @@
    "duration": 3.3,
    "loop": false,
    "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -12.0,
+   "mix_target": -15,
+   "mix_category": "stingers"
   },
   {
    "name": "combo_double",
@@ -613,8 +1356,11 @@
    "category": "sfx",
    "duration": 0.9,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -5.2,
+   "peak_dbfs": -3.0,
+   "loudness": -10.25,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "combo_triple",
@@ -622,8 +1368,11 @@
    "category": "sfx",
    "duration": 1.2,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.5,
+   "peak_dbfs": -3.0,
+   "loudness": -10.96,
+   "mix_target": -14.5,
+   "mix_category": "stingers"
   },
   {
    "name": "combo_grand",
@@ -631,8 +1380,11 @@
    "category": "sfx",
    "duration": 2.0,
    "loop": false,
-   "volume_db": -2.0,
-   "peak_dbfs": -3.0
+   "volume_db": -0.5,
+   "peak_dbfs": -3.0,
+   "loudness": -12.96,
+   "mix_target": -13.5,
+   "mix_category": "stingers"
   },
   {
    "name": "boss_warning",
@@ -640,8 +1392,11 @@
    "category": "sfx",
    "duration": 3.3,
    "loop": false,
-   "volume_db": -2.0,
-   "peak_dbfs": -3.0
+   "volume_db": -2.7,
+   "peak_dbfs": -3.0,
+   "loudness": -12.3,
+   "mix_target": -15,
+   "mix_category": "stingers"
   },
   {
    "name": "boss_slam",
@@ -649,8 +1404,11 @@
    "category": "sfx",
    "duration": 2.6,
    "loop": false,
-   "volume_db": -2.0,
-   "peak_dbfs": -3.0
+   "volume_db": -1.0,
+   "peak_dbfs": -3.0,
+   "loudness": -16.04,
+   "mix_target": -17,
+   "mix_category": "stingers"
   },
   {
    "name": "boss_roar",
@@ -658,8 +1416,11 @@
    "category": "sfx",
    "duration": 2.0,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -1.9,
+   "peak_dbfs": -3.0,
+   "loudness": -13.59,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "victory_fanfare",
@@ -667,8 +1428,11 @@
    "category": "sfx",
    "duration": 4.6,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -2.9,
+   "peak_dbfs": -3.0,
+   "loudness": -12.09,
+   "mix_target": -15,
+   "mix_category": "stingers"
   },
   {
    "name": "defeat_sting",
@@ -676,8 +1440,11 @@
    "category": "sfx",
    "duration": 3.4,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.4,
+   "peak_dbfs": -3.0,
+   "loudness": -12.07,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "level_up",
@@ -685,8 +1452,11 @@
    "category": "sfx",
    "duration": 1.5,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -4.1,
+   "peak_dbfs": -3.0,
+   "loudness": -11.37,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "achievement",
@@ -694,8 +1464,11 @@
    "category": "sfx",
    "duration": 2.3,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -3.6,
+   "peak_dbfs": -3.0,
+   "loudness": -11.91,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "coin",
@@ -703,8 +1476,11 @@
    "category": "sfx",
    "duration": 0.45,
    "loop": false,
-   "volume_db": -6.0,
-   "peak_dbfs": -6.0
+   "volume_db": -5.4,
+   "peak_dbfs": -6.0,
+   "loudness": -14.6,
+   "mix_target": -20,
+   "mix_category": "stingers"
   },
   {
    "name": "purchase",
@@ -712,8 +1488,11 @@
    "category": "sfx",
    "duration": 1.064,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -3.0
+   "volume_db": -4.8,
+   "peak_dbfs": -3.0,
+   "loudness": -10.66,
+   "mix_target": -15.5,
+   "mix_category": "stingers"
   },
   {
    "name": "ui_hover",
@@ -721,8 +1500,11 @@
    "category": "sfx",
    "duration": 0.045,
    "loop": false,
-   "volume_db": -6.0,
-   "peak_dbfs": -13.0
+   "volume_db": -0.4,
+   "peak_dbfs": -13.0,
+   "loudness": -23.65,
+   "mix_target": -24,
+   "mix_category": "ui"
   },
   {
    "name": "ui_click",
@@ -730,8 +1512,11 @@
    "category": "sfx",
    "duration": 0.07,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -9.0
+   "volume_db": 1.8,
+   "peak_dbfs": -9.0,
+   "loudness": -23.82,
+   "mix_target": -22,
+   "mix_category": "ui"
   },
   {
    "name": "ui_back",
@@ -739,8 +1524,11 @@
    "category": "sfx",
    "duration": 0.173,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -9.0
+   "volume_db": -1.8,
+   "peak_dbfs": -9.0,
+   "loudness": -17.23,
+   "mix_target": -19,
+   "mix_category": "ui"
   },
   {
    "name": "ui_confirm",
@@ -748,8 +1536,11 @@
    "category": "sfx",
    "duration": 0.32,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -9.0
+   "volume_db": 0.3,
+   "peak_dbfs": -9.0,
+   "loudness": -19.27,
+   "mix_target": -19,
+   "mix_category": "ui"
   },
   {
    "name": "ui_error",
@@ -757,8 +1548,11 @@
    "category": "sfx",
    "duration": 0.194,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -9.0
+   "volume_db": -1.0,
+   "peak_dbfs": -9.0,
+   "loudness": -17.96,
+   "mix_target": -19,
+   "mix_category": "ui"
   },
   {
    "name": "ui_tab",
@@ -766,8 +1560,11 @@
    "category": "sfx",
    "duration": 0.088,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -9.0
+   "volume_db": 1.5,
+   "peak_dbfs": -9.0,
+   "loudness": -23.48,
+   "mix_target": -22,
+   "mix_category": "ui"
   },
   {
    "name": "ui_slide",
@@ -775,8 +1572,11 @@
    "category": "sfx",
    "duration": 0.24,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -9.0
+   "volume_db": 0.2,
+   "peak_dbfs": -9.0,
+   "loudness": -20.66,
+   "mix_target": -20.5,
+   "mix_category": "ui"
   },
   {
    "name": "ui_toggle",
@@ -784,8 +1584,11 @@
    "category": "sfx",
    "duration": 0.1,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -9.0
+   "volume_db": 2.0,
+   "peak_dbfs": -9.0,
+   "loudness": -23.99,
+   "mix_target": -22,
+   "mix_category": "ui"
   },
   {
    "name": "crowd_cheer_1",
@@ -793,9 +1596,12 @@
    "category": "sfx",
    "duration": 2.6,
    "loop": false,
-   "volume_db": -6.0,
+   "volume_db": -5.9,
    "group": "crowd_cheer",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -13.63,
+   "mix_target": -19.5,
+   "mix_category": "crowd"
   },
   {
    "name": "crowd_cheer_2",
@@ -803,9 +1609,12 @@
    "category": "sfx",
    "duration": 2.9,
    "loop": false,
-   "volume_db": -6.0,
+   "volume_db": -5.9,
    "group": "crowd_cheer",
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -13.55,
+   "mix_target": -19.5,
+   "mix_category": "crowd"
   },
   {
    "name": "crowd_groan",
@@ -814,7 +1623,10 @@
    "duration": 2.0,
    "loop": false,
    "volume_db": -6.0,
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -14.54,
+   "mix_target": -20.5,
+   "mix_category": "crowd"
   },
   {
    "name": "crowd_ooh",
@@ -823,7 +1635,137 @@
    "duration": 1.9,
    "loop": false,
    "volume_db": -6.0,
-   "peak_dbfs": -3.0
+   "peak_dbfs": -3.0,
+   "loudness": -14.49,
+   "mix_target": -20.5,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_small_1",
+   "path": "res://assets/audio/sfx/crowd_small_1.wav",
+   "category": "sfx",
+   "duration": 1.3,
+   "loop": false,
+   "volume_db": -9.0,
+   "group": "crowd_small",
+   "peak_dbfs": -3.0,
+   "loudness": -12.91,
+   "mix_target": -23,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_small_2",
+   "path": "res://assets/audio/sfx/crowd_small_2.wav",
+   "category": "sfx",
+   "duration": 1.5,
+   "loop": false,
+   "volume_db": -9.0,
+   "group": "crowd_small",
+   "peak_dbfs": -3.0,
+   "loudness": -15.37,
+   "mix_target": -23,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_small_3",
+   "path": "res://assets/audio/sfx/crowd_small_3.wav",
+   "category": "sfx",
+   "duration": 1.2,
+   "loop": false,
+   "volume_db": -9.0,
+   "group": "crowd_small",
+   "peak_dbfs": -3.0,
+   "loudness": -13.61,
+   "mix_target": -23,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_big_1",
+   "path": "res://assets/audio/sfx/crowd_big_1.wav",
+   "category": "sfx",
+   "duration": 3.2,
+   "loop": false,
+   "volume_db": -6.8,
+   "group": "crowd_big",
+   "peak_dbfs": -3.0,
+   "loudness": -13.31,
+   "mix_target": -20,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_big_2",
+   "path": "res://assets/audio/sfx/crowd_big_2.wav",
+   "category": "sfx",
+   "duration": 3.6,
+   "loop": false,
+   "volume_db": -6.8,
+   "group": "crowd_big",
+   "peak_dbfs": -3.0,
+   "loudness": -13.19,
+   "mix_target": -20,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_groan_small_1",
+   "path": "res://assets/audio/sfx/crowd_groan_small_1.wav",
+   "category": "sfx",
+   "duration": 1.5,
+   "loop": false,
+   "volume_db": -7.8,
+   "group": "crowd_groan_small",
+   "peak_dbfs": -3.0,
+   "loudness": -14.99,
+   "mix_target": -22,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_groan_small_2",
+   "path": "res://assets/audio/sfx/crowd_groan_small_2.wav",
+   "category": "sfx",
+   "duration": 1.7,
+   "loop": false,
+   "volume_db": -7.8,
+   "group": "crowd_groan_small",
+   "peak_dbfs": -3.0,
+   "loudness": -13.39,
+   "mix_target": -22,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_roar",
+   "path": "res://assets/audio/sfx/crowd_roar.wav",
+   "category": "sfx",
+   "duration": 5.5,
+   "loop": false,
+   "volume_db": -4.3,
+   "peak_dbfs": -3.0,
+   "loudness": -13.74,
+   "mix_target": -18,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_chant",
+   "path": "res://assets/audio/sfx/crowd_chant.wav",
+   "category": "sfx",
+   "duration": 5.08,
+   "loop": false,
+   "volume_db": -9.7,
+   "peak_dbfs": -3.0,
+   "loudness": -12.8,
+   "mix_target": -22.5,
+   "mix_category": "crowd"
+  },
+  {
+   "name": "crowd_stomp",
+   "path": "res://assets/audio/sfx/crowd_stomp.wav",
+   "category": "sfx",
+   "duration": 4.92,
+   "loop": false,
+   "volume_db": -8.2,
+   "peak_dbfs": -3.0,
+   "loudness": -13.84,
+   "mix_target": -22,
+   "mix_category": "crowd"
   },
   {
    "name": "pack_shake",
@@ -831,8 +1773,11 @@
    "category": "sfx",
    "duration": 1.012,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -5.0
+   "volume_db": -3.0,
+   "peak_dbfs": -5.0,
+   "loudness": -17.96,
+   "mix_target": -21,
+   "mix_category": "packs"
   },
   {
    "name": "pack_tear",
@@ -840,8 +1785,11 @@
    "category": "sfx",
    "duration": 1.6,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -2.6,
+   "peak_dbfs": -3.0,
+   "loudness": -15.37,
+   "mix_target": -18,
+   "mix_category": "packs"
   },
   {
    "name": "card_whoosh",
@@ -849,8 +1797,11 @@
    "category": "sfx",
    "duration": 0.38,
    "loop": false,
-   "volume_db": -5.0,
-   "peak_dbfs": -8.0
+   "volume_db": -3.1,
+   "peak_dbfs": -8.0,
+   "loudness": -18.85,
+   "mix_target": -22,
+   "mix_category": "packs"
   },
   {
    "name": "card_flip",
@@ -858,8 +1809,11 @@
    "category": "sfx",
    "duration": 0.193,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -6.0
+   "volume_db": -3.9,
+   "peak_dbfs": -6.0,
+   "loudness": -17.14,
+   "mix_target": -21,
+   "mix_category": "packs"
   },
   {
    "name": "reveal_common",
@@ -867,8 +1821,11 @@
    "category": "sfx",
    "duration": 0.9,
    "loop": false,
-   "volume_db": -6.0,
-   "peak_dbfs": -8.0
+   "volume_db": -5.3,
+   "peak_dbfs": -8.0,
+   "loudness": -14.68,
+   "mix_target": -20,
+   "mix_category": "packs"
   },
   {
    "name": "reveal_rare",
@@ -876,8 +1833,11 @@
    "category": "sfx",
    "duration": 1.5,
    "loop": false,
-   "volume_db": -4.0,
-   "peak_dbfs": -5.0
+   "volume_db": -4.8,
+   "peak_dbfs": -5.0,
+   "loudness": -13.18,
+   "mix_target": -18,
+   "mix_category": "packs"
   },
   {
    "name": "reveal_epic",
@@ -885,8 +1845,11 @@
    "category": "sfx",
    "duration": 2.2,
    "loop": false,
-   "volume_db": -3.0,
-   "peak_dbfs": -3.0
+   "volume_db": -0.3,
+   "peak_dbfs": -3.0,
+   "loudness": -16.2,
+   "mix_target": -16.5,
+   "mix_category": "packs"
   },
   {
    "name": "reveal_legendary",
@@ -894,8 +1857,11 @@
    "category": "sfx",
    "duration": 3.4,
    "loop": false,
-   "volume_db": -2.0,
-   "peak_dbfs": -2.0
+   "volume_db": -1.0,
+   "peak_dbfs": -2.0,
+   "loudness": -13.96,
+   "mix_target": -15,
+   "mix_category": "packs"
   }
  ]
 }

@@ -152,12 +152,12 @@ def throw(rng, v):
 def ball_hit(rng, v):
     """Punchy body thud: short pitched thump (~100-180 Hz), textured mid
     'thwack', leathery smack and a tiny click.  Kept < 0.25 s."""
-    pf = [1.0, 0.88, 1.12][v]
+    pf = [1.0, 0.88, 1.12, 0.94, 1.06][v]
     b = buf(0.24)
-    at(b, thump(0.2, 185 * pf, 92 * pf, 0.014, [0.045, 0.055, 0.04][v]), 0, 0.9)
+    at(b, thump(0.2, 185 * pf, 92 * pf, 0.014, [0.045, 0.055, 0.04, 0.05, 0.042][v]), 0, 0.9)
     at(b, thump(0.12, 70 * pf, 55 * pf, 0.02, 0.03), 0, 0.35)
     at(b, noise_hit(rng, 0.14, 320 * pf, 1.0, 0.035), 0, 0.9)
-    at(b, noise_hit(rng, 0.08, [1800, 1500, 2200][v], 0.9, 0.011), 0, 0.75)
+    at(b, noise_hit(rng, 0.08, [1800, 1500, 2200, 1650, 2000][v], 0.9, 0.011), 0, 0.75)
     at(b, noise_hit(rng, 0.03, 3500, 0.7, 0.002, "hp"), 0, 0.3)
     x = saturate(b, 2.5)
     x = wet(x, ROOM, 0.1)
@@ -186,7 +186,7 @@ def crit_hit(rng):
 
 def glove_catch(rng, v):
     b = buf(0.2)
-    f1, f2 = [(1300, 720), (1150, 640)][v]
+    f1, f2 = [(1300, 720), (1150, 640), (1420, 780), (1220, 690)][v]
     at(b, noise_hit(rng, 0.05, f1, 2.5, 0.007), 0, 0.9)
     at(b, noise_hit(rng, 0.06, f2, 2.0, 0.012), 0, 0.7)
     at(b, thump(0.12, 230, 150, 0.01, 0.03), 0, 0.7)
@@ -215,10 +215,11 @@ def enemy_out(rng, v):
     at(b, noise_hit(rng, 0.1, 1600, 1.0, 0.015), 0, 0.5)
     at(b, noise_hit(rng, 0.2, 420, 1.3, 0.05), 0, 0.6)
     imp = saturate(b, 2.2)
-    if v == 0:
+    if v in (0, 2):
         n = ns(0.42)
         t = tarr(n)
-        f = 220 + (820 - 220) * np.exp(-t / 0.13)
+        k = 1.0 if v == 0 else 1.19
+        f = (220 + (820 - 220) * np.exp(-t / 0.13)) * k
         f *= 1 + 0.02 * np.sin(TWO_PI * 18 * t)
         tn = (0.6 * square(f, n, 0.5) + 0.4 * triangle(f, n))
         tn = lp(tn, 2200) * np.clip(t / 0.01, 0, 1) * np.exp(-t / 0.2)
@@ -1050,6 +1051,105 @@ def crowd_ooh(rng):
     return finish(x, -3.0, 0.03, 0.4, shave_db=1.0)
 
 
+# ---------------------------------------------------------------- crowd reactions (Update 5)
+def crowd_small(rng, v):
+    """A short "yeah!" from part of the crowd: single outs."""
+    dur = [1.3, 1.5, 1.2][v]
+    x = crowd_burst(rng, dur, "cheer", voices=[28, 32, 24][v],
+                    env_pts=[(0, 0), (0.09, 1.0), (dur * 0.45, 0.65), (dur, 0.0)],
+                    clap_rate=[20, 35, 15][v], bed=0.55, whistles=0)
+    x = wet(x, STADIUM, 0.3)
+    return finish(x, -3.0, 0.015, 0.3, shave_db=1.0)
+
+
+def crowd_big(rng, v):
+    """The whole stand erupts: double/triple plays, big boss hits."""
+    dur = [3.2, 3.6][v]
+    x = crowd_burst(rng, dur, "cheer", voices=[96, 110][v],
+                    env_pts=[(0, 0), (0.12, 1.0), (dur * 0.6, 0.9), (dur, 0.0)],
+                    clap_rate=[170, 210][v], bed=1.0, whistles=[3, 4][v])
+    x = wet(x, STADIUM, 0.32)
+    return finish(x, -3.0, 0.02, 0.5, shave_db=1.0)
+
+
+def crowd_roar(rng):
+    """Stadium roar with whistles and applause: victory, boss defeated."""
+    dur = 5.5
+    x = crowd_burst(rng, dur, "cheer", voices=150,
+                    env_pts=[(0, 0), (0.25, 1.0), (3.2, 0.92), (dur, 0.0)],
+                    clap_rate=300, bed=1.25, whistles=7)
+    x2 = crowd_burst(rng, dur - 0.6, "cheer", voices=60,
+                     env_pts=[(0, 0), (0.5, 1.0), (2.5, 0.8), (dur - 0.6, 0.0)], bed=0.4)
+    place(x, x2 * 0.6, ns(0.6))
+    x = wet(x, STADIUM, 0.35)
+    return finish(x, -3.0, 0.03, 0.9, shave_db=1.0)
+
+
+def crowd_groan_small(rng, v):
+    """Disappointed "aww": a run scores."""
+    dur = [1.5, 1.7][v]
+    x = crowd_burst(rng, dur, "groan", voices=[38, 44][v],
+                    env_pts=[(0, 0), (0.22, 1.0), (dur * 0.55, 0.7), (dur, 0.0)], bed=0.6)
+    x = wet(x, STADIUM, 0.3)
+    return finish(x, -3.0, 0.03, 0.35, shave_db=1.0)
+
+
+def _chant_voice(rng, n, f0, vowel, female):
+    t = tarr(n)
+    d = n / SR
+    contour = 2 ** ((-2.0 * t / d) / 12)
+    src = ins.voice_src(f0 * contour * (1 + 0.012 * rng.standard_normal()), n, rng, breath=0.15)
+    y = ins.formant_filter(src, vowel, 1.12 if female else 1.0)
+    env = np.clip(t / 0.03, 0, 1) * np.clip((d - t) / 0.08, 0, 1)
+    return y * env
+
+
+def crowd_chant(rng):
+    """"DE-FENSE!" (clap clap) twice: tense moments."""
+    beat = 0.56
+    dur = beat * 8 + 0.6
+    out = np.zeros(ns(dur))
+    for rep in range(2):
+        t0 = rep * beat * 4
+        for _ in range(40):
+            female = rng.random() < 0.4
+            f0 = rng.uniform(190, 260) if female else rng.uniform(110, 165)
+            j = rng.uniform(-0.025, 0.035)
+            g = rng.uniform(0.4, 1.0)
+            place(out, _chant_voice(rng, ns(0.2), f0 * 1.12, "e", female) * g, ns(t0 + j))
+            place(out, _chant_voice(rng, ns(0.42), f0, "e", female) * g, ns(t0 + beat + j))
+        for cb in (2, 3):
+            for _ in range(36):
+                m = ns(rng.uniform(0.006, 0.014))
+                c = bp(white(m, rng), rng.uniform(900, 2400), rng.uniform(0.8, 1.6)) * perc(m, 0.0004, m / SR / 4)
+                place(out, c * rng.uniform(0.3, 1.0), ns(t0 + cb * beat + rng.uniform(-0.02, 0.03)))
+    out /= np.max(np.abs(out)) + 1e-9
+    out = hp(out, 140)
+    out = lp(out, 6500)
+    x = wet(out, STADIUM, 0.35)
+    return finish(x, -3.0, 0.01, 0.4, shave_db=1.5)
+
+
+def crowd_stomp(rng):
+    """Stomp-stomp-CLAP, three times: the crowd driving the defence on."""
+    q = 0.72
+    dur = q * 6 + 0.6
+    out = np.zeros(ns(dur))
+    for rep in range(3):
+        t0 = rep * 2 * q
+        for k, tt in enumerate((0.0, q * 0.5)):
+            for _ in range(10):
+                place(out, ins.stomp(rng, 0.5) * rng.uniform(0.4, 1.0) * 0.5, ns(t0 + tt + rng.uniform(-0.02, 0.03)))
+        for _ in range(40):
+            m = ns(rng.uniform(0.006, 0.014))
+            c = bp(white(m, rng), rng.uniform(900, 2400), rng.uniform(0.8, 1.6)) * perc(m, 0.0004, m / SR / 4)
+            place(out, c * rng.uniform(0.3, 1.0), ns(t0 + q + rng.uniform(-0.02, 0.03)))
+    out /= np.max(np.abs(out)) + 1e-9
+    out = hp(out, 45)
+    x = wet(out, STADIUM, 0.35)
+    return finish(x, -3.0, 0.005, 0.4, shave_db=2.0)
+
+
 # ---------------------------------------------------------------------------
 # registry: name -> (fn, volume_db, loop, group)
 # ---------------------------------------------------------------------------
@@ -1164,13 +1264,13 @@ def _reg(name, fn, vol_db, loop=False, group=None):
 
 for _i in range(3):
     _reg(f"throw_{_i + 1}", _v(throw, _i), -8.0, group="throw")
-for _i in range(3):
+for _i in range(5):
     _reg(f"ball_hit_{_i + 1}", _v(ball_hit, _i), -5.0, group="ball_hit")
 _reg("crit_hit", crit_hit, -3.0)
-for _i in range(2):
+for _i in range(4):
     _reg(f"glove_catch_{_i + 1}", _v(glove_catch, _i), -6.0, group="glove_catch")
 _reg("bat_crack", bat_crack, -3.0)
-for _i in range(2):
+for _i in range(3):
     _reg(f"enemy_out_{_i + 1}", _v(enemy_out, _i), -5.0, group="enemy_out")
 _reg("defender_stunned", defender_stunned, -5.0)
 _reg("swing_whoosh", swing_whoosh, -5.0)
@@ -1229,6 +1329,15 @@ for _i in range(2):
     _reg(f"crowd_cheer_{_i + 1}", _v(crowd_cheer, _i), -6.0, group="crowd_cheer")
 _reg("crowd_groan", crowd_groan, -6.0)
 _reg("crowd_ooh", crowd_ooh, -6.0)
+for _i in range(3):
+    _reg(f"crowd_small_{_i + 1}", _v(crowd_small, _i), -8.0, group="crowd_small")
+for _i in range(2):
+    _reg(f"crowd_big_{_i + 1}", _v(crowd_big, _i), -6.0, group="crowd_big")
+for _i in range(2):
+    _reg(f"crowd_groan_small_{_i + 1}", _v(crowd_groan_small, _i), -7.0, group="crowd_groan_small")
+_reg("crowd_roar", crowd_roar, -5.0)
+_reg("crowd_chant", crowd_chant, -8.0)
+_reg("crowd_stomp", crowd_stomp, -8.0)
 
 _reg("pack_shake", pack_shake, -4.0)
 _reg("pack_tear", pack_tear, -3.0)
