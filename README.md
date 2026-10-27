@@ -19,14 +19,16 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
 ## Features
 
 - **Real 3D stadiums** — six arenas (The Steel Yard, Sunset Grounds, Neon Diamond, Iron Fortress,
-  Frostpark, Champion's Citadel) with fortress walls, enemy gates, light towers, animated crowds,
-  a live scoreboard, waving banners and themed skylines.
+  Frostpark, Champion's Citadel) with fortress walls, enemy gates, light towers, real dugouts, sponsor
+  boards and themed skylines. About 1,800 fans that clap, cheer, groan, stand and do the wave. A jumbotron
+  shows big plays live, a mascot entertains between waves, and fireworks go off on wins.
 - **Nine rigged and animated defenders** (Ace, Rico, Maya, Jax, Kai, Bruno + unlockable Nova, Dex, Hana),
   each with a class trait, a signature card, levels, training traits, gear and team uniforms.
-- **Eight runner types and three bosses** — Runner, Sprinter, Armored, Swarmer, Jumper, Trickster,
-  Captain and Siege Slugger; bosses Iron Slugger, Phantom Captain and the Grand Slammer, all with
-  telegraphed attacks and counterplay.
-- **26 ability cards** in four categories (offense, control, defense, utility) and five rarities,
+- **Nine runner types and three bosses** — Runner, Sprinter, Armored, Swarmer, Jumper, Trickster,
+  Captain, Siege Slugger and the Base Stealer; bosses Iron Slugger, Phantom Captain and the Grand Slammer,
+  all with telegraphed attacks and counterplay. Bosses get a camera entrance with a name card, and a
+  slow-motion finale when defeated.
+- **32 ability cards** in four categories (offense, control, defense, utility) and five rarities,
   with real combos (Curveball + Heat Wave, Magnet Glove + Grand Slam Barrage, Twin Play + relays...).
   8-card decks, 5-card hand, 10 energy, cooldowns, draw/discard cycling. Every card has a one-line rule,
   bold painted art and a metallic frame with a glow in its rarity colour; Rare, Epic and Legendary cards
@@ -48,6 +50,12 @@ All screenshots are rendered by the game itself (`tools/capture_screenshots.sh`)
   plus discounted specials.
 - **Defender level road**: defenders earn XP from every game (more for outs and for the MVP), and every level
   up to 10 pays out coins, a new trait or a card pack. The results screen shows each XP bar filling.
+- **Daily Challenge**: one seeded game per day with a fixed deck, stadium and modifier, a best score and a
+  day streak.
+- **Card mastery and collection sets**: cards earn mastery stars from play (cosmetic, with a gold MASTERED
+  frame), and completing a card category pays out a pack.
+- **Adaptive music**: each stadium has its own take on the battle theme, with layers that build with waves,
+  bosses and tense moments, plus a crowd that reacts to the game.
 - **Modes**: Standard Siege (9 innings, 3 bosses), Quick Defense (3 innings), The Endless Ninth
   (survival with modifiers and milestones), Practice Field (sandbox) and Promotion Challenges for the
   offline rank ladder (Rookie → Bronze → Silver → Gold → Platinum → Diamond → Champion → Legend).

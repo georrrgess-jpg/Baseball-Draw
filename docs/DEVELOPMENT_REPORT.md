@@ -340,3 +340,125 @@ Known limitations of this update:
 | | |
 |---|---|
 | ![Pack shop](screenshots/packs_shop.jpg) BUY 10 and OPEN ×5 / ×10 | ![Multi-open](screenshots/packs_multi.jpg) Ten Champion packs at once |
+
+## 11. Update 5: "Championship Polish"
+
+Plan: `docs/plans/UPDATE_5_PLAN.md`. Scored review findings for each area are in `docs/plans/review/`
+(`battle_feel.md`, `stadium.md`, `menus.md`, `audio.md`, `characters.md`). The work ran as parallel streams
+(tech and balance, stadium, battle feel, HUD, menus, audio, characters, new content).
+
+**Measuring tools**
+* **Balance simulator** (`tools/balance/simulate.py`): headless autopilot games; reports win rates, where runs
+  are lost, card play share and impact, defender share and boss time-to-kill.
+* **Economy model** (`tools/balance/economy.py`): projects 20 hours of play.
+* **Smoke test** (`--smoke-test`, `src/core/smoke_test.gd`): plays a short game and saves/reloads a profile.
+  CI runs it on the Linux export and, in a new job, on the Windows .exe on a Windows runner.
+* **Frame-time capture:** `--perf` and `--perf-test`.
+* **Card hit-map test:** `--ui-test-section=cards`.
+* **Character layer check:** `tools/blender/characters/check_layers.py`.
+
+**Battle feel** (`battle.gd`, `enemy.gd`, `projectiles.gd`, `camera_rig.gd`, `src/vfx/`)
+* **Base Shield:** the permanent dome over home plate is replaced by a thin ring and shield icons; the dome
+  flashes only when a shield blocks a run.
+* **Rally Cry and Twin Play:** a short burst, then a subtle ground ring.
+* **Hits:**
+  * a model-only hit-stop on crits and outs (the game clock is untouched);
+  * a camera punch on crits, outs and boss kills;
+  * frame-rate-independent ball trails;
+  * a glove pop on tags and an arm swoosh on throws.
+* **Health bars:** bars of bunched runners stack into rows.
+* **Fizzle labels:** readable size.
+* **Bosses:**
+  * Entrance: camera to the gate, gate burst, name card with the boss's threat. Under 3 s, skippable,
+    never during the tutorial or auto tests.
+  * Defeat: a short slow motion, a big burst, then the DEFEATED banner.
+  * New Battle signals: `boss_intro_started`, `boss_intro_finished`, `boss_defeated`.
+
+**Battle HUD** (`battle_hud.gd`)
+* Icon toolbar with hotkey tooltips.
+* Formation presets as mini diamond diagrams.
+* Call-out banners are smaller, queued and merged (a growing combo updates in place).
+* The energy bar previews the cost of the hovered or selected card, and outlines missing energy in red.
+* The next-card slot is a card back that fills with a seconds countdown.
+* Card tooltips include the full rules text.
+* The card hit map still shows 0 dead points and 0 dropped fast clicks.
+
+**Stadium** (`src/stadium/`, `stadium_builder.gd`, `field_builder.gd`, crowd and field shaders)
+* **Crowd:**
+  * low-poly fans in one MultiMesh per grandstand, animated in a vertex shader;
+  * they clap, cheer, groan, stand and do the wave in reaction to the game;
+  * density follows the quality preset.
+* **Dugouts and park:** real dugouts with bench players.
+* **Field surface:** mowing stripes, worn turf, rake marks and base-path scuffs, worn chalk, grass foul
+  territory, sponsor boards and foul poles.
+* **Lighting:** night light-tower glow; Frostpark no longer washed out.
+* **Stadium life:**
+  * a jumbotron with a live picture-in-picture of big moments (an animated graphic on Low);
+  * the mascot "Slugger" between waves;
+  * fireworks on wins and boss defeats.
+
+**Menus and design system** (`ui_theme.gd`, `src/ui/`)
+* **Shared design system:**
+  * a type scale with a 16 px minimum;
+  * button variants;
+  * one panel, tile and section style;
+  * one back-button position and currency pill;
+  * hover and press feedback;
+  * a shared screen-enter animation.
+* **Main menu:** a hero PLAY button, a Continue Run strip, grouped icon tiles with badges, and a drifting
+  camera with a defender showcase.
+* **Play:** mode cards, rendered stadium pictures, and a difficulty explainer listing exactly what changes.
+* **Progression:** rank emblem with a progress ring, a stats dashboard, and achievement progress.
+* **Results:**
+  * staged reward build-up;
+  * a game-flow graph;
+  * three highlights (biggest combo, best card play, MVP);
+  * PLAY AGAIN with the same settings.
+* **Settings:** search, one-line explanations, and a graphics benchmark that recommends a preset.
+* **Dugout, pause and Team:** restyled to match.
+
+**Audio** (`tools/audio/`, `src/audio/`, `audio_manager.gd`)
+* Each arena has its own take on the battle theme, with four synced layers: calm, wave, boss and tense.
+* Boss intro and defeat stings.
+* Crowd reactions scaled by excitement.
+* Mix targets per category, music ducking, and variation and voice limits for frequent sounds.
+* New sounds for card draw, full energy and fireworks.
+
+**Characters** (`tools/blender/characters/`)
+* Clothing layers share skin weights, so undershirts, jerseys and pants no longer poke through at the sleeves,
+  waist or elbows.
+* The broken back-number outlines are fixed.
+* Throw, catch, celebrate and idle clips are reworked with the same lengths and event frames.
+* Rico's socks are confirmed fixed.
+
+**New content**
+* **Six cards (32 in total):**
+  * Called Shot (Rare): the boss counter;
+  * Line Drive (Common): area damage;
+  * Tag at the Plate (Common): a cheap run-stopper;
+  * Bullpen Call (Uncommon): draw and energy;
+  * Hot Corner (Uncommon): a defender buff that pierces armor;
+  * Perfect Game (Legendary).
+* **Base Stealer runner:** sprints when no defender is aiming at it; a slow, stun or freeze mid-steal
+  catches it.
+* **Shielded elite:** blocks the first hit.
+* **Daily Challenge** (`src/core/daily_challenge.gd`, `data/daily.json`): one seeded game per day, with a best
+  score, a day streak and a first-game/first-win bonus. It never touches the Continue Run slot.
+* **Card mastery** (cosmetic): stars at 10 / 40 / 120 plays and a gold MASTERED frame.
+* **Collection sets:** a Pro Pack per completed category and a Champion Pack for the full collection.
+
+**Balance and economy**
+* **Economy:** re-tuned so the collection lasts. The model projects about 10 earned packs per hour and the
+  full collection at about 19 hours (it was about 1 hour).
+  * Pack prices: Rookie 200, Pro 500, Champion 50 stars; bundles 1,800 / 4,500 / 450.
+  * Fewer free packs per game, and rarer Epic and Legendary odds.
+  * Defenders reach level 10 at about 7 hours.
+* **Waves:** the simulator showed that the defenders alone stopped every regular runner, even with no cards
+  played, so only bosses ever scored. Regular runners now scale up faster per inning, and Standard, Veteran
+  and Legend have tougher, bigger waves. On Quick Defense, Standard, the autopilot now wins about 1 game in
+  4 with no cards and about 3 in 4 with cards, so cards decide games.
+* **Other:** Heat Wave and Rico buffed.
+
+**Tech**
+* Leaks at exit cut from 84 to about 22 objects; an orphan HUD label is now freed.
+* Per-frame battle-loop cost is about 1 ms (CPU) in a boss wave at 3x speed.
