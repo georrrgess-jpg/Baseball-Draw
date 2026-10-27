@@ -33,7 +33,8 @@ class BodyMixin:
                          np.outer(np.sin(ang), V[i]) * rx)
         v, f = geo.loft(rings, None, None)
         f = orient_outward(v, f, (a + b) / 2)
-        return self.add("Neck", v, f, self.m["Skin"], bones=["chest", "neck", "head"])
+        self.neck_obj = self.add("Neck", v, f, self.m["Skin"], bones=["chest", "neck", "head"])
+        return self.neck_obj
 
     def torso_stations(self):
         s = self.s
@@ -47,8 +48,10 @@ class BodyMixin:
         fem = 1.0 if self.female else 0.0
         # z, W, F, B, n, pec, blade, yc, dip  (W/F/B/pec/blade/yc/dip in s-units)
         return [
-            (zp - 0.06 * s, ww * 1.00, wd * 1.00, wd * 1.02, 2.4, 0, 0, 0, 0),
-            (zp + 0.04 * s, ww * 1.00 + 0.02 * bel, wd + 0.035 * bel, wd * 1.02, 2.4, 0, 0, 0, 0),
+            # hem tucked ~7 cm (x scale) under the waistband, clear of the hip
+            # crease so a raised thigh cannot fold the pants over it
+            (zp - 0.005 * s, ww * 1.00, wd * 1.00, wd * 1.02, 2.4, 0, 0, 0, 0),
+            (zp + 0.045 * s, ww * 1.00 + 0.02 * bel, wd + 0.035 * bel, wd * 1.02, 2.4, 0, 0, 0, 0),
             (zs + 0.03 * s, ww * 1.04 + 0.03 * bel, wd * 1.03 + 0.06 * bel, wd * 1.03, 2.4, 0, 0,
              0, 0),
             (zc + 0.01 * s, cw * 0.95 + 0.02 * bel, cd * 0.97 + 0.04 * bel, cd * 0.95, 2.3,
@@ -93,6 +96,13 @@ class BodyMixin:
                        bones=["hips", "spine", "chest", "neck", "shoulder.L", "shoulder.R",
                               "upper_arm.L", "upper_arm.R"])
         self.torso_obj = obj
+        self.torso_bottom = float(A(rings[0])[:, 2].min())
+        if getattr(self, "neck_obj", None) is not None:
+            # the neck base inside the collar moves with the jersey
+            zt = float(A(rings[-1])[:, 2].max())
+            s = self.s
+            self.neck_obj["share"] = json.dumps(dict(src=obj.name, a=[0, 0, zt - 0.015 * s],
+                                                     b=[0, 0, zt + 0.03 * s], u0=0.0, u1=1.0))
         self.collar_ring = A(rings[-1])
         self.surf["torso"] = geo.Surface(obj)
         return obj
@@ -136,6 +146,10 @@ class BodyMixin:
         f = orient_outward(v, f, S + d * 0.05 * s)
         obj = self.add("Sleeve." + side, v, f, self.m["Jersey"],
                        bones=["chest", "shoulder." + side, "upper_arm." + side])
+        if not hasattr(self, "sleeve_obj"):
+            self.sleeve_obj, self.sleeve_u = {}, {}
+        self.sleeve_obj[side] = obj
+        self.sleeve_u[side] = (0.014 * s + L) / Lua      # hem, in upper-arm lengths
         c = S + d * (L - 0.002 * s)
         ring = [c + (U * math.cos(a) * 1.04 + V * math.sin(a)) * (rh + 0.0015 * s)
                 for a in np.linspace(0, 2 * np.pi, 20, endpoint=False)]
@@ -143,7 +157,7 @@ class BodyMixin:
         self.add("SleeveTrim." + side, pv, pf, self.m["JerseyTrim"], weights_from=obj)
         return obj
 
-    def arm_profile(self, side, u0, u1, cuff=True, nseg=10, rings=18, grow=1.0):
+    def arm_profile(self, side, u0, u1, cuff=True, nseg=10, rings=18, grow=1.0, tuck=None):
         """Loft rings along shoulder->elbow->wrist; u in [0, 2] (0 shoulder,
         1 elbow, 2 wrist)."""
         s = self.s
@@ -168,6 +182,12 @@ class BodyMixin:
         pts = A([axis(u) for u in us])
         rx = geo.interp(ku, krx, us) * grow
         ry = geo.interp(ku, kry, us) * grow
+        if tuck:
+            # (u_end, scale): hidden under another sleeve up to u_end - 0.03
+            ue, sc = tuck
+            g = np.clip((ue - 0.03 - A(us)) / 0.05, 0.0, 1.0)
+            rx = rx * (1 - (1 - sc) * g)
+            ry = ry * (1 - (1 - sc) * g)
         if cuff:
             for i, u in enumerate(us):
                 if u >= u1 - 0.07:
@@ -188,13 +208,21 @@ class BodyMixin:
                       np.outer(np.sin(ang), V[i]) * rx[i] * 0.72)
         return rr, pts
 
-    def build_arm(self, side, mat, u0=0.12, u1=2.0, cuff=True, name=None):
-        rings, pts = self.arm_profile(side, u0, u1, cuff=cuff)
+    def build_arm(self, side, mat, u0=0.12, u1=2.0, cuff=True, name=None, tuck=None):
+        rings, pts = self.arm_profile(side, u0, u1, cuff=cuff, tuck=tuck)
         v, f = geo.loft(rings, None, None)
         f = orient_outward(v, f, pts[len(pts) // 2])
-        return self.add(name or ("Arm." + side), v, f, mat,
-                        bones=["shoulder." + side, "upper_arm." + side, "forearm." + side,
-                               "hand." + side])
+        obj = self.add(name or ("Arm." + side), v, f, mat,
+                       bones=["shoulder." + side, "upper_arm." + side, "forearm." + side,
+                              "hand." + side])
+        if u0 < self.sleeve_u.get(side, 0.0):
+            # under the jersey sleeve the arm moves with the sleeve (its
+            # weights), blending back to its own just below the hem
+            S, E, W = self.arm_axis(side)
+            uh = self.sleeve_u[side]
+            obj["share"] = json.dumps(dict(src=self.sleeve_obj[side].name, a=list(S), b=list(E),
+                                           u0=uh - 0.04, u1=uh + 0.24))
+        return obj
 
     def build_wristband(self, side, mat):
         s = self.s
@@ -443,12 +471,48 @@ class BodyMixin:
         # lower legs (cuff + inner fold) get the same axial weights as the
         # sock tucked under them (hero.axial_weights), so they cannot separate
         obj["axial"] = json.dumps(dict(kind="pants", u_mask=self.sock_top_u(hem_z, knee_pants)))
+        # waistband: moves with the tucked jersey under it (the torso's
+        # weights) down to the jersey hem, then blends to its own weights
+        zb = self.torso_bottom
+        obj["share"] = json.dumps(dict(src=self.torso_obj.name, a=[0, 0, zb], b=[0, 0, zb - 0.07 * s],
+                                       u0=-0.15, u1=1.0))
         self.pants_obj = obj
         self.surf["pants"] = geo.Surface(obj)
+        self.tuck_torso()
         self.hem_z = hem_z
         self.hem_r = rh * s
         self.knee_pants = knee_pants
         return obj
+
+    def tuck_torso(self):
+        """Keep the tucked-in jersey inside the pants: below the waistband the
+        torso is pulled in to 1.4 cm (x scale) inside the pant surface (heavy
+        bellies and backs used to stick out through the waistband)."""
+        s = self.s
+        P = geo.verts_of(self.pants_obj)
+        zt = float(P[np.abs(P[:, 0]) < 0.6 * self.p["pelvis_w"] * s, 2].max())
+        T = geo.verts_of(self.torso_obj)
+        surf = self.surf["pants"]
+        changed = False
+        for i, v in enumerate(T):
+            k = 1.0 - min(max((v[2] - (zt - 0.014 * s)) / (0.010 * s), 0.0), 1.0)
+            if k <= 0:
+                continue
+            r = math.hypot(v[0], v[1])
+            if r < 1e-6:
+                continue
+            d = A([v[0] / r, v[1] / r, 0.0])
+            loc, nor = surf.ray(A([0, 0, v[2]]), d, 1.0)
+            if loc is None:
+                continue
+            cap = math.hypot(loc[0], loc[1]) - 0.014 * s
+            if r > cap:
+                rn = r + (cap - r) * k
+                T[i, 0], T[i, 1] = d[0] * rn, d[1] * rn
+                changed = True
+        if changed:
+            geo.set_verts(self.torso_obj, T)
+            self.torso_obj.data.update()
 
     def build_pant_stripes(self):
         """JerseyTrim stripe down the outer side of each pant leg."""

@@ -762,7 +762,51 @@ def offset_loop(loop, d):
             continue
         cosh = max(np.dot(m, n1), 0.5)
         out.append(b + m * d / cosh)
-    return A(out)
+    return untangle_loop(A(out), sgn)
+
+
+def _seg_hit(a, b, c, d):
+    r, s = b - a, d - c
+    den = r[0] * s[1] - r[1] * s[0]
+    if abs(den) < 1e-14:
+        return None
+    q = c - a
+    t = (q[0] * s[1] - q[1] * s[0]) / den
+    u = (q[0] * r[1] - q[1] * r[0]) / den
+    if 1e-9 < t < 1 - 1e-9 and 1e-9 < u < 1 - 1e-9:
+        return a + r * t
+    return None
+
+
+def _loop_area(P):
+    return 0.5 * np.sum(P[:, 0] * np.roll(P[:, 1], -1) - np.roll(P[:, 0], -1) * P[:, 1])
+
+
+def untangle_loop(P, sgn, depth=0):
+    """Remove the swallowtails an offset makes where it is wider than a slit
+    or a thin notch (e.g. the open counter of a "4"): split the loop at its
+    first self-intersection and keep the parts that wind like the input
+    (the reversed ones are the inverted swallowtail loops)."""
+    n = len(P)
+    if n < 4 or depth > 40:
+        return P
+    for i in range(n):
+        a, b = P[i], P[(i + 1) % n]
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue
+            x = _seg_hit(a, b, P[j], P[(j + 1) % n])
+            if x is None:
+                continue
+            l1 = np.concatenate([P[:i + 1], [x], P[j + 1:]], 0)
+            l2 = np.concatenate([[x], P[i + 1:j + 1]], 0)
+            keep = [l for l in (l1, l2) if len(l) >= 3 and _loop_area(l) * sgn > 0]
+            if not keep:
+                return P
+            # one outline per input loop: keep the largest correctly-wound part
+            best = max(keep, key=lambda l: abs(_loop_area(l)))
+            return untangle_loop(best, sgn, depth + 1)
+    return P
 
 
 # ---------------------------------------------------------------------------

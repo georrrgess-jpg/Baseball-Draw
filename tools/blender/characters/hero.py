@@ -9,6 +9,8 @@ emblems) that copy the weights of the surface under them.
 Head frame (``P``): origin at the eye line on the head axis, unit = head
 height h (chin -> crown), x = character left, y = back (front is -y), z up.
 """
+import json
+
 import numpy as np
 
 import geo
@@ -140,8 +142,13 @@ class Hero(HeadMixin, BodyMixin, WearMixin):
         for sd in "LR":
             self.build_sleeve(sd)
             if cfg.get("undershirt") == "elbow":
-                self.build_arm(sd, m["Undershirt"], 0.12, 1.10, cuff=True, name="ArmUpper." + sd)
-                self.build_arm(sd, m["Skin"], 0.92, 2.0, cuff=False, name="Forearm." + sd)
+                up = self.build_arm(sd, m["Undershirt"], 0.12, 1.10, cuff=True,
+                                    name="ArmUpper." + sd)
+                fo = self.build_arm(sd, m["Skin"], 0.92, 2.0, cuff=False, name="Forearm." + sd,
+                                    tuck=(1.10, 0.84))
+                # the skin under the elbow cuff moves with the cuff
+                S, E, W = self.arm_axis(sd)
+                fo["share"] = json.dumps(dict(src=up.name, a=list(S), b=list(E), u0=1.02, u1=1.24))
             else:
                 self.build_arm(sd, m["Undershirt"])
             if cfg.get("wristbands"):
@@ -244,9 +251,77 @@ def axial_weights(obj, sk):
             vg.add([int(i)], float(W[i, j]), 'REPLACE')
 
 
+def _read_weights(obj):
+    names = [g.name for g in obj.vertex_groups]
+    W = np.zeros((len(obj.data.vertices), len(names)))
+    for v in obj.data.vertices:
+        for g in v.groups:
+            W[v.index, g.group] = g.weight
+    return names, W
+
+
+def _write_weights(obj, names, W):
+    if W.shape[1] > 4:
+        cut = np.argsort(-W, axis=1)[:, 4:]
+        np.put_along_axis(W, cut, 0.0, axis=1)
+    W[W < 0.005] = 0.0
+    W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
+    n = len(obj.data.vertices)
+    for j, b in enumerate(names):
+        vg = obj.vertex_groups.get(b) or obj.vertex_groups.new(name=b)
+        vg.remove(list(range(n)))
+        for i in np.nonzero(W[:, j] > 0)[0]:
+            vg.add([int(i)], float(W[i, j]), 'REPLACE')
+
+
+def share_weights(obj, src):
+    """Layered clothing: where ``obj`` lies under / against the garment
+    ``src`` it takes the garment's skin weights (inverse-distance over the 4
+    nearest garment vertices), blending back to its own weights past the
+    garment edge.  Both layers then get the same bone matrices, so the inner
+    one cannot poke through in any pose (undershirt arm under the jersey
+    sleeve, pants waistband over the tucked jersey hem).
+
+    obj["share"] = {"src": name, "a": [x,y,z], "b": [x,y,z], "u0": .., "u1": ..}:
+    u = projection on the axis a->b (0 at a, 1 at b); mask 1 below u0,
+    smoothstep to 0 at u1."""
+    import json
+    from mathutils import Vector
+    from mathutils.kdtree import KDTree
+    cfg = json.loads(obj["share"])
+    sv = geo.verts_of(src)
+    kd = KDTree(len(sv))
+    for i, p in enumerate(sv):
+        kd.insert(Vector(p), i)
+    kd.balance()
+    s_names, s_W = _read_weights(src)
+    names, W = _read_weights(obj)
+    for b in s_names:
+        if b not in names:
+            names.append(b)
+            W = np.hstack([W, np.zeros((len(W), 1))])
+    col = [names.index(b) for b in s_names]
+    P = geo.verts_of(obj)
+    a, b = A(cfg["a"]), A(cfg["b"])
+    d = b - a
+    u = (P - a) @ d / (d @ d)
+    m = 1.0 - _sstep(cfg["u0"], cfg["u1"], u)
+    T = np.zeros_like(W)
+    for i in np.nonzero(m > 0)[0]:
+        acc = np.zeros(len(s_names))
+        tot = 0.0
+        for co, idx, dist in kd.find_n(Vector(P[i]), 4):
+            w = 1.0 / max(dist, 1e-5) ** 2
+            acc += w * s_W[idx]
+            tot += w
+        T[i, col] = acc / tot
+    W = W * (1 - m)[:, None] + T * m[:, None]
+    _write_weights(obj, names, W)
+
+
 def apply_weights(parts, sk):
-    """Rigid / distance-based weights (axial for pant legs + socks), then copy
-    weights onto decals."""
+    """Rigid / distance-based weights (axial for pant legs + socks, shared
+    weights for layered clothing), then copy weights onto decals."""
     by_name = {p.name: p for p in parts}
     later = []
     for p in parts:
@@ -256,6 +331,10 @@ def apply_weights(parts, sk):
         skin.apply_weights(p, sk)
         if p.get("axial"):
             axial_weights(p, sk)
+    for p in parts:
+        if p.get("share") and not p.get("weights_from"):
+            import json
+            share_weights(p, by_name[json.loads(p["share"])["src"]])
     for p in later:
         src = by_name.get(p["weights_from"])
         geo.transfer_weights(src, p)
