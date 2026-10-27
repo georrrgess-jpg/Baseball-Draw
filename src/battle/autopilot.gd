@@ -34,7 +34,8 @@ var _boss_watch: Array = []
 # `--perf` samples the engine's process and physics time every frame, split by phase (CPU only:
 # a headless run has no GPU, so this is the game-logic and scene cost, not the rendering cost).
 var perf := false
-var perf_samples: Dictionary = {}   # phase -> {"process": [], "physics": [], "enemies": []}
+var perf_samples: Dictionary = {}   # phase -> {"process": [], "frame": [], "enemies": []}
+var _last_frame_us := 0
 
 
 func _ready() -> void:
@@ -45,6 +46,7 @@ func _ready() -> void:
 	play_cards = not ("--no-cards" in OS.get_cmdline_user_args())
 	quit_on_finish = bool(Session.run_config.get("auto_quit", true))   # the smoke test keeps going
 	perf = "--perf" in OS.get_cmdline_user_args()
+	battle.profile_sections = perf   # per-section timing of the battle loop (battle.prof)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--speed="):
 			Engine.time_scale = float(a.split("=")[1])
@@ -107,13 +109,16 @@ func _on_boss_spawned(e: Enemy) -> void:
 
 func _track(delta: float) -> void:
 	game_time += delta
-	if perf and battle.state == "wave":
+	var now_us := Time.get_ticks_usec()
+	if perf and battle.state == "wave" and _last_frame_us > 0:
 		var phase := "boss_wave" if battle.boss_alive != null else "wave"
-		var ps: Dictionary = perf_samples.get(phase, {"process": [], "physics": [], "enemies": []})
+		if not perf_samples.has(phase):
+			perf_samples[phase] = {"process": [], "frame": [], "enemies": []}
+		var ps: Dictionary = perf_samples[phase]
 		ps.process.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
-		ps.physics.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0)
+		ps.frame.append((now_us - _last_frame_us) / 1000.0)
 		ps.enemies.append(battle.enemies.size())
-		perf_samples[phase] = ps
+	_last_frame_us = now_us
 	if battle.state == "wave":
 		wave_time += delta
 		if battle.cards.energy >= CardSystem.MAX_ENERGY - 0.01:
@@ -147,11 +152,21 @@ func perf_summary() -> Dictionary:
 		var tot := 0.0
 		for v in pr:
 			tot += v
-		var ph := 0.0
-		for v in ps.physics:
-			ph += v
-		out[phase] = {"frames": n, "process_ms_avg": snappedf(tot / n, 0.01), "process_ms_p95": snappedf(pr[int(n * 0.95)], 0.01),
-			"process_ms_max": snappedf(pr[n - 1], 0.01), "physics_ms_avg": snappedf(ph / n, 0.01), "max_enemies": ps.enemies.max()}
+		var fr: Array = ps.frame.duplicate()
+		fr.sort()
+		var ft := 0.0
+		for v in fr:
+			ft += v
+		# Performance.TIME_PROCESS is unreliable with --fixed-fps; frame_ms is the wall time between frames.
+		out[phase] = {"frames": n, "frame_ms_avg": snappedf(ft / n, 0.01), "frame_ms_p95": snappedf(fr[int(n * 0.95)], 0.01), "frame_ms_max": snappedf(fr[n - 1], 0.01),
+			"max_enemies": ps.enemies.max()}
+	if battle.profile_sections and battle.prof.has("frames"):
+		var frames := float(battle.prof.frames)
+		var sec := {}
+		for k in battle.prof.keys():
+			if k != "frames":
+				sec[k] = snappedf(float(battle.prof[k]) / frames / 1000.0, 0.001)
+		out["battle_loop_ms_per_frame"] = sec
 	return out
 
 

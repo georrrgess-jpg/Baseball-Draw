@@ -3,8 +3,8 @@
   "growth_rate": 0.12,
   "max_level": 5,
   "cards": [
-    {"id": "heat_wave", "name": "Heat Wave", "category": "offense", "rarity": "rare", "cost": 5, "cooldown": 12, "target": "area", "radius": 2.0, "linked": "ace",
-     "params": {"damage": 110, "burn_dps": 22, "burn_time": 4.0, "width": 3.6, "length": 15.0}, "growth": ["damage", "burn_dps"],
+    {"id": "heat_wave", "name": "Heat Wave", "category": "offense", "rarity": "rare", "cost": 4, "cooldown": 12, "target": "area", "radius": 2.0, "linked": "ace",
+     "params": {"damage": 120, "burn_dps": 22, "burn_time": 4.0, "width": 4.4, "length": 20.0}, "growth": ["damage", "burn_dps"],
      "text": "Line of fire: {damage} damage, then burns runners.",
      "details": "A roaring line of fire from the caster toward the target. Burns runners for {burn_dps}/s. Curved runners take +50% fire damage.",
      "art": "A baseball wreathed in roaring flame streaking forward, leaving a wave of fire across infield dirt."},

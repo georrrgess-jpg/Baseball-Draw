@@ -68,9 +68,9 @@
    "title": "The Wall",
    "bio": "Nothing gets past Rico. Not fastballs, not runners, not excuses.",
    "stats": {
-    "damage": 18,
+    "damage": 24,
     "interval": 1.0,
-    "range": 7.5,
+    "range": 8.5,
     "throw_speed": 24.0,
     "accuracy": 75,
     "special_power": 1.0,
