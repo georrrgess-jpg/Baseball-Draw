@@ -125,6 +125,31 @@
    "text": "A walking wrecking ball. Smashes walls and stuns defenders it passes. Scores 2 runs."
   },
   {
+   "id": "base_stealer",
+   "name": "Base Stealer",
+   "hp": 60,
+   "speed": 3.0,
+   "armor": 0.0,
+   "evasion": 0.35,
+   "runs": 1,
+   "coins": 4,
+   "cost": 1.6,
+   "from_inning": 4,
+   "behavior": "stealer",
+   "model": "runner",
+   "scale": 0.95,
+   "colors": {
+    "JerseyTrim": "#FF3FB4",
+    "Socks": "#FF3FB4",
+    "Number": "#FF3FB4",
+    "Glow": "#FF4FD0",
+    "Jersey": "#2A1630"
+   },
+   "steal_speed": 2.3,
+   "threat": "medium",
+   "text": "Sprints for the next base whenever no defender is aiming at it. Slow, root or stun it mid-steal to catch it stealing."
+  },
+  {
    "id": "decoy",
    "name": "Decoy",
    "hp": 1,

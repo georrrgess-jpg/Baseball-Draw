@@ -7,14 +7,16 @@ extends RefCounted
 const GROUP_SIZE := {
 	"runner": Vector2i(3, 5), "sprinter": Vector2i(2, 4), "armored": Vector2i(1, 3), "swarmer": Vector2i(5, 7),
 	"jumper": Vector2i(2, 3), "trickster": Vector2i(1, 2), "captain": Vector2i(1, 1), "slugger": Vector2i(1, 1),
+	"base_stealer": Vector2i(2, 3),
 }
 
 const THEMES := {
-	"mixed": {"runner": 3.0, "sprinter": 1.5, "armored": 1.5, "swarmer": 1.2, "jumper": 1.2, "trickster": 1.0, "captain": 0.8, "slugger": 0.6},
-	"rush": {"runner": 2.0, "sprinter": 4.0, "jumper": 2.0, "swarmer": 1.5, "trickster": 1.0},
+	"mixed": {"runner": 3.0, "sprinter": 1.5, "armored": 1.5, "swarmer": 1.2, "jumper": 1.2, "trickster": 1.0, "captain": 0.8, "slugger": 0.6,
+		"base_stealer": 1.2},
+	"rush": {"runner": 2.0, "sprinter": 4.0, "jumper": 2.0, "swarmer": 1.5, "trickster": 1.0, "base_stealer": 2.5},
 	"heavy": {"runner": 1.0, "armored": 4.0, "slugger": 1.5, "captain": 1.0},
 	"swarm": {"swarmer": 5.0, "runner": 1.5, "sprinter": 1.0},
-	"squad": {"captain": 2.5, "runner": 3.0, "armored": 1.0, "trickster": 1.5},
+	"squad": {"captain": 2.5, "runner": 3.0, "armored": 1.0, "trickster": 1.5, "base_stealer": 1.0},
 }
 
 

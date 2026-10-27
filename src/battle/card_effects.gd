@@ -8,7 +8,10 @@ var battle: Battle
 
 ## Cards that resolve instantly (no caster wind-up): they get a cast acknowledgement pop.
 const DIRECT_CARDS := ["grand_slam_barrage", "shadow_change", "time_out", "changeup", "frost_field", "wall_of_dirt",
-	"base_shield", "bunt_trap", "field_vision", "diamond_aura", "rally_cry", "magnet_glove", "seventh_inning_stretch"]
+	"base_shield", "bunt_trap", "field_vision", "diamond_aura", "rally_cry", "magnet_glove", "seventh_inning_stretch",
+	"tag_at_the_plate", "bullpen_call", "hot_corner", "perfect_game"]
+const GOLD := Color(1.0, 0.82, 0.3)
+const TAG_TEAL := Color(0.35, 1.0, 0.85)
 
 
 func _init(p_battle: Battle) -> void:
@@ -434,6 +437,134 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			battle.notify("SEVENTH-INNING STRETCH!", Color(1.0, 0.9, 0.5))
 			fx.stretch()
 
+		"called_shot":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return
+			var df := nearest_thrower(e.global_position)
+			var last_pos := e.center()
+			Audio.play("crowd_ooh", -8.0)
+			fx.lock_on(e, Defender.RELEASE.special / 1.3 + 0.35, GOLD)
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					var again := battle.lead_runners(1)
+					if again.is_empty():
+						fx.called_shot_impact(last_pos, false)
+						fx.fizzle(last_pos, "NO TARGET")
+						return
+					e = again[0]
+				# The ball drops out of the sky onto where the runner will be when it lands.
+				var flight := 0.38
+				var land: Vector3 = e.route.position_at(minf(e.d + e.current_speed() * flight, e.route.length)) if e.route else e.global_position
+				var sky := land + Vector3(randf_range(-2.0, 2.0), 22.0, 5.0)
+				fx.called_shot_drop(sky, land, flight)
+				battle.projectiles.launch_at(sky, land + Vector3(0, e.height * 0.55, 0), sky.distance_to(land) / flight, {"big": true, "arc_mult": 0.0,
+					"color": GOLD, "trail": "comet"}, func(_at: Vector3) -> void:
+						if not is_instance_valid(e) or not e.alive:
+							fx.called_shot_impact(land, false)
+							return
+						var bonus := e.max_hp * p(card_id, "percent", level) / 100.0
+						if not e.is_boss:
+							bonus = minf(bonus, p(card_id, "max_bonus", level))
+						Audio.play("bat_crack", -2.0)
+						Audio.play("boss_slam", -10.0)
+						battle.shake(0.3)
+						fx.called_shot_impact(e.center(), e.is_boss)
+						battle.deal_damage(e, p(card_id, "damage", level) + bonus, {"source": df, "kind": "called", "card": card_id, "pierce": 1.0,
+							"dir": e.global_position - battle.vfx.camera_pos(), "at": e.center(), "color": GOLD})
+						if e.alive and e.is_boss:
+							# Bosses shrug off 40% of a slow (Enemy.current_speed); the stated slow is what they get.
+							e.apply_slow("called_shot", minf(p(card_id, "slow", level) / 100.0 / 0.6, 0.85), p(card_id, "slow_time", level) * control_mult()))
+			_cast(df, go, e.global_position, "special", card_id)
+
+		"line_drive":
+			var r := float(DB.card(card_id).get("radius", 2.4))
+			var df := nearest_thrower(point)
+			var go := func() -> void:
+				var from := _origin(df)
+				Audio.play("bat_crack", -3.0)
+				fx.line_drive_release(from, point)
+				battle.projectiles.launch_at(from, point + Vector3(0, 0.6, 0), 46.0, {"color": Color(1.0, 0.96, 0.85), "big": true, "arc_mult": 0.12, "trail": "comet"},
+					func(_at: Vector3) -> void:
+						Audio.play("explosion_small", -5.0)
+						battle.shake(0.15)
+						fx.line_drive_impact(point, r, (point - from).normalized())
+						var victims := battle.enemies_in_radius(point, r)
+						if victims.is_empty():
+							fx.fizzle(point)
+						for e: Enemy in victims:
+							battle.deal_damage(e, p(card_id, "damage", level), {"source": df, "kind": "throw", "card": card_id,
+								"dir": e.global_position - point, "at": e.center(), "color": Color(1.0, 0.9, 0.6)})
+							if e.alive:
+								e.knockback(p(card_id, "knockback", level)))
+			_cast(df, go, point, "throw", card_id)
+
+		"tag_at_the_plate":
+			Audio.play("glove_catch")
+			Audio.play("crowd_small", -6.0)
+			# A fresh tag replaces one that is still waiting (they don't stack).
+			for b in battle.buffs.duplicate():
+				if b.kind == "plate_tag":
+					battle.buffs.erase(b)
+			var dur := p(card_id, "duration", level)
+			battle.add_buff("plate_tag", 1.0, dur, {"stun": p(card_id, "boss_stun", level), "knockback": p(card_id, "knockback", level)})
+			battle.notify("PLATE BLOCKED!", TAG_TEAL)
+			fx.tag_plate(dur)
+			var catcher := nearest_thrower(Field.HOME)
+			if catcher and catcher.model.action == "":
+				catcher.model.play_action("catch", 1.0)
+
+		"bullpen_call":
+			Audio.play("card_draw")
+			Audio.play("heal_chime", -8.0)
+			battle.cards.add_energy(p(card_id, "energy", level))
+			battle.cards.draw(int(p(card_id, "draw", level)))
+			battle.notify("BULLPEN CALL!", Color(0.55, 1.0, 0.5))
+			fx.bullpen_call()
+
+		"hot_corner":
+			var df: Defender = target.get("defender")
+			if df == null:
+				return
+			Audio.play("fire_cast", -4.0)
+			for b in battle.buffs.duplicate():
+				if b.kind == "hot_corner" and b.get("defender") == df:
+					battle.buffs.erase(b)
+			var dur := p(card_id, "duration", level)
+			battle.add_buff("hot_corner", p(card_id, "damage_bonus", level) / 100.0, dur, {"defender": df})
+			fx.hot_corner(df, dur)
+
+		"perfect_game":
+			Audio.play("rally_horn")
+			Audio.play("crowd_roar", -4.0)
+			battle.notify("PERFECT GAME!", GOLD)
+			battle.hud_flash(Color(1.0, 0.85, 0.4, 0.22))
+			battle.crowd_cheer(1.0)
+			var tag_time := p(card_id, "tag_time", level)
+			battle.add_buff("perfect_tag", 1.0, tag_time, {"stun": 2.0, "knockback": 4.0})
+			fx.perfect_game(tag_time)
+			var victims: Array = []
+			for e: Enemy in battle.enemies:
+				if e.alive and e.id != "decoy":
+					victims.append(e)
+			if victims.is_empty():
+				fx.fizzle(Field.MOUND + Vector3(0, 1.5, 0), "NO RUNNERS")
+			# Bolts of light strike every runner in a quick sweep outward from the mound.
+			for e: Enemy in victims:
+				var delay := 0.35 + clampf(Field.v2(e.global_position).distance_to(Field.v2(Field.MOUND)) / 40.0, 0.0, 0.5)
+				battle.get_tree().create_timer(delay, false).timeout.connect(func() -> void:
+					if not is_instance_valid(battle) or not is_instance_valid(e) or not e.alive:
+						return
+					fx.perfect_strike(e)
+					battle.deal_damage(e, p(card_id, "damage", level), {"kind": "lightning", "card": card_id, "true": true,
+						"dir": e.global_position - Field.MOUND, "at": e.center(), "color": GOLD})
+					if e.alive and e.is_boss:
+						battle.deal_damage(e, e.max_hp * p(card_id, "boss_percent", level) / 100.0, {"kind": "lightning", "card": card_id,
+							"true": true, "pierce": 1.0, "at": e.center(), "color": GOLD})
+					if e.alive:
+						e.apply_stun(p(card_id, "stun", level) * control_mult()))
+			Audio.play("lightning_zap", -2.0)
+
 
 ## Has the caster perform its animation, then runs the effect at the impact frame.
 ## The wind-up visuals (anticipation) play over the same window.
@@ -460,7 +591,7 @@ func _cast(caster: Defender, effect: Callable, face_point: Vector3, anim := "spe
 ## path cards, the chosen defender for Diamond Aura, home plate otherwise.
 func _ack_point(card_id: String, target: Dictionary, point: Vector3) -> Vector3:
 	var df = target.get("defender")
-	if card_id == "diamond_aura" and df is Node3D and is_instance_valid(df):
+	if card_id in ["diamond_aura", "hot_corner"] and df is Node3D and is_instance_valid(df):
 		return (df as Node3D).global_position
 	if String(DB.card(card_id).get("target", "none")) in ["area", "path"]:
 		return point

@@ -422,6 +422,13 @@ func _build_payload(t: Enemy, fastball: bool) -> Dictionary:
 	var rico := maxf(ricochet, dyn_ricochet)
 	if rico > 0.0:
 		p.ricochet = rico
+	if battle.hot_corner_on(self):
+		# Hot Corner card: a red-hot throw that ignores armor and can't be dodged.
+		p.pierce = 1.0
+		p.accuracy = 999.0
+		p.trail = "fire"
+		p.color = Color(1.0, 0.42, 0.12)
+		p.fx = "hot"
 	return p
 
 

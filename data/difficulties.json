@@ -13,6 +13,7 @@
     {"id": "swift", "name": "Swift", "text": "+30% speed", "speed": 0.3},
     {"id": "tough", "name": "Tough", "text": "+60% health", "hp": 0.6},
     {"id": "plated", "name": "Plated", "text": "+25% armor", "armor": 0.25},
-    {"id": "slippery", "name": "Slippery", "text": "Hard to hit", "evasion": 0.35}
+    {"id": "slippery", "name": "Slippery", "text": "Hard to hit", "evasion": 0.35},
+    {"id": "shielded", "name": "Shielded", "text": "A bubble blocks the first hit", "shield": 1}
   ]
 }

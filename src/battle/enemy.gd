@@ -51,6 +51,12 @@ var airborne_t := 0.0
 var airborne_len := 0.0
 var blocked := false
 var vulnerable_t := 0.0
+var shield_hits := 0               # Shielded elites: hits the bubble still blocks
+var steal_t := 0.0                 # Base Stealer: seconds left in the current steal
+var steal_cd := 0.0
+var _unwatched_t := 0.0
+var _fx_bubble: MeshInstance3D
+var _bubble_k := 0.0
 
 # Behaviour timers
 var ability_t := 0.0
@@ -131,6 +137,7 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 			base_speed *= 1.0 + float(a.get("speed", 0.0))
 			armor = clampf(armor + float(a.get("armor", 0.0)), 0.0, 0.9)
 			evasion = clampf(evasion + float(a.get("evasion", 0.0)), 0.0, 1.0)
+			shield_hits = int(a.get("shield", 0))
 			coins = int(coins * 1.5) + 2
 	hp = max_hp
 	ability_cd = float(DB.difficulty(battle.run.difficulty_id).get("ability_cd", 1.0))
@@ -139,8 +146,12 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	model = CharacterModel.new()
 	add_child(model)
 	var model_id: String = data.get("model", enemy_id)
-	model.setup(model_id, {"accent": Color("#FF7A1A"), "body": Color("#2B2F36"), "shadows": is_boss,
-		"scale": Battle.UNIT_SCALE * (_fallback_scale() if not CharacterModel.has_model(model_id) else 1.0)})
+	var mopts := {"accent": Color("#FF7A1A"), "body": Color("#2B2F36"), "shadows": is_boss,
+		"scale": Battle.UNIT_SCALE * float(data.get("scale", 1.0)) * (_fallback_scale() if not CharacterModel.has_model(model_id) else 1.0)}
+	# Runner types that reuse another model wear their own colours (Base Stealer).
+	if data.has("colors"):
+		mopts.colors = data.colors
+	model.setup(model_id, mopts)
 	height = model.height
 	if enemy_id == "decoy":
 		model.set_ghost(0.55)
@@ -264,6 +275,8 @@ func current_speed() -> float:
 	var s := base_speed * (1.0 - clampf(slow, 0.0, 0.85)) * aura_speed
 	if dash_t > 0.0:
 		s *= 1.7
+	if steal_t > 0.0:
+		s *= float(data.get("steal_speed", 2.0))
 	return s
 
 
@@ -361,6 +374,13 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 	if not alive:
 		return 0.0
 	if untargetable_t > 0.0 and not info.get("true", false):
+		return 0.0
+	if shield_hits > 0 and amount > 0.0:
+		# Shielded elite: the bubble soaks the whole hit, then pops.
+		shield_hits -= 1
+		battle.vfx.bubble_pop(self, shield_hits <= 0)
+		Audio.play("shield_block", -8.0, 0.1, 80)
+		model.flash(0.4)
 		return 0.0
 	var mult := 1.0
 	var kind: String = info.get("kind", "throw")
@@ -592,6 +612,13 @@ func _tick_status(delta: float) -> void:
 	untargetable_t = maxf(0.0, untargetable_t - delta)
 	magnet_t = maxf(0.0, magnet_t - delta)
 	dash_t = maxf(0.0, dash_t - delta)
+	if steal_t > 0.0:
+		steal_t -= delta
+		# Slowed, rooted, stunned, frozen or pulled mid-steal: caught stealing.
+		if stun_t > 0.0 or freeze_t > 0.0 or (root_t > 0.0 and not is_airborne()) or magnet_t > 0.0 or not slows.is_empty() or zone_slow > 0.0:
+			_caught_stealing()
+		elif steal_t <= 0.0:
+			steal_t = 0.0
 	if vulnerable_t > 0.0:
 		vulnerable_t -= delta
 		if vulnerable_t <= 0.0:
@@ -681,7 +708,7 @@ func _move_anim() -> String:
 		return "idle"
 	if base_speed < 1.9 and model.has_anim("walk"):
 		return "walk"
-	if id == "sprinter" and model.has_anim("sprint"):
+	if (id == "sprinter" or steal_t > 0.0) and model.has_anim("sprint"):
 		return "sprint"
 	return "run"
 
@@ -796,6 +823,20 @@ func _update_status_fx(delta: float) -> void:
 			_fx_cage.visible = _cage_k > 0.0
 			_fx_cage.set_instance_shader_parameter("progress", _cage_k if rooted else 1.0)
 			_fx_cage.set_instance_shader_parameter("vis", 1.0 if rooted else _cage_k)
+	# Shielded elite: a hex bubble around the runner until its first hit pops it.
+	var bubble_target := 1.0 if shield_hits > 0 else 0.0
+	if _bubble_k != bubble_target:
+		_bubble_k = move_toward(_bubble_k, bubble_target, delta * (4.0 if shield_hits > 0 else 8.0))
+		if _fx_bubble == null and shield_hits > 0:
+			_fx_bubble = vfx.make_runner_bubble()
+			add_child(_fx_bubble)
+			var br := 0.62 * height / 1.8 * 1.3
+			_fx_bubble.scale = Vector3(br, height * 0.6, br)
+		if _fx_bubble:
+			_fx_bubble.visible = _bubble_k > 0.0
+			_fx_bubble.set_instance_shader_parameter("build", _bubble_k)
+	if steal_t > 0.0:
+		vfx.status_steal(global_position, route.direction_at(d), height, delta)
 	if burn_t > 0.0:
 		vfx.status_burn(global_position, height, delta)
 	if chilled and not frozen:
@@ -805,7 +846,7 @@ func _update_status_fx(delta: float) -> void:
 
 
 func _clear_status_fx() -> void:
-	for n in [_fx_ground, _fx_head, _fx_ice, _fx_cage]:
+	for n in [_fx_ground, _fx_head, _fx_ice, _fx_cage, _fx_bubble]:
 		if n:
 			n.visible = false
 	_fx_key = 0
@@ -859,6 +900,8 @@ func _tick_behavior(delta: float) -> void:
 				if victim:
 					ability_t = 3.0 * ability_cd
 					_start_telegraph("swing", global_position, 3.6, 0.55)
+		"stealer":
+			_tick_stealer(delta)
 		"boss_iron":
 			if ability_t <= 0.0:
 				ability_t = 8.0 * ability_cd
@@ -874,6 +917,46 @@ func _tick_behavior(delta: float) -> void:
 				if victim:
 					ability_t = 9.0 * ability_cd
 					_start_telegraph("homerun", victim.global_position, 3.6, 1.5)
+
+
+## Base Stealer: once no defender has been aiming at it for a moment, it takes off for the
+## next base at steal speed (the tell: a crouch flash, chevrons and magenta speed streaks).
+## A slow, root, stun, freeze or magnet during the steal catches it stealing: it is
+## stunned and takes +25% damage, ignoring armor, for a few seconds.
+func _tick_stealer(delta: float) -> void:
+	steal_cd -= delta
+	if steal_t > 0.0:
+		return
+	var watched := false
+	for df in battle.defenders:
+		if df.target == self:
+			watched = true
+			break
+	_unwatched_t = 0.0 if watched else _unwatched_t + delta
+	if steal_cd > 0.0 or _unwatched_t < 0.5 or remaining() < 3.0 or confuse_t > 0.0 or root_t > 0.0 \
+			or magnet_t > 0.0 or not slows.is_empty() or zone_slow > 0.0 or knock_t > 0.0:
+		return
+	steal_t = 1.8
+	steal_cd = 4.0 * ability_cd
+	_unwatched_t = 0.0
+	battle.vfx.steal_start(self)
+	Audio.play("swing_whoosh", -10.0, 0.1, 80)
+
+
+func _caught_stealing() -> void:
+	steal_t = 0.0
+	stun_t = maxf(stun_t, 1.5)
+	vulnerable_t = maxf(vulnerable_t, 3.0)
+	_rim_dirty = true
+	steal_cd = maxf(steal_cd, 5.0 * ability_cd)
+	battle.vfx.caught_stealing(self)
+	Audio.play("glove_catch", -6.0)
+	if battle.run:
+		battle.run.stats.caught_stealing = int(battle.run.stats.get("caught_stealing", 0)) + 1
+
+
+func is_stealing() -> bool:
+	return steal_t > 0.0
 
 
 func _nearest_defender(radius: float) -> Node3D:

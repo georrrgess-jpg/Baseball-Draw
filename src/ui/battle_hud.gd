@@ -476,7 +476,7 @@ func _build_practice_panel() -> void:
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	vb.add_child(grid)
-	for id in ["runner", "sprinter", "armored", "swarmer", "jumper", "trickster", "captain", "slugger", "iron_slugger", "phantom_captain", "grand_slammer"]:
+	for id in ["runner", "sprinter", "armored", "swarmer", "jumper", "base_stealer", "trickster", "captain", "slugger", "iron_slugger", "phantom_captain", "grand_slammer"]:
 		var b := UITheme.small_button(DB.enemy(id).name, Color(1.0, 0.4, 0.3), 18)
 		b.custom_minimum_size = Vector2(162, 34)
 		b.pressed.connect(func() -> void:
