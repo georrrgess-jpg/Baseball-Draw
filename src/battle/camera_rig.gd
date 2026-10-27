@@ -19,6 +19,8 @@ var _t_distance := distance
 var _shake := 0.0
 var _shake_t := 0.0
 var _orbit_speed := 0.0
+var _punch := 0.0          # amplitude of the current zoom kick
+var _punch_t := 1.0        # seconds since it started
 
 const MIN_DIST := 14.0
 const MAX_DIST := 62.0
@@ -72,6 +74,25 @@ func center() -> void:
 func shake(amount: float) -> void:
 	amount *= Settings.shake_scale()
 	_shake = maxf(_shake, amount)
+
+
+## A quick zoom kick toward the focus that springs back (crits, outs, boss hits).
+## Cosmetic, scaled by the screen-shake setting and rate-limited so streams of outs stay calm.
+func punch(amount: float) -> void:
+	amount = clampf(amount * Settings.shake_scale(), 0.0, 1.5)
+	if amount <= 0.01:
+		return
+	# A new kick only interrupts a running one when it is stronger or the old one has settled.
+	if _punch_t < 0.25 and amount <= _punch_level():
+		return
+	_punch = amount
+	_punch_t = 0.0
+
+
+func _punch_level() -> float:
+	if _punch_t < 0.05:
+		return _punch * _punch_t / 0.05
+	return _punch * exp(-(_punch_t - 0.05) * 9.0)
 
 
 func orbit(speed_deg: float) -> void:
@@ -130,6 +151,10 @@ func _process(delta: float) -> void:
 	if _shake > 0.0:
 		_shake = maxf(0.0, _shake - real_delta * 1.8)
 		_shake_t += real_delta * 40.0
+	if _punch > 0.0:
+		_punch_t += real_delta
+		if _punch_t > 0.7:
+			_punch = 0.0
 	_apply(false)
 
 
@@ -138,7 +163,9 @@ func _apply(_instant: bool) -> void:
 		return
 	var r := deg_to_rad(yaw)
 	var p := deg_to_rad(pitch)
-	var offset := Vector3(sin(r) * cos(p), -sin(p), cos(r) * cos(p)) * distance
+	# Punch: a fast push toward the focus (50 ms) that eases back out.
+	var kick := 1.0 - 0.05 * _punch_level()
+	var offset := Vector3(sin(r) * cos(p), -sin(p), cos(r) * cos(p)) * distance * kick
 	var pos := focus + offset
 	if _shake > 0.0:
 		pos += Vector3(sin(_shake_t * 1.3), sin(_shake_t * 1.7), cos(_shake_t * 1.1)) * _shake * 0.35

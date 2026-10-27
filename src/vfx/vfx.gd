@@ -52,6 +52,10 @@ var _bolt_mat: ShaderMaterial
 var _camera: Camera3D
 var _status_budget := 0
 var _dome: MeshInstance3D
+var _dome_flare := 0.0
+var _shield_ring: MeshInstance3D
+var _shield_pips: Array[MeshInstance3D] = []
+var _pip_k: Array[float] = []
 var _dome_shields := -1
 var _dome_build := 1.0
 var _dome_ripple := 1.0
@@ -695,6 +699,47 @@ func hit_impact(pos: Vector3, dir: Vector3, color: Color, strength := 0.6, crit 
 			impact_ring(Vector3(pos.x, 0.08, pos.z), Vector3.UP, Color(gold, 0.9), 1.5, 0.3)
 
 
+## Boss entrance: the gate blows open in the boss's colour (dust, debris, light rays).
+func boss_gate_burst(pos: Vector3, color: Color) -> void:
+	var g := Vector3(pos.x, 0.0, pos.z)
+	shockwave(g, 7.0, Color(color, 0.95), 0.6, 0.07)
+	shockwave(g, 4.0, Color(1.0, 0.95, 0.85, 0.9), 0.35, 0.05, 0.08)
+	ground_fx("rays", g, 5.0, Color(color, 0.85), Color.WHITE, 1.1)
+	burst("explosion", g + Vector3(0, 0.9, 0), color)
+	emit("dust", g + Vector3(0, 0.3, 0), 18, Color(0.6, 0.46, 0.33, 0.7), 6.0, 0.35, 1.6, 1.3)
+	spray("debris", g + Vector3(0, 0.5, 0), 14, Color(0.45, 0.34, 0.26), 9.0, Vector3.UP, 1.1, 0.9, 1.0)
+	spray("spark", g + Vector3(0, 1.0, 0), 24, color.lerp(Color.WHITE, 0.4), 12.0, Vector3.UP, 1.0, 1.0)
+	flash_light(g + Vector3(0, 2.5, 0), color, 6.0, 16.0, 0.6)
+
+
+## Boss defeated: a big burst, confetti, a ground ring and light rays. Each piece is short
+## (nothing lingers over the field for more than about a second and a half).
+func boss_finale(pos: Vector3, color: Color) -> void:
+	var g := Vector3(pos.x, 0.0, pos.z)
+	var c := pos + Vector3(0, 1.6, 0)
+	emit_one("flash", toward_camera(c, 1.0), Vector3.ZERO, Color(1.0, 0.95, 0.85, 0.95), 3.2, 1.2)
+	burst("explosion", c, color)
+	burst("crit", c)
+	sphere_pulse(g + Vector3(0, 0.2, 0), 4.0, Color(color, 0.55), 0.45)
+	shockwave(g, 10.0, Color(color, 0.95), 0.8, 0.05)
+	shockwave(g, 5.0, Color(1.0, 0.95, 0.8, 0.95), 0.45, 0.06, 0.1)
+	ground_fx("rays", g, 6.5, Color(color, 0.9), Color.WHITE, 1.4)
+	spray("spark", c, 36, Color(1.0, 0.9, 0.55), 15.0, Vector3.UP, 1.3, 1.2)
+	emit("magic", c, 24, color.lerp(Color.WHITE, 0.3), 7.0, 1.0)
+	burst("confetti", c + Vector3(0, 2.5, 0))
+	after(0.25, func() -> void: burst("confetti", c + Vector3(0, 3.5, 0)))
+	flash_light(c + Vector3(0, 1.5, 0), color, 8.0, 18.0, 0.7)
+
+
+## A glove pop on a catch / tag: a small white flash and ring at the glove with leather dust.
+func catch_pop(pos: Vector3, color := Color(1.0, 0.95, 0.85)) -> void:
+	var front := toward_camera(pos, 0.3)
+	emit_one("flash", front, Vector3.ZERO, Color(1.0, 0.97, 0.9, 0.85), 0.75, 0.55)
+	emit_one("ring", front, Vector3.ZERO, Color(color, 0.95), 0.9, 0.6)
+	spray("spark", front, 6, color.lerp(Color.WHITE, 0.5), 5.0, Vector3.UP, 1.2, 0.6, 0.45)
+	emit("dust", pos, 3, Color(0.7, 0.55, 0.4, 0.5), 1.5, 0.3, 1.0, 0.6)
+
+
 ## A thin shock ring at `pos` whose plane faces `normal` (e.g. along a throw).
 func impact_ring(pos: Vector3, normal: Vector3, color: Color, radius: float, time := 0.25) -> void:
 	var mi := _take("ring")
@@ -718,7 +763,8 @@ func fizzle(pos: Vector3, text := "NO EFFECT", color := Color(0.8, 0.82, 0.88)) 
 	emit_one("ring", toward_camera(p, 0.3), Vector3.ZERO, Color(color, 0.7), 1.1, 0.9)
 	shockwave(Vector3(p.x, 0.0, p.z), 1.6, Color(color, 0.85), 0.4, 0.06, 0.0, true)
 	if text != "":
-		text_popup(p + Vector3(0, 0.8, 0), text, color, 0.8, 1.1)
+		# Readable (full popup size, held a little longer) but muted grey, so it stays secondary.
+		text_popup(p + Vector3(0, 0.9, 0), text, color.lerp(Color.WHITE, 0.15), 1.0, 1.35)
 	Audio.play("swing_whoosh", -18.0, 0.1, 150)
 
 
@@ -1107,6 +1153,23 @@ func live_ribbon(pts_fn: Callable, color: Color, width: float, life: float, dela
 	an.kind = "bolt"
 
 
+## Throw follow-through: a faint swoosh that trails the throwing hand for a moment after the
+## release, plus a small glint where the ball leaves the hand.
+func arm_swoosh(model: Node3D, color: Color, life := 0.18) -> void:
+	if model == null or not is_instance_valid(model) or _scale < 0.35:
+		return
+	var pts := PackedVector3Array()
+	var start: Vector3 = model.hand_position()
+	pts.append(start)
+	emit_one("glow", start, Vector3.ZERO, Color(color.lerp(Color.WHITE, 0.6), 0.75), 0.45, 0.35)
+	live_ribbon(func(_k: float) -> PackedVector3Array:
+		if is_instance_valid(model):
+			pts.insert(0, model.hand_position())
+			if pts.size() > 7:
+				pts.resize(7)
+		return pts, Color(color.lerp(Color.WHITE, 0.55), 0.8), 0.07, life)
+
+
 ## Points on an arc from a to b bulging `lift` metres upward.
 static func arc_points(a: Vector3, b: Vector3, lift: float, n := 16) -> PackedVector3Array:
 	var pts := PackedVector3Array()
@@ -1196,11 +1259,16 @@ func status_magnet(pos: Vector3, to_center: Vector3, h: float, delta: float) -> 
 			back * 6.0, Color(1.0, 0.4, 0.3), 0.8, 0.7)
 
 
-# ---------------------------------------------------------------- shield dome
+# ---------------------------------------------------------------- base shields
 
-## Hex-cell energy dome over home plate while Base Shields are up. Battle toggles its
-## visibility and `strength`; VFX animates build-up, hit ripples and the break.
-func make_shield_dome() -> MeshInstance3D:
+## Base Shields at home plate: a low dashed ring around the plate plus one shield pip per
+## shield standing on the ring's sides (never over the plate). The hex dome only flares up
+## for a moment when a shield is raised or blocks a run. Battle owns the root node; VFX
+## polls run.shields and animates everything.
+func make_shield_dome() -> Node3D:
+	var root := Node3D.new()
+	root.name = "ShieldMarker"
+	add_child(root)
 	var mi := MeshInstance3D.new()
 	var sm := SphereMesh.new()
 	sm.radius = 2.5
@@ -1218,9 +1286,37 @@ func make_shield_dome() -> MeshInstance3D:
 	mi.set_instance_shader_parameter("mode", 0.0)
 	mi.set_instance_shader_parameter("build", 1.0)
 	mi.set_instance_shader_parameter("ripple", Vector4(0, 0, 1, 1))
-	add_child(mi)
+	mi.visible = false
+	root.add_child(mi)
 	_dome = mi
-	return mi
+	_shield_ring = make_owned("ring")
+	_shield_ring.position = Vector3(0, 0.07, 0)
+	_shield_ring.scale = Vector3(SHIELD_RING_R, 1, SHIELD_RING_R)
+	_shield_ring.set_instance_shader_parameter("color", Color(0.35, 0.88, 1.0, 0.9))
+	_shield_ring.set_instance_shader_parameter("mode", 1.0)
+	_shield_ring.set_instance_shader_parameter("params", Vector4(0.035, 0.05, 0.35, 18.0))
+	_shield_ring.set_instance_shader_parameter("progress", 0.0)
+	_shield_ring.visible = false
+	root.add_child(_shield_ring)
+	for i in 3:
+		var pip := make_owned("glyph")
+		pip.scale = Vector3.ONE * 0.95
+		pip.set_instance_shader_parameter("color", Color(0.45, 0.9, 1.0, 1.0))
+		pip.set_instance_shader_parameter("anim", Vector4(0.4, 14, 0, 0))
+		pip.visible = false
+		root.add_child(pip)
+		_shield_pips.append(pip)
+		_pip_k.append(0.0)
+	return root
+
+
+const SHIELD_RING_R := 2.7
+const _PIP_ANGLES := [PI, 0.0, PI * 0.5]   # left, right, then behind the plate (catcher side)
+
+
+func _pip_rest(i: int) -> Vector3:
+	var a: float = _PIP_ANGLES[i]
+	return Vector3(cos(a) * SHIELD_RING_R, 0.62, sin(a) * SHIELD_RING_R)
 
 
 func _update_dome(delta: float) -> void:
@@ -1229,22 +1325,61 @@ func _update_dome(delta: float) -> void:
 	var s: int = battle.run.shields
 	if _dome_shields < 0:
 		_dome_shields = s
+		for i in _shield_pips.size():
+			_pip_k[i] = 1.0 if i < s else 0.0
 	if s != _dome_shields:
 		if s > _dome_shields:
-			if _dome_shields == 0:
-				_dome_build = 0.0
-			_dome_ripple = 0.0
-			_dome.set_instance_shader_parameter("ripple", Vector4(0, 1, 0, 0))
+			_dome_build = 0.0
+			_dome_flare = 1.0
+			_dome_ripple = 1.0
+			_dome.set_instance_shader_parameter("ripple", Vector4(0, 1, 0, 1))
 		else:
+			for i in range(s, _dome_shields):
+				if i < _shield_pips.size():
+					_pip_burst(_shield_pips[i].global_position)
 			_shield_hit(s == 0)
 		_dome_shields = s
+	var rd := delta / maxf(Engine.time_scale, 0.01)
+	# Pips pop in / out; the ring shows while any shield is up and flares on events.
+	var tt := Time.get_ticks_msec() / 1000.0
+	for i in _shield_pips.size():
+		var target := 1.0 if i < s else 0.0
+		_pip_k[i] = move_toward(_pip_k[i], target, rd / (0.25 if target > 0.0 else 0.12))
+		var pip := _shield_pips[i]
+		pip.visible = _pip_k[i] > 0.01
+		if pip.visible:
+			var k: float = _pip_k[i]
+			var pop := 1.0 + 0.5 * sin(k * PI) * float(target > 0.0)
+			pip.position = _pip_rest(i) + Vector3(0, 0.08 * sin(tt * 2.2 + i * 1.7), 0)
+			pip.scale = Vector3.ONE * 0.95 * k * pop
+			pip.set_instance_shader_parameter("color", Color(0.45 + 0.55 * _dome_flare, 0.9 + 0.1 * _dome_flare, 1.0, 1.0))
+	var ring_target := (0.55 + 0.45 * _dome_flare) if s > 0 else _dome_flare
+	var ring_k: float = _shield_ring.get_instance_shader_parameter("progress")
+	ring_k = move_toward(ring_k, ring_target, rd * 4.0)
+	_shield_ring.visible = ring_k > 0.01
+	_shield_ring.set_instance_shader_parameter("progress", ring_k)
+	# The dome is only a moment's flare (raised / hit), so it never hides the plate for long.
+	if _dome_flare > 0.0:
+		_dome_flare = maxf(0.0, _dome_flare - rd / 1.1)
+	_dome.visible = _dome_flare > 0.0
+	if _dome.visible:
+		var f := _dome_flare
+		(_dome.material_override as ShaderMaterial).set_shader_parameter("strength", 1.3 * smoothstep(0.0, 0.45, f) * (0.6 if reduce_flashes else 1.0))
 	if _dome_build < 1.0:
-		_dome_build = minf(1.0, _dome_build + delta / 0.9)
+		_dome_build = minf(1.0, _dome_build + rd / 0.45)
 		_dome.set_instance_shader_parameter("build", _dome_build)
 	if _dome_ripple < 1.0:
-		_dome_ripple = minf(1.0, _dome_ripple + delta / 0.7)
+		_dome_ripple = minf(1.0, _dome_ripple + rd / 0.7)
 		var r: Vector4 = _dome.get_instance_shader_parameter("ripple")
 		_dome.set_instance_shader_parameter("ripple", Vector4(r.x, r.y, r.z, _dome_ripple))
+
+
+## A spent shield pip bursts into shards.
+func _pip_burst(pos: Vector3) -> void:
+	var c := Color(0.45, 0.9, 1.0)
+	emit_one("flash", pos, Vector3.ZERO, Color(c, 0.9), 0.9, 0.8)
+	spray("shard", pos, 8, Color.WHITE, 5.0, Vector3.UP, 1.2, 0.5, 0.8)
+	glyph(pos, 15, 1.3, c, 0.8, 0.0, 0.9)
 
 
 func _shield_hit(broken: bool) -> void:
@@ -1262,6 +1397,9 @@ func _shield_hit(broken: bool) -> void:
 	dir.y = 0.0
 	dir = dir.normalized() if dir.length() > 0.1 else Vector3(0, 0, -1)
 	dir = (dir + Vector3(0, 0.45, 0)).normalized()
+	_dome_flare = 1.0
+	_dome_build = 1.0
+	_dome.set_instance_shader_parameter("build", 1.0)
 	_dome_ripple = 0.0
 	_dome.set_instance_shader_parameter("ripple", Vector4(dir.x, dir.y, dir.z, 0.0))
 	var hit := home + dir * 2.5
@@ -1269,8 +1407,6 @@ func _shield_hit(broken: bool) -> void:
 	emit_one("flash", hit, Vector3.ZERO, Color(c, 0.9), 1.0, 1.0)
 	spray("spark", hit, 18, c.lerp(Color.WHITE, 0.3), 9.0, dir, 0.8)
 	flash_light(hit, c, 5.0, 8.0, 0.35)
+	shockwave(home, SHIELD_RING_R * 1.4, c, 0.45, 0.05)
 	if broken:
-		ring_emit("shard", home + Vector3(0, 1.2, 0), 1.8, 18, Color.WHITE, 5.0, 4.0, 0.7, 1.0)
-		spray("magic", home + Vector3(0, 1.5, 0), 24, c, 6.0, Vector3.UP, 1.4)
-		shockwave(home, 4.5, c, 0.6)
-		glyph(home + Vector3(0, 3.2, 0), 15, 1.6, c, 1.0)
+		ring_emit("shard", home + Vector3(0, 1.0, 0), 1.8, 12, Color.WHITE, 4.0, 3.5, 0.6, 0.9)

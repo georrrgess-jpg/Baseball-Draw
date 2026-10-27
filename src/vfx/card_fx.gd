@@ -558,7 +558,9 @@ func diving_catch(from: Vector3, point: Vector3, r: float) -> void:
 
 # ---------------------------------------------------------------- utility
 
-## A glowing aura that follows a defender for the length of a buff.
+## A glowing aura that follows a defender for the length of a buff. It lands bright for
+## about half a second, then settles into a quiet ground ring so long buffs don't cover
+## the field.
 func defender_aura(df: Node3D, color: Color, dur: float, radius := 1.3, kind := "ring") -> void:
 	if df == null or not is_instance_valid(df):
 		return
@@ -569,7 +571,7 @@ func defender_aura(df: Node3D, color: Color, dur: float, radius := 1.3, kind := 
 	if kind == "ring":
 		mi.set_instance_shader_parameter("color", color)
 		mi.set_instance_shader_parameter("mode", 1.0)
-		mi.set_instance_shader_parameter("params", Vector4(0.08, 0.3, 1.5, 6.0))
+		mi.set_instance_shader_parameter("params", Vector4(0.07, 0.12, 1.5, 6.0))
 		mi.set_instance_shader_parameter("progress", 0.0)
 	else:
 		mi.set_instance_shader_parameter("color", color)
@@ -577,20 +579,22 @@ func defender_aura(df: Node3D, color: Color, dur: float, radius := 1.3, kind := 
 		mi.set_instance_shader_parameter("anim", Vector4(0, 0, 1, 0))
 	vfx.animate(mi, dur, func(n: Node3D, k: float) -> void:
 		var tt := k * dur
-		var vis := smoothstep(0.0, 0.3, tt) * (1.0 - smoothstep(dur - 0.6, dur, tt))
-		var pulse := 0.85 + 0.15 * sin(tt * 4.0)
+		var vis := smoothstep(0.0, 0.2, tt) * (1.0 - smoothstep(dur - 0.6, dur, tt))
+		var settle := 1.0 - 0.5 * smoothstep(0.4, 1.1, tt)
+		var pulse := 0.88 + 0.12 * sin(tt * 4.0)
 		var m := n as MeshInstance3D
 		if kind == "ring":
-			m.set_instance_shader_parameter("progress", vis * pulse)
+			m.set_instance_shader_parameter("progress", vis * settle * pulse)
 		else:
-			m.set_instance_shader_parameter("anim", Vector4(k, vis, 1.0, 0.0)))
+			m.set_instance_shader_parameter("anim", Vector4(k, vis * (0.55 + 0.45 * settle), 1.0, 0.0)))
 
 
 func twin_play(caster: Node3D, dur: float) -> void:
 	var col := Color(0.35, 1.0, 0.55)
 	var c: Vector3 = _flat(caster.global_position) if caster and is_instance_valid(caster) else Field.HOME
-	vfx.shockwave(c, 30.0, col, 1.2, 0.03)
-	vfx.flash_light(c + Vector3(0, 2.0, 0), col, 4.0, 10.0, 0.5)
+	# One quick sweep (not a field-wide ring that hangs around).
+	vfx.shockwave(c, 12.0, col, 0.55, 0.035)
+	vfx.flash_light(c + Vector3(0, 2.0, 0), col, 4.0, 10.0, 0.4)
 	# Two orbs spiralling up from the caster.
 	for side in [0.0, PI]:
 		for i in 10:
@@ -632,19 +636,18 @@ func diamond_aura(df: Node3D, radius: float, dur: float) -> void:
 			vfx.emit_one("magic", _flat(df.global_position) + Vector3(cos(a) * d, randf_range(0.2, 1.6), sin(a) * d), Vector3(0, 0.8, 0), Color(0.75, 0.95, 1.0), 1.0, 1.0))
 
 
+## Rally Cry: a short shout from every defender (a small bubble, the shout icon and a quick
+## light shaft) and one thin wave from the mound; then only a quiet ring under each defender.
 func rally_cry(dur: float) -> void:
 	var col := Color(1.0, 0.82, 0.3)
-	var c := Field.HOME + Vector3(0, 1.5, 0)
-	for i in 3:
-		vfx.sphere_pulse(c, 5.0 + i * 3.0, Color(col, 0.45), 0.6, i * 0.16)
-		vfx.shockwave(Field.HOME, 18.0 + i * 8.0, col, 0.9, 0.04, i * 0.16)
-	vfx.glyph(c + Vector3(0, 2.0, 0), 9, 2.4, col, 1.0)
+	vfx.shockwave(Field.MOUND, 20.0, col, 0.7, 0.03)
 	for df in battle.defenders:
 		var p: Vector3 = _flat(df.global_position)
-		vfx.beam(p, 0.8, 5.0, col, 0.7, 0.2)
-		vfx.glyph(df.model.head_position() + Vector3(0, 0.9, 0), 6, 1.2, Color(1.0, 0.85, 0.35), 1.0, 0.25, 0.8)
+		vfx.sphere_pulse(p + Vector3(0, 0.3, 0), 1.9, Color(col, 0.5), 0.4, 0.05)
+		vfx.beam(p, 0.7, 3.5, col, 0.5, 0.1)
+		vfx.glyph(df.model.head_position() + Vector3(0, 0.9, 0), 9, 1.2, Color(1.0, 0.85, 0.35), 0.9, 0.1, 0.8)
 		defender_aura(df, Color(col, 0.8), dur, 1.3)
-		vfx.after(0.25, func() -> void:
+		vfx.after(0.15, func() -> void:
 			if is_instance_valid(df):
 				vfx.ring_emit("magic", p + Vector3(0, 0.3, 0), 0.8, 10, col, 0.5, 3.5, 1.0, 1.0))
 
