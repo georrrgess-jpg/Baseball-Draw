@@ -138,7 +138,7 @@ static func build(colors: Dictionary, label: String, steps_right: bool, rng: Ran
 	lab.font = load("res://assets/fonts/RussoOne-Regular.ttf")
 	lab.font_size = 96
 	lab.outline_size = 0
-	lab.modulate = Color(0.66, 0.66, 0.64)
+	lab.modulate = trim.lerp(Color(0.9, 0.9, 0.88), 0.25)
 	lab.shaded = true
 	lab.double_sided = false
 	var text_w := lab.font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, lab.font_size).x

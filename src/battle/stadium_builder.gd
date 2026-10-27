@@ -185,6 +185,12 @@ func _build_environment() -> void:
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.08
 	env.adjustment_saturation = 1.12
+	if theme.get("time", "") == "dusk_snow":
+		# Snow arenas washed out to grey from the battle camera: thinner haze, a little more contrast.
+		env.fog_density *= 0.5
+		env.volumetric_fog_density *= 0.5
+		env.adjustment_contrast = 1.16
+		env.adjustment_saturation = 1.2
 	Settings.configure_environment(env)
 	world_env.environment = env
 	root.add_child(world_env)

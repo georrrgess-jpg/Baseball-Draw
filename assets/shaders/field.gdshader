@@ -192,7 +192,7 @@ void fragment() {
 	vec2 od = vec2(abs(p.x) - 7.6, p.y - 9.0);
 	float odd = length(od);
 	float od_fill = 1.0 - smoothstep(0.78, 0.82, odd);
-	col = mix(col, team_color * (0.85 + 0.2 * n3), od_fill * 0.85);
+	col = mix(col, team_color * (0.85 + 0.2 * n3), od_fill * 0.6);
 	col = mix(col, chalk_color, band(odd, 0.8, 0.04, aa) * 0.9 * (0.8 + 0.2 * n3));
 
 	// ---- Placement-zone overlay (shown while positioning defenders).
