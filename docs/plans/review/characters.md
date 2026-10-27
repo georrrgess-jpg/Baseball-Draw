@@ -22,7 +22,7 @@ Priority = Severity (1–4) × Reach (1–4) ÷ Effort (S=1, M=2, L=3).
 | 1 | Undershirt arm pokes through the jersey sleeve (hem and armpit) whenever the arm is raised or across the body: 2–4 cm on all nine in throw / pitch / special / catch / ready, 6.4 cm on Bruno; visible as coloured spikes on the sleeve from behind | 3 | 4 | M | 6.0 | fixed |
 | 2 | Bruno's tucked jersey is wider than the waistband at the back: the pants poke through the jersey hem as white spikes in every pose; Jax / Rico / Bruno jersey pokes 2–3 cm through the waistband in throw / pitch | 3 | 3 | M | 4.5 | fixed |
 | 3 | Bruno / Maya elbow undershirt: the forearm skin pokes through the cuff at the elbow (jagged skin-coloured teeth) | 2 | 3 | S | 6.0 | fixed |
-| 4 | Back numbers with a "4" (Jax 34, Bruno 44): the gold outline was broken (missing below the crossbar, stray slivers beside it); the outline offset folded over the open counter of the 4 | 2 | 3 | S | 6.0 | fixed |
+| 4 | Back numbers: the gold outline was broken on "4" and "5" (Jax 34, Bruno 44, Maya 5: missing below the crossbar / top bar, stray slivers beside it) because the outline offset folded over the glyph's open counter; the white fill of the "4" had a hole at the crossbar (scanfill on a concave loop with collinear runs) | 2 | 3 | S | 6.0 | fixed |
 | 5 | Throw: little anticipation and a short follow-through (arm stops in front of the body, chest barely bends) | 2 | 4 | S | 8.0 | improved |
 | 6 | Catch: the glove just drifts back after the catch, no impact | 2 | 4 | S | 8.0 | improved ("pop") |
 | 7 | Celebrate: weak hop; the glove arm sticks straight out to the side (odd silhouette from the battle camera) | 2 | 3 | S | 6.0 | improved |
@@ -52,7 +52,9 @@ of a fully extended throwing arm), not visible in the renders.
   waistband (`tuck_torso`) and its hem is 5.5 cm shorter (still 7 cm under the waistband, clear of the hip
   crease); the forearm skin hidden under an elbow cuff is 16 % thinner.
 * **Outline offsets untangled** (`geo.untangle_loop`): offset loops are split at self-intersections and the
-  inverted swallowtails dropped, so number outlines (and cap emblem outlines) fill correctly.
+  inverted swallowtails dropped, so number outlines (and cap emblem outlines) fill correctly; single-loop
+  decals are triangulated by ear clipping (`geo.ear_clip`, scanfill kept for loops with holes), which fixes
+  the hole in the "4".
 * **Clips** (same names, lengths and event times; release 0.30 / 0.85, catch 0.25, impact 0.70 unchanged):
   * throw / special: deeper sink and coil at the cock (shoulders turn past the hips), glove arm reaches for
     the target and pulls into the chest at release, shoulders rotate through, chest bends over, throwing hand

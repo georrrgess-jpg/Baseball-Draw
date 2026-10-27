@@ -474,9 +474,65 @@ def tessellate(loops2d):
         offs = []
         for g in group:
             offs += list(range(starts[g], starts[g] + len(loops2d[g])))
+        if len(group) == 1:
+            # single loop: ear clipping (scanfill leaves holes in concave
+            # glyphs with collinear runs, e.g. the crossbar of a "4")
+            ears = ear_clip(loops2d[i])
+            if ears is not None:
+                tris += [tuple(offs[k] for k in t) for t in ears]
+                continue
         for t in mg.tessellate_polygon(vl):
             tris.append(tuple(offs[k] for k in t))
     return np.concatenate(loops2d, 0), tris
+
+
+def ear_clip(P):
+    """Ear-clipping triangulation of a simple 2D polygon (either winding).
+    Returns index triangles, or None if it gets stuck (self-intersecting)."""
+    P = A(P)
+    n = len(P)
+    sgn = 1.0 if _loop_area(P) > 0 else -1.0
+    idx = list(range(n))
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    out = []
+    guard = 0
+    while len(idx) > 3 and guard < 4 * n * n:
+        guard += 1
+        m = len(idx)
+        clipped = False
+        for k in range(m):
+            a, b, c = idx[k - 1], idx[k], idx[(k + 1) % m]
+            if cross(P[a], P[b], P[c]) * sgn <= 1e-14:
+                continue        # reflex or degenerate corner
+            ok = True
+            for j in idx:
+                if j in (a, b, c):
+                    continue
+                p = P[j]
+                if (cross(P[a], P[b], p) * sgn >= 0 and cross(P[b], P[c], p) * sgn >= 0 and
+                        cross(P[c], P[a], p) * sgn >= 0):
+                    ok = False
+                    break
+            if ok:
+                out.append((a, b, c))
+                idx.pop(k)
+                clipped = True
+                break
+        if not clipped:
+            # drop a collinear / degenerate vertex if there is one, else give up
+            for k in range(m):
+                a, b, c = idx[k - 1], idx[k], idx[(k + 1) % m]
+                if abs(cross(P[a], P[b], P[c])) <= 1e-12:
+                    idx.pop(k)
+                    clipped = True
+                    break
+            if not clipped:
+                return None
+    if len(idx) == 3:
+        out.append(tuple(idx))
+    return out
 
 
 def subdivide_tris(p2, tris, boundary, levels):

@@ -90,7 +90,7 @@
   "height": 1.813,
   "id": "ace",
   "kind": "defender",
-  "seconds": 52.8,
+  "seconds": 54.1,
   "tris": 19075
  },
  "armored": {
@@ -275,7 +275,7 @@
   "height": 1.954,
   "id": "bruno",
   "kind": "defender",
-  "seconds": 45.0,
+  "seconds": 53.8,
   "tris": 17972
  },
  "captain": {
@@ -460,8 +460,8 @@
   "height": 1.777,
   "id": "dex",
   "kind": "defender",
-  "seconds": 51.6,
-  "tris": 19737
+  "seconds": 49.0,
+  "tris": 19725
  },
  "grand_slammer": {
   "anims": {
@@ -643,7 +643,7 @@
   "height": 1.709,
   "id": "hana",
   "kind": "defender",
-  "seconds": 54.0,
+  "seconds": 57.4,
   "tris": 19334
  },
  "iron_slugger": {
@@ -826,7 +826,7 @@
   "height": 1.921,
   "id": "jax",
   "kind": "defender",
-  "seconds": 52.4,
+  "seconds": 54.3,
   "tris": 19548
  },
  "jumper": {
@@ -1009,7 +1009,7 @@
   "height": 1.927,
   "id": "kai",
   "kind": "defender",
-  "seconds": 51.3,
+  "seconds": 49.2,
   "tris": 19276
  },
  "maya": {
@@ -1103,7 +1103,7 @@
   "height": 1.732,
   "id": "maya",
   "kind": "defender",
-  "seconds": 52.4,
+  "seconds": 51.6,
   "tris": 19950
  },
  "nova": {
@@ -1197,8 +1197,8 @@
   "height": 1.75,
   "id": "nova",
   "kind": "defender",
-  "seconds": 50.8,
-  "tris": 19596
+  "seconds": 47.9,
+  "tris": 19572
  },
  "phantom_captain": {
   "anims": {
@@ -1382,7 +1382,7 @@
   "height": 1.756,
   "id": "rico",
   "kind": "defender",
-  "seconds": 68.7,
+  "seconds": 64.4,
   "tris": 19650
  },
  "runner": {
