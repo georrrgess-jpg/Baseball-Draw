@@ -35,6 +35,8 @@ func _run() -> void:
 	test_waves()
 	test_rewards_and_progression()
 	test_packs()
+	test_economy()
+	test_tools()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -255,6 +257,13 @@ func test_rewards_and_progression() -> void:
 	ok(int(Profile.data.division) == div + 1, "winning the promotion challenge promotes")
 
 
+# ---------------------------------------------------------------- economy (Update 5)
+
+func test_economy() -> void:
+	section("economy tuning")
+	pass
+
+
 # ---------------------------------------------------------------- battle
 
 func test_packs() -> void:
@@ -469,8 +478,43 @@ func test_battle_systems() -> void:
 	for cid in DB.card_order:
 		await _test_card(cid)
 	_clear()
+	# Balance statistics: damage and outs are credited to the card that caused them.
+	var imp: Dictionary = battle.run.card_impact
+	for cid in ["power_throw", "thunderbolt", "grand_slam_barrage", "sky_hook"]:
+		ok(float(imp.get(cid, {}).get("damage", 0.0)) > 0.0, "%s damage is credited to the card (%s)" % [cid, imp.get(cid, {})])
+	ok(not imp.has("field_vision"), "buff cards are not credited with damage")
 	battle.queue_free()
 	await _wait(0.2)
+
+
+# ---------------------------------------------------------------- tools (Update 5)
+
+func test_tools() -> void:
+	section("smoke test and balance tools")
+	var all_ok := {"menu": true, "battle": true, "played": true, "results": true, "saved": true, "reloaded": true, "errors": 0}
+	ok(SmokeTest.verdict(all_ok) == "PASS", "smoke test passes when every step completes without errors")
+	var missing := all_ok.duplicate()
+	missing.reloaded = false
+	ok(SmokeTest.verdict(missing).begins_with("FAIL") and "reloaded" in SmokeTest.verdict(missing), "a missing step fails the smoke test and names it")
+	var errs := all_ok.duplicate()
+	errs.errors = 2
+	errs.first_error = "boom"
+	ok(SmokeTest.verdict(errs).begins_with("FAIL") and "boom" in SmokeTest.verdict(errs), "logged errors fail the smoke test")
+	ok(SmokeTest.verdict({}).begins_with("FAIL"), "an empty run fails the smoke test")
+	var counter := SmokeTest.ErrorCounter.new()
+	OS.add_logger(counter)
+	push_warning("smoke-test logger check: this warning is expected and ignored")
+	var after_warning := counter.count
+	push_error("smoke-test logger check: this error is expected")
+	OS.remove_logger(counter)
+	ok(after_warning == 0 and counter.count == 1, "the smoke test counts errors but not warnings (%d, %d)" % [after_warning, counter.count])
+	var r := RunState.create(Session.new_run_config("quick"))
+	r.add_card_impact("power_throw", 120.0, 1)
+	r.add_card_impact("power_throw", 30.0)
+	r.add_card_impact("", 999.0, 5)
+	ok(is_equal_approx(float(r.card_impact.power_throw.damage), 150.0) and int(r.card_impact.power_throw.outs) == 1 and r.card_impact.size() == 1,
+		"card impact accumulates per card and ignores uncredited damage")
+	ok(not r.to_dict().has("card_impact"), "card impact statistics are not saved with the run")
 
 
 func _clear() -> void:

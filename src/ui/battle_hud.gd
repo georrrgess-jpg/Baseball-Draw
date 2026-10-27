@@ -174,6 +174,7 @@ func _build_top() -> void:
 	cbox.add_child(_top_coins)
 	row2.add_child(cbox)
 	_top_score = UITheme.label("0", 18, UITheme.MUTED, UITheme.font_body_bold())
+	# Not shown in the compact scoreboard (kept for the score text); freed with the HUD, see _exit_tree.
 
 
 func _vsep() -> ColorRect:
@@ -1242,3 +1243,10 @@ class HandTray:
 				var t := "NEXT CARD"
 				var tw := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
 				draw_string(f, r.get_center() + Vector2(-tw * 0.5, 6), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.45))
+
+
+func _exit_tree() -> void:
+	# _top_score is never added to the tree, so it would outlive the HUD (an orphan Label that kept a
+	# font and its glyph textures alive: the "ObjectDB instances leaked at exit" warning).
+	if is_instance_valid(_top_score) and not _top_score.is_inside_tree():
+		_top_score.free()

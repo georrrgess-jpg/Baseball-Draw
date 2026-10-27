@@ -44,6 +44,8 @@ var stats := {
 }
 var finished := false
 var won := false
+## Damage and outs credited to the card that caused them (balance statistics, not saved).
+var card_impact: Dictionary = {}
 
 
 static func create(cfg: Dictionary) -> RunState:
@@ -145,6 +147,15 @@ func add_damage(defender_id: String, amount: float) -> void:
 	if defender_id == "":
 		return
 	stats.damage_by[defender_id] = float(stats.damage_by.get(defender_id, 0.0)) + amount
+
+
+func add_card_impact(card_id: String, damage: float, outs := 0) -> void:
+	if card_id == "":
+		return
+	var c: Dictionary = card_impact.get(card_id, {"damage": 0.0, "outs": 0})
+	c.damage = float(c.damage) + damage
+	c.outs = int(c.outs) + outs
+	card_impact[card_id] = c
 
 
 func add_out(defender_id: String) -> void:

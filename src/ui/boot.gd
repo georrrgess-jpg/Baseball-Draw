@@ -3,6 +3,8 @@ extends Control
 ## Command-line flags (after `--`) support automated testing:
 ##   --test-battle=<mode>   jump straight into a battle
 ##   --auto                 let the battle play itself (auto-start waves, autoplay cards)
+##   --smoke-test           release-build check: menu, a Quick Defense autopilot game, save/reload (CI)
+##   --deck=a,b,...  --seed=N  fixed deck / run seed for balance simulations (tools/balance)
 
 func _ready() -> void:
 	var bg := ColorRect.new()
@@ -23,6 +25,9 @@ func _ready() -> void:
 		s.out_dir = shots
 		s.times = shot_times
 		get_tree().root.add_child.call_deferred(s)
+	if "--smoke-test" in args:
+		get_tree().root.add_child.call_deferred(SmokeTest.new())
+		return
 	if "--perf-test" in args:
 		var pt: Node = load("res://tests/perf_test.gd").new()
 		get_tree().root.add_child.call_deferred(pt)
@@ -44,6 +49,11 @@ func _ready() -> void:
 					cfg.start_inning = int(b.split("=")[1])
 				if b.begins_with("--start-wave="):
 					cfg.start_wave = int(b.split("=")[1])
+				# Balance simulation (tools/balance): a fixed deck and seed.
+				if b.begins_with("--deck="):
+					cfg.deck = Array(b.split("=")[1].split(",")).filter(func(id: String) -> bool: return DB.cards.has(id))
+				if b.begins_with("--seed="):
+					cfg.seed = int(b.split("=")[1])
 			Session.start(cfg)
 			return
 		if a.begins_with("--scene="):

@@ -715,6 +715,7 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 	var src: Defender = info.get("source") if info.get("source") is Defender else null
 	var src_id := src.id if src and is_instance_valid(src) else ""
 	run.add_out(src_id)
+	run.add_card_impact(str(info.get("card", "")), 0.0, 1)
 	if src and is_instance_valid(src):
 		src.outs += 1
 	var coin := int(round(e.coins * (1.0 + run.modifier_total("coin_mult"))))

@@ -357,7 +357,7 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> bool:
 	# dir / at / color only drive the runner's hit reaction (Enemy._hit_feedback).
 	var dealt := t.take_damage(float(p.damage), {"source": source, "kind": "fire" if p.get("fire", false) else "throw",
 		"crit": p.get("crit", false), "pierce": p.get("pierce", 0.0), "dir": p.get("_dir", Vector3.ZERO), "at": at,
-		"color": p.get("color", Color.WHITE)})
+		"color": p.get("color", Color.WHITE), "card": p.get("card", "")})
 	battle.on_damage_dealt(source, t, dealt, p.get("crit", false))
 	Audio.play("crit_hit" if p.get("crit", false) else "ball_hit", -4.0 if p.get("crit", false) else -7.0, 0.08, 40)
 	if p.get("crit", false):
@@ -406,7 +406,7 @@ func hit_chain_continue(t: Enemy, p: Dictionary, at: Vector3) -> void:
 	cp.chained = chained + [nxt]
 	battle.vfx.cards.chain_arc(at, nxt.center(), Color(1.0, 0.95, 0.4))
 	var dealt := nxt.take_damage(float(cp.damage), {"source": p.get("source"), "kind": "lightning", "dir": nxt.center() - at,
-		"color": Color(1.0, 0.95, 0.4)})
+		"color": Color(1.0, 0.95, 0.4), "card": p.get("card", "")})
 	battle.on_damage_dealt(p.get("source"), nxt, dealt, false)
 	if cp.chain > 0:
 		hit_chain_continue(nxt, cp, nxt.center())
