@@ -133,7 +133,7 @@ func _start() -> void:
 			get_tree().create_timer(hold, false).timeout.connect(func() -> void:
 				if is_instance_valid(df):
 					df.s_range = rng)
-		get_tree().create_timer(_arg_f("--fx-slow", 2.6), false).timeout.connect(func() -> void:
+		get_tree().create_timer(_arg_f("--fx-slow", 1.6), false).timeout.connect(func() -> void:
 			for e in battle.enemies:
 				if e.is_stealing():
 					e.apply_slow("curveball", 0.4, 2.0)

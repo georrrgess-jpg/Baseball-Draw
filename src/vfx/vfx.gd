@@ -1259,7 +1259,7 @@ const BUBBLE_AMBER := Color(1.0, 0.62, 0.22)
 ## Shielded elite: an amber hex bubble around the runner (Enemy drives `build`).
 func make_runner_bubble() -> MeshInstance3D:
 	var mi := make_owned("pulse")
-	mi.set_instance_shader_parameter("color", Color(BUBBLE_AMBER, 0.9))
+	mi.set_instance_shader_parameter("color", Color(BUBBLE_AMBER * 0.5, 1.0))
 	mi.set_instance_shader_parameter("mode", 0.0)
 	mi.set_instance_shader_parameter("build", 0.0)
 	mi.set_instance_shader_parameter("ripple", Vector4(0, 0, 1, 1))

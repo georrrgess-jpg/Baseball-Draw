@@ -830,8 +830,8 @@ func _update_status_fx(delta: float) -> void:
 		if _fx_bubble == null and shield_hits > 0:
 			_fx_bubble = vfx.make_runner_bubble()
 			add_child(_fx_bubble)
-			var br := 0.62 * height / 1.8 * 1.3
-			_fx_bubble.scale = Vector3(br, height * 0.6, br)
+			var br := height * 0.42
+			_fx_bubble.scale = Vector3(br, height * 0.72, br)
 		if _fx_bubble:
 			_fx_bubble.visible = _bubble_k > 0.0
 			_fx_bubble.set_instance_shader_parameter("build", _bubble_k)
