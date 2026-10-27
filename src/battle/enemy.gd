@@ -378,6 +378,8 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 	var before := clampf(hp / max_hp, 0.0, 1.0)
 	hp -= dmg
 	_last_hit_info = info
+	if info.has("card") and battle.run:
+		battle.run.add_card_impact(str(info.card), minf(dmg, dmg + hp))
 	_bar_hit(before, bool(info.get("dot", false)))
 	if dmg >= 1.0:
 		_hit_feedback(dmg, info)

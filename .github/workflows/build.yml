@@ -1,7 +1,8 @@
 name: Build Baseball Draw
 
 # Builds the Windows (and Linux) game from source, runs the automated tests,
-# and uploads the playable builds as workflow artifacts.
+# uploads the playable builds as workflow artifacts, and smoke-tests both exports
+# (the Windows one on a windows-latest runner).
 # Runs on demand (Actions tab -> "Build Baseball Draw" -> Run workflow), on version
 # tags (v*), on pushes to main, and on any push whose commit message contains "[build]".
 on:
@@ -65,7 +66,16 @@ jobs:
           godot --headless --path . --export-release "Linux" build/linux/BaseballDraw.x86_64 > export_linux.log 2>&1 || { tail -40 export_linux.log; exit 1; }
           test -s build/windows/BaseballDraw.pck && test -s build/linux/BaseballDraw.pck
           ls -la build/windows build/linux
-          cp README.md build/windows/ && cp README.md build/linux/
+
+      # The exported Linux binary plays a short autopilot game, saves and reloads (see src/core/smoke_test.gd).
+      - name: Smoke test the Linux export
+        run: |
+          timeout 600 build/linux/BaseballDraw.x86_64 --headless -- --smoke-test 2>&1 | tee smoke_linux.log
+          grep -h "SMOKE TEST" smoke_linux.log >> "$GITHUB_STEP_SUMMARY"
+          grep -q "SMOKE TEST: PASS" smoke_linux.log
+
+      - name: Add the README
+        run: cp README.md build/windows/ && cp README.md build/linux/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -76,3 +86,39 @@ jobs:
         with:
           name: BaseballDraw-Linux
           path: build/linux/
+
+  # Runs the exported Windows game on a real Windows machine: main menu, a Quick Defense autopilot game
+  # at 4x speed, rewards, save and reload. Headless, so no GPU is needed; it fails the build on any error.
+  smoke-windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: BaseballDraw-Windows
+          path: game
+
+      - name: Smoke test BaseballDraw.exe
+        run: |
+          cd game
+          ls -la
+          # The .exe is a GUI program: its output goes to the log file, the exit code tells the result.
+          log="$(cygpath -w "$PWD/smoke.log")"
+          set +e
+          timeout 600 ./BaseballDraw.exe --headless --log-file "$log" -- --smoke-test > stdout.log 2>&1
+          code=$?
+          set -e
+          cat stdout.log smoke.log 2>/dev/null || true
+          {
+            echo "### Windows smoke test"
+            echo '```'
+            grep -h "SMOKE" smoke.log stdout.log 2>/dev/null || echo "no smoke-test output (exit code $code)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "exit code: $code"
+          test "$code" -eq 0
+          cat smoke.log stdout.log 2>/dev/null | grep -q "SMOKE TEST: PASS"

@@ -177,6 +177,7 @@ func _build_top() -> void:
 	cbox.add_child(_top_coins)
 	row2.add_child(cbox)
 	_top_score = UITheme.label("0", 18, UITheme.MUTED, UITheme.font_body_bold())
+	# Not shown in the compact scoreboard (kept for the score text); freed with the HUD, see _exit_tree.
 
 
 func _vsep() -> ColorRect:
@@ -1406,3 +1407,10 @@ class FormationCard:
 		draw_string(f, Vector2((size.x - tw) * 0.5, size.y - 8), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UITheme.GOLD if active else Color.WHITE)
 		if active:
 			draw_rect(Rect2(Vector2(2, 2), size - Vector2(4, 4)), Color(UITheme.GOLD, 0.9), false, 2.0)
+
+
+func _exit_tree() -> void:
+	# _top_score is never added to the tree, so it would outlive the HUD (an orphan Label that kept a
+	# font and its glyph textures alive: the "ObjectDB instances leaked at exit" warning).
+	if is_instance_valid(_top_score) and not _top_score.is_inside_tree():
+		_top_score.free()

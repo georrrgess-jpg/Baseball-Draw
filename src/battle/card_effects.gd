@@ -103,7 +103,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				if not is_instance_valid(e) or not e.targetable():
 					fx.lost_throw(_origin(df), last_pos, Color(1.0, 0.85, 0.4))
 					return
-				battle.projectiles.launch(_origin(df), e, 42.0, {"source": df, "damage": p(card_id, "damage", level),
+				battle.projectiles.launch(_origin(df), e, 42.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level),
 					"knockback": p(card_id, "knockback", level), "accuracy": 200.0, "big": true, "color": Color(1.0, 0.85, 0.4), "crit": true,
 					"fx": "power", "trail": "comet"})
 				fx.power_release(_origin(df), e.center())
@@ -125,7 +125,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 								battle.projectiles.launch_at(at, point + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), 18.0, {"arc_mult": 0.3, "color": Color(0.7, 0.9, 1.0), "trail": "comet"}, func(x: Vector3) -> void: fx.ball_impact("split", x, Color(0.7, 0.9, 1.0)))
 								continue
 							var v: Enemy = victims[i % victims.size()]
-							battle.projectiles.launch(at, v, 20.0, {"source": df, "damage": p(card_id, "damage", level), "accuracy": 200.0, "color": Color(0.7, 0.9, 1.0), "arc_mult": 0.3,
+							battle.projectiles.launch(at, v, 20.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level), "accuracy": 200.0, "color": Color(0.7, 0.9, 1.0), "arc_mult": 0.3,
 								"fx": "split", "trail": "comet"}))
 			_cast(df, go, point, "throw", card_id)
 
@@ -213,7 +213,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				var from := _origin(caster)
 				fx.thunderbolt(from, e.center())
 				battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "lightning", "card": card_id})
-				var payload := {"source": caster, "damage": p(card_id, "damage", level) * power, "chain": int(p(card_id, "chains", level)) + (1 if battle.buff_active("twin_play") else 0),
+				var payload := {"source": caster, "card": card_id, "damage": p(card_id, "damage", level) * power, "chain": int(p(card_id, "chains", level)) + (1 if battle.buff_active("twin_play") else 0),
 					"chain_mult": p(card_id, "falloff", level), "chained": [e]}
 				battle.projectiles.hit_chain_continue(e, payload, e.center())
 			_cast(caster, go, e.global_position, "special", card_id)
@@ -303,7 +303,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 					fx.fizzle(e.center() + Vector3(0, 0.6, 0), "IMMUNE" if e.is_boss else "SAFE!")
 				if picked:
 					battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "PICKED OFF!", Color(0.2, 1.0, 0.8), 0.8, 0.7)
-					e.die({"source": caster, "kind": "pickoff"})
+					e.die({"source": caster, "kind": "pickoff", "card": card_id})
 				else:
 					battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "throw", "card": card_id})
 				Audio.play("glove_catch")
@@ -421,7 +421,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 						fx.hook_whiff(_origin(caster))
 						return
 					e = again[0]
-				battle.projectiles.launch(_origin(caster), e, 30.0, {"source": caster, "damage": p(card_id, "damage", level) * power,
+				battle.projectiles.launch(_origin(caster), e, 30.0, {"source": caster, "card": card_id, "damage": p(card_id, "damage", level) * power,
 					"knockback": p(card_id, "pull", level), "accuracy": 200.0, "arc_mult": 3.5, "color": Color(0.3, 0.85, 1.0), "big": true,
 					"fx": "hook", "trail": "hook"})
 			_cast(caster, go, e.global_position, "special", card_id)

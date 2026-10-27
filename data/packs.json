@@ -3,23 +3,23 @@
  "packs": [
   {
    "id": "rookie", "name": "Rookie Pack", "tagline": "Three cards to grow your collection.",
-   "cards": 3, "price_coins": 150, "price_stars": 0, "for_sale": true,
+   "cards": 3, "price_coins": 200, "price_stars": 0, "for_sale": true,
    "color": "#2F7BE0", "color2": "#0E2A5C", "accent": "#9FD3FF",
-   "weights": {"common": 55, "uncommon": 30, "rare": 12, "epic": 2.5, "legendary": 0.5},
+   "weights": {"common": 56, "uncommon": 30, "rare": 12, "epic": 0.8, "legendary": 0.1},
    "slots": [{}, {}, {"min": "uncommon"}]
   },
   {
    "id": "pro", "name": "Pro Pack", "tagline": "Four cards with a guaranteed Rare or better.",
-   "cards": 4, "price_coins": 400, "price_stars": 0, "for_sale": true,
+   "cards": 4, "price_coins": 500, "price_stars": 0, "for_sale": true,
    "color": "#8A3BE0", "color2": "#2A0E57", "accent": "#E2B8FF",
-   "weights": {"common": 40, "uncommon": 32, "rare": 20, "epic": 6, "legendary": 2},
+   "weights": {"common": 41, "uncommon": 33, "rare": 21, "epic": 2.5, "legendary": 0.4},
    "slots": [{}, {}, {"min": "uncommon"}, {"min": "rare"}]
   },
   {
    "id": "champion", "name": "Champion Pack", "tagline": "Five cards with a guaranteed Epic or better.",
-   "cards": 5, "price_coins": 0, "price_stars": 35, "for_sale": true,
+   "cards": 5, "price_coins": 0, "price_stars": 50, "for_sale": true,
    "color": "#E8A317", "color2": "#5C2E00", "accent": "#FFF0B8",
-   "weights": {"common": 25, "uncommon": 30, "rare": 28, "epic": 12, "legendary": 5},
+   "weights": {"common": 26, "uncommon": 31, "rare": 30, "epic": 9, "legendary": 1.2},
    "slots": [{}, {"min": "uncommon"}, {"min": "uncommon"}, {"min": "rare"}, {"min": "epic"}]
   },
   {
