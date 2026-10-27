@@ -127,7 +127,7 @@
   {
    "id": "base_stealer",
    "name": "Base Stealer",
-   "hp": 60,
+   "hp": 85,
    "speed": 3.0,
    "armor": 0.0,
    "evasion": 0.35,
@@ -145,7 +145,7 @@
     "Glow": "#FF4FD0",
     "Jersey": "#2A1630"
    },
-   "steal_speed": 2.3,
+   "steal_speed": 2.5,
    "threat": "medium",
    "text": "Sprints for the next base whenever no defender is aiming at it. Slow, root or stun it mid-steal to catch it stealing."
   },
