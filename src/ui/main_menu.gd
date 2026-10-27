@@ -15,6 +15,9 @@ var _continue_btn: Button
 var _hero: Button
 var _profile_box: VBoxContainer
 var _caption: VBoxContainer
+var _right: VBoxContainer
+var _daily_countdown: Label
+var _countdown_t := 0.0
 ## Idle showcase: every few seconds one defender shows off and the camera leans toward them.
 var _show_t := 5.0
 var _focus := Vector3.ZERO
@@ -86,6 +89,7 @@ func _spawn_team() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_update_daily_countdown(delta)
 	# Slow cinematic drift in front of home plate: a gentle push-in on entry, then a lazy
 	# figure-eight sway. During a showcase the camera leans toward the defender showing off.
 	var push := 1.0 - exp(-_t * 0.6)
@@ -218,7 +222,8 @@ func _build_ui() -> void:
 		["CARDS & DECK", "deck", UITheme.BLUE, func() -> void:
 			Session.menu_tab = "deck"
 			Router.goto("deck_builder"),
-			"%d NEW" % Profile.fresh_card_count() if Profile.fresh_card_count() > 0 else "", UITheme.SCARLET],
+			"SET REWARD" if CollectionSets.claimable_count() > 0 else ("%d NEW" % Profile.fresh_card_count() if Profile.fresh_card_count() > 0 else ""),
+			UITheme.GOLD.darkened(0.3) if CollectionSets.claimable_count() > 0 else UITheme.SCARLET],
 		["UPGRADE CARDS", "upgrade", UITheme.GREEN, func() -> void: Router.goto("card_upgrades"),
 			"%d READY" % ready if ready > 0 else "", Color(0.16, 0.6, 0.35)],
 		["TEAM", "roster", UITheme.BLUE, func() -> void: Router.goto("roster"), "", UITheme.SCARLET],
@@ -343,15 +348,20 @@ func _group_label(text: String) -> Control:
 
 
 func _build_profile_panel() -> void:
+	# Right column: the profile panel, then the Daily Challenge highlight.
+	_right = VBoxContainer.new()
+	_right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_right.offset_left = -480.0
+	_right.offset_right = -40.0
+	_right.offset_top = 36.0
+	_right.custom_minimum_size = Vector2(440, 0)
+	_right.add_theme_constant_override("separation", 14)
+	ui.add_child(_right)
 	var p := UITheme.card_panel(Color(UITheme.GOLD, 0.35), 18, Color(0.04, 0.07, 0.12, 0.88))
-	p.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	p.offset_left = -480.0
-	p.offset_right = -40.0
-	p.offset_top = 36.0
-	p.custom_minimum_size = Vector2(440, 0)
-	ui.add_child(p)
+	_right.add_child(p)
 	UITheme.animate_in(p, 0.25)
+	_build_daily_panel()
 	_profile_box = VBoxContainer.new()
 	_profile_box.add_theme_constant_override("separation", 8)
 	p.add_child(_profile_box)
@@ -418,7 +428,7 @@ func _build_profile_panel() -> void:
 		pill.custom_minimum_size = Vector2(30, 0)
 		pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(pill)
-		var txt := UITheme.label("%s · %s · inn. %d" % [DB.mode(h.mode).name, DB.difficulty(h.difficulty).name, int(h.inning)], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body())
+		var txt := UITheme.label("%s · %s · inn. %d" % [DB.mode(str(h.mode)).name, DB.difficulty(str(h.difficulty)).name, int(h.inning)], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body())
 		txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		txt.clip_text = true
 		row.add_child(txt)
@@ -433,6 +443,79 @@ func _build_profile_panel() -> void:
 		nu.add_child(UITheme.icon_rect("lock", 20, Color(0.75, 0.85, 1.0)))
 		nu.add_child(UITheme.label(next_unlock, UITheme.FS_MIN + 1, Color(0.75, 0.85, 1.0)))
 		_profile_box.add_child(nu)
+
+
+# ---------------------------------------------------------------- daily challenge
+
+## Daily Challenge highlight: today's rules, best score, streak, countdown and a PLAY button
+## that opens the Play screen with the Daily Challenge selected.
+func _build_daily_panel() -> void:
+	const ACCENT := Color("#FF8A3D")
+	var rules := DailyChallenge.today_rules()
+	var played := DailyChallenge.played()
+	var p := UITheme.card_panel(Color(ACCENT, 0.85 if not played else 0.45), 16, Color(0.09, 0.06, 0.05, 0.9), 2)
+	p.name = "DailyPanel"
+	_right.add_child(p)
+	UITheme.animate_in(p, 0.4)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	p.add_child(vb)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	vb.add_child(head)
+	var ic := UITheme.icon_rect("calendar", 34, ACCENT.lightened(0.2))
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(ic)
+	var hv := VBoxContainer.new()
+	hv.add_theme_constant_override("separation", -6)
+	hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(hv)
+	hv.add_child(UITheme.label("DAILY CHALLENGE", 30, ACCENT.lightened(0.25), UITheme.font_display()))
+	var md := DailyChallenge.modifier_def(str(rules.modifier))
+	var sub := UITheme.label("%s · %d innings · %s" % [DB.difficulty(str(rules.difficulty)).name, int(rules.innings), str(md.get("name", ""))],
+		UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
+	sub.clip_text = true
+	hv.add_child(sub)
+	var bd := UITheme.badge("NEW TODAY" if not played else "BEST %s" % UITheme.format_int(DailyChallenge.best_score()),
+		ACCENT.darkened(0.2) if not played else Color(0.13, 0.4, 0.25))
+	bd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(bd)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	vb.add_child(row)
+	var info := VBoxContainer.new()
+	info.add_theme_constant_override("separation", 0)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(info)
+	var streak := DailyChallenge.current_streak()
+	var st := HBoxContainer.new()
+	st.add_theme_constant_override("separation", 6)
+	st.add_child(UITheme.icon_rect("fire", 20, ACCENT.lightened(0.2)))
+	st.add_child(UITheme.label("%d-day streak" % streak if streak > 0 else "Start a streak today", UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold()))
+	info.add_child(st)
+	_daily_countdown = UITheme.label("New challenge in %s" % DailyChallenge.countdown_text(), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+	info.add_child(_daily_countdown)
+	var go := UITheme.button("PLAY DAILY", "primary", UITheme.FS_LEAD, "play", ACCENT.darkened(0.15))
+	go.name = "DailyButton"
+	go.custom_minimum_size = Vector2(190, UITheme.BTN_H)
+	go.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	go.tooltip_text = "Open today's Daily Challenge on the Play screen"
+	go.pressed.connect(func() -> void:
+		Session.menu_tab = "daily"
+		Router.goto("play_menu"))
+	row.add_child(go)
+	if not played:
+		var pulse := p.create_tween().set_loops()
+		pulse.tween_property(p, "self_modulate", Color(1.18, 1.08, 0.95), 0.9).set_trans(Tween.TRANS_SINE)
+		pulse.tween_property(p, "self_modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
+
+
+func _update_daily_countdown(delta: float) -> void:
+	_countdown_t -= delta
+	if _countdown_t > 0.0 or _daily_countdown == null:
+		return
+	_countdown_t = 1.0
+	_daily_countdown.text = "New challenge in %s" % DailyChallenge.countdown_text()
 
 
 # ---------------------------------------------------------------- idle showcase

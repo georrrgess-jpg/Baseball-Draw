@@ -38,6 +38,7 @@ func _run() -> void:
 	test_packs()
 	test_economy()
 	test_tools()
+	await test_daily_mastery_sets()
 	await test_menus()
 	test_update5_content()
 	await test_battle_systems()
@@ -473,6 +474,193 @@ func test_pack_bundles() -> void:
 	var owned_id: String = res.cards[0].id
 	Profile.load_profile()
 	ok(int(Profile.data.packs_opened) == opened and Profile.is_card_owned(owned_id), "multi-open results survive save and load")
+
+
+# ---------------------------------------------------------------- daily, mastery, sets (Update 5)
+
+func test_daily_mastery_sets() -> void:
+	section("daily challenge, mastery, collection sets")
+	Profile.reset_profile()
+	# Seeding: the same date gives the same rules, other dates differ.
+	var day0 := "2026-10-27"
+	var a := DailyChallenge.rules_for(day0)
+	ok(str(a) == str(DailyChallenge.rules_for(day0)), "same date gives the same daily rules")
+	var differ := 0
+	var arenas := {}
+	var mods := {}
+	var formats := {}
+	var diffs := {}
+	for i in range(1, 41):
+		var r := DailyChallenge.rules_for(DailyChallenge.shift_date(day0, i))
+		if str(r) != str(a):
+			differ += 1
+		arenas[r.arena] = true
+		mods[r.modifier] = true
+		formats[r.format] = true
+		diffs[r.difficulty] = true
+	ok(differ == 40, "every other date gives different rules (%d of 40)" % differ)
+	ok(arenas.size() >= 4 and mods.size() >= 8 and formats.size() == 2 and diffs.size() >= 2,
+		"daily rules vary (%d stadiums, %d modifiers, %d formats, %d difficulties)" % [arenas.size(), mods.size(), formats.size(), diffs.size()])
+	ok(DailyChallenge.shift_date("2026-12-31", 1) == "2027-01-01" and DailyChallenge.days_between("2026-02-28", "2026-03-01") == 1, "date arithmetic crosses months and years")
+	var unique := {}
+	var deck_ok: bool = a.deck.size() == Profile.DECK_SIZE
+	for cid in a.deck:
+		unique[cid] = true
+		deck_ok = deck_ok and DB.cards.has(cid) and str(DB.card(cid).get("linked", "")) == ""
+	ok(deck_ok and unique.size() == Profile.DECK_SIZE, "daily deck has 8 different non-signature cards %s" % [a.deck])
+	ok(DB.difficulties.has(a.difficulty) and DB.arenas.has(a.arena) and not DailyChallenge.modifier_def(a.modifier).is_empty(), "daily rules use valid ids")
+	ok(DailyChallenge.countdown_text(3725) == "1h 02m" and DailyChallenge.seconds_to_next() <= 86400, "countdown to the next challenge")
+	# Config and run state.
+	DailyChallenge.date_override = day0
+	var cfg := Session.new_run_config("daily")
+	ok(cfg.get("daily", "") == day0 and cfg.deck == a.deck and int(cfg.seed) == int(a.seed) and cfg.arena == a.arena, "daily config carries the day's rules")
+	var run := RunState.create(cfg)
+	ok(run.is_daily() and run.max_innings == int(a.innings) and DailyChallenge.is_daily_mode(run.mode_id), "daily run has %d innings" % run.max_innings)
+	ok(run.card_level(a.deck[0]) == int(a.card_level), "daily cards play at level %d" % int(a.card_level))
+	var bosses_ok := true
+	for k in a.bosses.keys():
+		bosses_ok = bosses_ok and run.boss_for_inning(int(k)) == str(a.bosses[k])
+	ok(bosses_ok and run.boss_for_inning(1) == "", "daily bosses come from the rules %s" % [a.bosses])
+	# Daily-only modifiers work through the shared modifier code.
+	var found := {}
+	for i in 400:
+		var r := DailyChallenge.rules_for(DailyChallenge.shift_date(day0, i))
+		if r.modifier in ["power_surge", "bare_plate"] and not found.has(r.modifier):
+			found[r.modifier] = r.date
+	ok(found.size() == 2, "daily-only modifiers get picked (%s)" % [found])
+	if found.has("power_surge"):
+		var ps := RunState.create(DailyChallenge.config_for(found.power_surge))
+		ok(ps.modifier_total("energy_regen") >= 1.0, "Power Surge doubles energy regeneration")
+	if found.has("bare_plate"):
+		var bp := RunState.create(DailyChallenge.config_for(found.bare_plate))
+		ok(bp.shields == 0 and int(DB.difficulty(bp.difficulty_id).shields) > 0, "Bare Plate removes the base shields")
+	DailyChallenge.set_active(true)
+	ok(DB.endless_modifiers.has("power_surge"), "daily modifiers are listed while a daily game runs")
+	DailyChallenge.set_active(false)
+	ok(not DB.endless_modifiers.has("power_surge") and DB.endless_modifiers.has("speed_demons"), "daily modifiers never leak into Endless")
+	# The Continue Run slot is untouched.
+	Profile.data.current_run = {"config": {"mode": "standard"}, "inning": 4, "mode_id": "standard"}
+	Profile.store_run(run.to_dict())
+	ok(int(Profile.data.current_run.inning) == 4, "a daily game never replaces the saved run")
+	# Streak, best score and the once-per-day bonus.
+	var packs0 := Profile.pack_count()
+	var coins0 := int(Profile.data.coins)
+	run.score = 3000
+	var r1 := DailyChallenge.record_result(run, false)
+	ok(r1.first_today and int(r1.streak) == 1 and int(r1.best) == 3000, "first daily game starts a streak (%d)" % int(r1.streak))
+	ok(Profile.pack_count() == packs0 + 1 and int(Profile.data.coins) == coins0 + int(r1.bonus_coins) and int(r1.bonus_coins) > 0, "first game of the day gives coins and a pack")
+	run.score = 2000
+	var r2 := DailyChallenge.record_result(run, false)
+	ok(not r2.first_today and int(r2.best) == 3000 and not r2.new_best and Profile.pack_count() == packs0 + 1, "a second attempt keeps the best score and gives no bonus")
+	run.score = 5000
+	var r3 := DailyChallenge.record_result(run, true)
+	ok(r3.new_best and int(r3.best) == 5000 and Profile.pack_count() == packs0 + 2 and "pro" in r3.bonus_packs, "first win of the day gives a Pro Pack (%s)" % [r3.bonus_packs])
+	DailyChallenge.record_result(run, true)
+	ok(Profile.pack_count() == packs0 + 2 and int(DailyChallenge.day_record(day0).attempts) == 4, "the win bonus is given once per day")
+	var next := RunState.create(DailyChallenge.config_for(DailyChallenge.shift_date(day0, 1)))
+	ok(int(DailyChallenge.record_result(next, false).streak) == 2, "playing the next day extends the streak")
+	var gap := RunState.create(DailyChallenge.config_for(DailyChallenge.shift_date(day0, 3)))
+	var rg := DailyChallenge.record_result(gap, false)
+	ok(int(rg.streak) == 1 and int(rg.best_streak) == 2, "missing a day resets the streak (best stays 2)")
+	DailyChallenge.date_override = DailyChallenge.shift_date(day0, 4)
+	ok(DailyChallenge.current_streak() == 1, "streak still alive the day after")
+	DailyChallenge.date_override = DailyChallenge.shift_date(day0, 6)
+	ok(DailyChallenge.current_streak() == 0, "streak shows 0 after a missed day")
+	DailyChallenge.date_override = day0
+	# Mastery thresholds.
+	ok(CardMastery.stars_for(0) == 0 and CardMastery.stars_for(9) == 0 and CardMastery.stars_for(10) == 1 and CardMastery.stars_for(39) == 1
+		and CardMastery.stars_for(40) == 2 and CardMastery.stars_for(119) == 2 and CardMastery.stars_for(120) == 3 and CardMastery.stars_for(999) == 3,
+		"mastery stars at 10 / 40 / 120 plays")
+	ok(CardMastery.next_threshold(10) == 40 and CardMastery.next_threshold(120) == 0 and is_equal_approx(CardMastery.progress(25), 0.5), "mastery progress to the next star")
+	# A daily game through Rewards: mastery from card casts, daily record in the result.
+	Profile.data.cards.power_throw.plays = 8
+	var dr := RunState.create(DailyChallenge.config_for(DailyChallenge.shift_date(day0, 10)))
+	dr.score = 4100
+	dr.inning = 2
+	dr.stats["card_casts"] = {"power_throw": 3, "curveball": 1}
+	var res := Rewards.apply(dr, false)
+	ok(Profile.card_plays("power_throw") == 11 and CardMastery.stars("power_throw") == 1, "card casts add mastery (%d plays)" % Profile.card_plays("power_throw"))
+	var m0: Dictionary = res.mastery[0] if not res.mastery.is_empty() else {}
+	ok(res.mastery.size() == 2 and m0.get("id", "") == "power_throw" and int(m0.stars_after) == 1 and int(m0.stars_before) == 0, "the result lists mastery gains, star earners first")
+	ok(not res.daily.is_empty() and int(res.daily.score) == 4100 and res.daily.first_today, "the result carries the daily record")
+	ok(Profile.data.history[0].mode == dr.mode_id and int(res.rp) == 0, "daily games are in the history and give no rank points")
+	var prac := RunState.create(Session.new_run_config("quick"))
+	prac.stats["card_casts"] = {}
+	ok(Rewards.apply(prac, false).daily.is_empty(), "other modes have no daily record")
+	# Collection sets: once-only rewards.
+	ok(not CollectionSets.can_claim("offense") and CollectionSets.claim("offense") == "", "an incomplete set cannot be claimed")
+	var off := CollectionSets.cards_in("offense")
+	ok(off.size() > 0 and int(CollectionSets.progress("offense").total) == off.size(), "offense set lists %d cards" % off.size())
+	for cid in off:
+		Profile.grant_card(cid)
+	ok(CollectionSets.is_complete("offense") and CollectionSets.can_claim("offense"), "owning every offense card completes the set")
+	var pk0 := Profile.pack_count("pro")
+	ok(CollectionSets.claim("offense") == "pro" and Profile.pack_count("pro") == pk0 + 1, "claiming the set gives a Pro Pack")
+	ok(CollectionSets.claim("offense") == "" and Profile.pack_count("pro") == pk0 + 1 and not CollectionSets.can_claim("offense"), "a set reward is given only once")
+	Profile.save_now()
+	Profile.load_profile()
+	ok(CollectionSets.is_claimed("offense") and not CollectionSets.can_claim("offense"), "claimed sets survive save and load")
+	for cid in DB.card_order:
+		Profile.grant_card(cid)
+	ok(CollectionSets.reward_pack("all") == "champion" and CollectionSets.claim("all") == "champion", "the full collection gives a Champion Pack")
+	# Save migration: a save written before this update (no daily, sets or plays) loads cleanly.
+	var old := Profile.default_profile()
+	old.erase("daily")
+	old.erase("sets_claimed")
+	for cid in old.cards.keys():
+		old.cards[cid].erase("plays")
+	old.coins = 4321
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Profile.load_status == "ok" and int(Profile.data.coins) == 4321, "an old save loads (%s)" % Profile.load_status)
+	ok(int(Profile.data.daily.streak) == 0 and typeof(Profile.data.daily.days) == TYPE_DICTIONARY and Profile.data.sets_claimed.is_empty(), "old saves get empty daily records and sets")
+	ok(Profile.card_plays("power_throw") == 0 and CardMastery.stars("power_throw") == 0, "old saves start mastery at zero")
+	ok(DailyChallenge.current_streak() == 0 and not DailyChallenge.played(), "old saves have no daily games yet")
+	# Mangled daily data is repaired.
+	Profile.data.daily = {"streak": "3", "days": [1, 2]}
+	Profile.data.sets_claimed = {"bogus": "x"}
+	Profile._merge(Profile.data, {})
+	var d0: Dictionary = Profile.default_profile()
+	Profile._merge(d0, {"daily": {"streak": 2.0, "last_date": "2026-10-26", "days": {"2026-10-26": {"best": 10.0}, "bad": 5}}, "sets_claimed": {"bogus": "x"}, "version": 1})
+	Profile.data = d0
+	Profile._sanitize()
+	ok(int(Profile.data.daily.streak) == 2 and Profile.data.daily.days.size() == 1 and not Profile.data.sets_claimed.has("bogus"), "sanitize repairs daily records and set claims")
+	# The Results screen shows the daily tile and mastery moments.
+	var rs: Control = load("res://src/ui/results_screen.gd").new()
+	rs.result = {"won": true, "mode": "daily", "difficulty": "veteran", "arena": "steel_yard", "coins": 80, "xp": 150, "rp": 0,
+		"levels": 0, "innings_cleared": 3, "outs": 40, "runs": 1, "run_limit": 3, "score": 5200, "mvp": "ace", "defender_xp": {}, "packs": [],
+		"stats": {"cards_played": 6}, "daily": {"date": day0, "score": 5200, "best": 5200, "new_best": true, "streak": 3, "best_streak": 3,
+			"first_today": true, "bonus_coins": 150, "bonus_packs": ["rookie", "pro"], "attempts": 1},
+		"mastery": [{"id": "power_throw", "plays": 3, "before": 8, "after": 11, "stars_before": 0, "stars_after": 1}]}
+	add_child(rs)
+	await get_tree().process_frame
+	var texts := []
+	for l in rs.find_children("*", "Label", true, false):
+		texts.append((l as Label).text)
+	ok("DAILY CHALLENGE" in texts and "DAY STREAK" in texts and "CARD MASTERY" in texts, "results shows the daily record and card mastery")
+	ok(_find_text(rs, "RETRY DAILY"), "results offers RETRY DAILY")
+	rs.queue_free()
+	# Cards & Deck shows the set progress strip; Card Upgrades shows mastery.
+	Session.menu_tab = "deck"
+	var dbs: Control = load("res://src/ui/deck_builder.gd").new()
+	add_child(dbs)
+	await get_tree().process_frame
+	ok(dbs.find_children("Set_offense", "", true, false).size() == 1 and dbs.find_children("Set_all", "", true, false).size() == 1, "Cards & Deck shows set progress tiles")
+	dbs.queue_free()
+	DailyChallenge.date_override = ""
+	Profile.reset_profile()
+	await get_tree().process_frame
+
+
+func _find_text(n: Node, text: String) -> bool:
+	if (n is Button and (n as Button).text == text) or (n is Label and (n as Label).text == text):
+		return true
+	for c in n.get_children():
+		if _find_text(c, text):
+			return true
+	return false
 
 
 func test_menus() -> void:

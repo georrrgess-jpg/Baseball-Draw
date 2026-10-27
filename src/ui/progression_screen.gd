@@ -143,11 +143,12 @@ func _overview_tab() -> Control:
 	sp.add_child(sv)
 	sv.add_child(UITheme.section_header("CAREER STATS", "outs", UITheme.GOLD, UITheme.FS_H3))
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
 	sv.add_child(grid)
-	var wins := int(Profile.stat("wins_standard")) + int(Profile.stat("wins_quick")) + int(Profile.stat("wins_ranked"))
+	var wins := int(Profile.stat("wins_standard")) + int(Profile.stat("wins_quick")) + int(Profile.stat("wins_ranked")) \
+		+ int(Profile.stat("wins_daily")) + int(Profile.stat("wins_daily_long"))
 	var rows := [
 		["inning", int(Profile.stat("runs_played")), "Games played", UITheme.OFFWHITE],
 		["trophy", wins, "Wins", UITheme.GOLD],
@@ -155,6 +156,9 @@ func _overview_tab() -> Control:
 		["lightning", int(Profile.stat("double_plays")), "Double plays", UITheme.OFFWHITE],
 		["deck", int(Profile.stat("cards_played")), "Cards played", UITheme.OFFWHITE],
 		["wave", int(d.records.get("best_endless_inning", 0)), "Endless best inning", UITheme.PURPLE.lightened(0.3)],
+		["calendar", int(d.daily.get("best_streak", 0)), "Best daily streak", Color("#FF8A3D").lightened(0.2)],
+		["star", CardMastery.mastered_count(), "Cards mastered", UITheme.GOLD],
+		["collection", d.sets_claimed.size(), "Card sets completed", UITheme.OFFWHITE],
 	]
 	for row in rows:
 		var t := UITheme.stat_tile(row[0], UITheme.format_int(row[1]), row[2], row[3], 0)

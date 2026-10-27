@@ -1,0 +1,21 @@
+{
+  "_comment": "Daily Challenge: one seeded game per local calendar day. The date picks a format, difficulty, stadium (any stadium, locked ones too), a fixed 8-card deck from every card in the game (2 per category, no signature cards) and one modifier. Rewards come on top of the normal game rewards.",
+  "formats": [
+    {"id": "sprint", "mode": "daily", "name": "3-Inning Sprint", "weight": 2, "difficulties": ["standard", "veteran", "veteran", "legend"]},
+    {"id": "classic", "mode": "daily_long", "name": "5-Inning Classic", "weight": 1, "difficulties": ["standard", "standard", "veteran"]}
+  ],
+  "bosses": ["iron_slugger", "phantom_captain", "grand_slammer"],
+  "card_level": 3,
+  "modifier_pool": ["speed_demons", "iron_skin", "swarm_season", "fog_delay", "overtime", "heavy_hitters", "rain_delay",
+    "power_surge", "track_meet", "bare_plate", "quick_draw", "rocket_arms", "glass_cannon", "hot_streak"],
+  "modifiers": [
+    {"id": "power_surge", "name": "Power Surge", "text": "Energy regenerates twice as fast.", "energy_regen": 1.0},
+    {"id": "track_meet", "name": "Track Meet", "text": "Runners are 20% faster.", "enemy_speed": 0.2},
+    {"id": "bare_plate", "name": "Bare Plate", "text": "No base shields. Ever.", "start_shields": 0},
+    {"id": "quick_draw", "name": "Quick Draw", "text": "Cards are drawn 50% faster.", "draw_speed": 0.5},
+    {"id": "rocket_arms", "name": "Rocket Arms", "text": "Defender range +20%, runners +15% health.", "range": 0.2, "enemy_hp": 0.15},
+    {"id": "glass_cannon", "name": "Glass Cannon", "text": "Defenders +25% damage, runners +20% speed.", "damage": 0.25, "enemy_speed": 0.2},
+    {"id": "hot_streak", "name": "Hot Streak", "text": "Card cooldowns 30% shorter.", "card_cooldown": -0.3}
+  ],
+  "rewards": {"first_coins": 150, "first_pack": "rookie", "win_pack": "pro"}
+}

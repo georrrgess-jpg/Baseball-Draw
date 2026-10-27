@@ -30,6 +30,8 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 	var packs_before := Profile.pack_count()
 
 	var coins := int(round((run.coins_earned * COIN_SHARE + cleared * COINS_PER_INNING + (WIN_COINS if won else 0)) * mult))
+	# Daily Challenge bonus (first game of the day: coins + a Rookie Pack; first win: a Pro Pack)
+	# is added by DailyChallenge.record_result below and shown separately on the Results screen.
 	var xp := maxi(15, int(round((run.outs_total * 2.0 + cleared * 30 + (220 if won else 0)) * mult)))
 	Profile.add_coins(coins)
 	var levels := Profile.add_xp(xp)
@@ -105,9 +107,15 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 	var best_key := "best_score_" + run.mode_id
 	if run.score > int(Profile.data.records.get(best_key, 0)):
 		Profile.data.records[best_key] = run.score
-		if run.mode_id != "endless":
+		if run.mode_id != "endless" and not run.is_daily():
 			records.append("New best score for %s!" % mode.name)
 	Profile.refresh_unlocks()
+
+	# Card mastery (cosmetic) from the cards played, and the Daily Challenge record + bonus.
+	var mastery := CardMastery.apply_run(run)
+	var daily := {}
+	if run.is_daily():
+		daily = DailyChallenge.record_result(run, won)
 
 	var new_achievements: Array = []
 	for id in Profile.data.achievements.keys():
@@ -121,6 +129,7 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 		"defender_xp": def_xp, "mvp": mvp, "packs": Profile.data.packs.slice(packs_before), "rp": rp, "promoted": promoted,
 		"division_before": division_before, "records": records, "achievements": new_achievements,
 		"stats": run.stats.duplicate(true), "date": Time.get_datetime_string_from_system(),
+		"mastery": mastery, "daily": daily,
 	}
 	Profile.add_history({"won": won, "mode": run.mode_id, "difficulty": run.difficulty_id, "arena": run.arena_id,
 		"inning": run.inning, "score": run.score, "outs": run.outs_total, "runs": run.runs, "date": result.date})

@@ -9,7 +9,11 @@
     {"id": "practice", "name": "Practice Field", "innings": 0, "waves_per_inning": 0,
      "text": "Spawn any runner, test any card. No rewards, no risk.", "rewards": false, "reward_mult": 0.0},
     {"id": "ranked", "name": "Promotion Challenge", "innings": 3, "waves_per_inning": 3, "bosses": {"3": "phantom_captain"}, "inning_scale": 2.2,
-     "text": "Beat the division challenge to earn promotion.", "rewards": true, "reward_mult": 0.6}
+     "text": "Beat the division challenge to earn promotion.", "rewards": true, "reward_mult": 0.6},
+    {"id": "daily", "name": "Daily Challenge", "innings": 3, "waves_per_inning": 3, "bosses": {"3": "iron_slugger"}, "inning_scale": 2.4, "hidden": true,
+     "text": "Today's three-inning challenge: a fixed deck, a stadium and a twist. Same for every manager today.", "rewards": true, "reward_mult": 0.45},
+    {"id": "daily_long", "name": "Daily Challenge", "innings": 5, "waves_per_inning": 3, "bosses": {"3": "iron_slugger", "5": "phantom_captain"}, "inning_scale": 1.2, "hidden": true,
+     "text": "Today's five-inning challenge: a fixed deck, a stadium and a twist. Same for every manager today.", "rewards": true, "reward_mult": 0.7}
   ],
   "endless_modifiers": [
     {"id": "speed_demons", "name": "Speed Demons", "text": "Runners are 15% faster.", "enemy_speed": 0.15},

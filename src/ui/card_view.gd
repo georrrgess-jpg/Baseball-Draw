@@ -24,6 +24,9 @@ var owned := true:
 			_update_foil()
 		queue_redraw()
 var show_level := true
+## Mastery stars (0-3) drawn on the bottom-right frame edge; 3 adds the gold "mastered" trim.
+## -1 (the default, e.g. the battle hand) draws nothing. Cosmetic only.
+var mastery := -1
 var hotkey := ""
 var count_badge := ""
 var face_down := false:
@@ -267,6 +270,8 @@ func _draw() -> void:
 			var pc := Vector2(rect.position.x + (14 + i * 9) * s, rect.end.y - 2.5 * s)
 			draw_circle(pc, 3.6 * s, Color(0.02, 0.03, 0.06, 0.85))
 			draw_circle(pc, 2.6 * s, Color(UITheme.GOLD, dim) if i < level else Color(1, 1, 1, 0.18))
+	if mastery >= 1:
+		_draw_mastery(rect, s, dim)
 	# Linked defender badge
 	var linked: String = c.get("linked", "")
 	if linked != "":
@@ -346,6 +351,32 @@ func _draw_back() -> void:
 		var lw := 92.0 * s
 		var lh := lw * float(logo.get_height()) / float(logo.get_width())
 		draw_texture_rect(logo, Rect2(cc - Vector2(lw, lh) * 0.5, Vector2(lw, lh)), false)
+
+
+## Mastery: up to three stars on the bottom-right frame edge. A mastered card (three stars) gets
+## a gold outer rim, a fine inner gold line and its stars set on a gold plate.
+func _draw_mastery(rect: Rect2, s: float, dim: float) -> void:
+	var gold := Color(UITheme.GOLD, dim)
+	var mastered := mastery >= CardMastery.MAX_STARS
+	if mastered:
+		_rr_outline(rect.grow(2.2 * s), 14 * s, Color(1.0, 0.86, 0.4, 0.95 * dim), 2.4 * s)
+		_rr_outline(rect.grow(-3.4 * s), 9.5 * s, Color(1.0, 0.85, 0.35, 0.75 * dim), 1.1 * s)
+		var plate := Rect2(Vector2(rect.end.x - 44 * s, rect.end.y - 9 * s), Vector2(38, 13) * s)
+		_rr_fill(plate, 6 * s, Color(0.35, 0.22, 0.02, 0.95 * dim))
+		_rr_outline(plate, 6 * s, Color(1.0, 0.86, 0.4, dim), 1.2 * s)
+	for i in CardMastery.MAX_STARS:
+		var cpos := Vector2(rect.end.x - (13 + i * 11) * s, rect.end.y - 2.5 * s)
+		var on := i < mastery
+		_star(cpos, 5.6 * s, Color(0.02, 0.03, 0.06, 0.9))
+		_star(cpos, 4.3 * s, (Color(1.0, 0.95, 0.7, dim) if mastered else gold) if on else Color(1, 1, 1, 0.2 * dim))
+
+
+func _star(c: Vector2, r: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for k in 10:
+		var a := -PI / 2 + PI * k / 5.0
+		pts.append(c + Vector2(cos(a), sin(a)) * (r if k % 2 == 0 else r * 0.45))
+	draw_colored_polygon(pts, col)
 
 
 func _draw_corner_ornaments(rect: Rect2, s: float, col: Color, dim: float, legendary: bool) -> void:
