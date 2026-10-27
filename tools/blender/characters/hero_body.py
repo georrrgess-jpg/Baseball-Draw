@@ -886,6 +886,9 @@ class BodyMixin:
                                subdiv=sub)
             self.add_decal("Number%sOutline" % name, vv, ff, self.m["NumberOutline"],
                      weights_from=self.torso_obj)
-            vv, ff = geo.decal(surf, loops, c, u, v, n, 0.0026 * s, 0.0014 * s, depth=0.004 * s,
+            # fill raised well above the outline: their flat triangles sag
+            # differently on round backs (Bruno), and the outline must never
+            # show through the fill
+            vv, ff = geo.decal(surf, loops, c, u, v, n, 0.0040 * s, 0.0014 * s, depth=0.006 * s,
                                subdiv=sub)
             self.add_decal("Number" + name, vv, ff, self.m["Number"], weights_from=self.torso_obj)

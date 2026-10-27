@@ -54,7 +54,8 @@ of a fully extended throwing arm), not visible in the renders.
 * **Outline offsets untangled** (`geo.untangle_loop`): offset loops are split at self-intersections and the
   inverted swallowtails dropped, so number outlines (and cap emblem outlines) fill correctly; single-loop
   decals are triangulated by ear clipping (`geo.ear_clip`, scanfill kept for loops with holes), which fixes
-  the hole in the "4".
+  the hole in the "4"; the number fill sits 1.4 mm (× scale) higher above its outline so the outline's
+  flatter triangles cannot show through it on round backs (Bruno).
 * **Clips** (same names, lengths and event times; release 0.30 / 0.85, catch 0.25, impact 0.70 unchanged):
   * throw / special: deeper sink and coil at the cock (shoulders turn past the hips), glove arm reaches for
     the target and pulls into the chest at release, shoulders rotate through, chest bends over, throwing hand

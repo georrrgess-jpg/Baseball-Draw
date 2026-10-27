@@ -524,7 +524,7 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0143
+   "min_z": -0.0159
   },
   "hit": {
    "foot_slide": 0.0,
