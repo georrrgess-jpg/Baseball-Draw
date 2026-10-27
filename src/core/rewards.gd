@@ -3,6 +3,15 @@ extends RefCounted
 ## Converts a finished run into permanent progression: coins, account XP,
 ## defender XP, card packs, rank points, records, stats and history.
 
+# Tuned with tools/balance/economy.py (Update 5): about 7-9 packs and 2,000-2,500 coins per hour of play,
+# the whole collection in ~15-20 hours, the team at level 10 after ~12 hours.
+const COIN_SHARE := 0.35           # of the coins earned during the run
+const COINS_PER_INNING := 15
+const WIN_COINS := 100
+const DEFENDER_XP_SHARE := 0.3     # of the account XP, for every defender on the team
+const DEFENDER_XP_PER_OUT := 1
+
+
 static func innings_cleared(run: RunState, won: bool) -> int:
 	if won:
 		return run.inning
@@ -20,17 +29,17 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 	var division_before := int(Profile.data.division)
 	var packs_before := Profile.pack_count()
 
-	var coins := int(round((run.coins_earned * 0.55 + cleared * 22 + (160 if won else 0)) * mult))
+	var coins := int(round((run.coins_earned * COIN_SHARE + cleared * COINS_PER_INNING + (WIN_COINS if won else 0)) * mult))
 	var xp := maxi(15, int(round((run.outs_total * 2.0 + cleared * 30 + (220 if won else 0)) * mult)))
 	Profile.add_coins(coins)
 	var levels := Profile.add_xp(xp)
 
-	# Defender XP: everyone on the team, +3 per runner they got out, MVP +50%.
+	# Defender XP: everyone on the team gets a share of the account XP, +1 per runner they got out, MVP +50%.
 	var mvp := run.mvp()
 	var def_xp := {}
 	for id in run.team:
 		var outs := int(run.stats.get("outs_by", {}).get(id, 0))
-		var amount := int(round((xp * 0.55 + outs * 3) * (1.5 if id == mvp else 1.0)))
+		var amount := int(round((xp * DEFENDER_XP_SHARE + outs * DEFENDER_XP_PER_OUT) * (1.5 if id == mvp else 1.0)))
 		var d_level_before := Profile.defender_level(id)
 		var xp_before := Profile.defender_xp(id)
 		var gained := Profile.add_defender_xp(id, amount)
@@ -47,15 +56,10 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 	Profile.add_pack("rookie", src)
 	match run.mode_id:
 		"standard":
-			for i in cleared / 3:
-				Profile.add_pack("rookie", src)
 			if won:
 				Profile.add_pack("champion" if run.difficulty_id in ["veteran", "legend"] else "pro", src)
-		"quick":
-			if won:
-				Profile.add_pack("rookie", src)
 		"endless":
-			for i in mini(cleared / 3, 4):
+			for i in mini(cleared / 5, 2):
 				Profile.add_pack("rookie", src)
 		"ranked":
 			if won:

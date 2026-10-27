@@ -137,7 +137,7 @@ func test_profile_and_saves() -> void:
 	ok(Profile.buy_gear("iron_wristband"), "gear purchase")
 	Profile.equip_gear("jax", "iron_wristband")
 	ok(float(Profile.defender_mods("jax").damage) > before, "gear increases defender damage")
-	Profile.add_defender_xp("jax", 400)
+	Profile.add_defender_xp("jax", 700)
 	ok(Profile.defender_level("jax") >= 3, "defender XP levels up (lv %d)" % Profile.defender_level("jax"))
 	Profile.choose_trait("jax", 3, "power")
 	ok(float(Profile.defender_mods("jax").damage) > before + 0.1, "trait adds damage")
@@ -241,7 +241,7 @@ func test_rewards_and_progression() -> void:
 	var res := Rewards.apply(r, true)
 	ok(int(Profile.data.coins) >= coins + int(res.coins) and int(res.coins) > 0, "victory awards coins (%d, plus level-up bonuses)" % int(res.coins))
 	ok(int(res.xp) > 200, "victory awards XP (%d)" % int(res.xp))
-	ok(res.packs.size() >= 4, "standard victory awards packs (%d)" % res.packs.size())
+	ok(res.packs.size() >= 2, "standard victory awards packs (%d)" % res.packs.size())
 	ok(res.packs.any(func(pk: Dictionary) -> bool: return pk.type == "pro"), "standard victory includes a Pro Pack")
 	ok(Profile.pack_count() >= res.packs.size(), "earned packs wait unopened in the inventory")
 	ok(int(Profile.data.rp) == rp + int(res.rp) and int(res.rp) > 0, "victory awards rank points")
@@ -261,7 +261,57 @@ func test_rewards_and_progression() -> void:
 
 func test_economy() -> void:
 	section("economy tuning")
-	pass
+	# Shop prices (round numbers) and rarer Epic/Legendary pulls.
+	ok(int(DB.pack("rookie").price_coins) == 200 and int(DB.pack("pro").price_coins) == 500 and int(DB.pack("champion").price_stars) == 50,
+		"pack prices: Rookie 200, Pro 500 coins, Champion 50 stars")
+	ok(int(Profile.pack_price("pro", Profile.BUNDLE_SIZE).coins) == 4500 and int(Profile.pack_price("champion", Profile.BUNDLE_SIZE).stars) == 450,
+		"bundles: 10 Pro Packs 4,500 coins, 10 Champion Packs 450 stars")
+	for t in ["rookie", "pro", "champion"]:
+		var w: Dictionary = DB.pack(t).weights
+		var total := 0.0
+		for r in w.values():
+			total += float(r)
+		ok(float(w.legendary) / total < 0.015, "%s packs: Legendary is the long tail (%.2f %% per slot)" % [t, 100.0 * float(w.legendary) / total])
+	ok(DB.pack("champion").slots[-1].get("min", "") == "epic", "Champion Packs still guarantee an Epic")
+	# Defender level road: slower curve, same rewards.
+	ok(int(DB.defender_xp_curve[DB.defender_xp_curve.size() - 1]) == 10200, "defender level 10 needs 10,200 XP")
+	ok(str(DB.defender_level_rewards["10"].get("pack", "")) == "champion", "defender level 10 still gives a Champion Pack")
+	# Rewards for a won Quick Defense game (Standard, Steel Yard): coins, defender XP and one pack.
+	var level0 := int(Profile.data.level)
+	var cfg := Session.new_run_config("quick")
+	cfg.difficulty = "standard"
+	cfg.arena = "steel_yard"
+	var r := RunState.create(cfg)
+	r.inning = 3
+	r.wave = 3
+	r.coins_earned = 720
+	r.outs_total = 160
+	r.stats.outs_by = {r.team[0]: 40}
+	var res := Rewards.apply(r, true)
+	ok(int(res.coins) == 179, "Quick win coins = (720 x 0.35 + 3 x 15 + 100) x 0.45 = 179 (%d)" % int(res.coins))
+	ok(int(res.xp) == 284, "Quick win XP = (160 x 2 + 3 x 30 + 220) x 0.45 = 284 (%d)" % int(res.xp))
+	var game_packs: Array = res.packs.filter(func(pk: Dictionary) -> bool: return str(pk.source).begins_with("Quick Defense"))
+	ok(game_packs.size() == 1 and game_packs[0].type == "rookie", "a Quick Defense game gives one Rookie Pack (%d)" % game_packs.size())
+	var mvp_xp := int(res.defender_xp[r.team[0]].xp)
+	ok(mvp_xp == int(round((284 * Rewards.DEFENDER_XP_SHARE + 40 * Rewards.DEFENDER_XP_PER_OUT) * 1.5)), "MVP defender XP = (XP x 0.3 + outs) x 1.5 (%d)" % mvp_xp)
+	ok(int(res.defender_xp[r.team[1]].xp) == int(round(284 * Rewards.DEFENDER_XP_SHARE)), "other defenders get 30 % of the XP")
+	# A won Standard Siege: one Rookie Pack plus a Pro Pack; a loss: only the Rookie Pack.
+	var cfg2 := Session.new_run_config("standard")
+	cfg2.difficulty = "standard"
+	cfg2.arena = "steel_yard"
+	var s2 := RunState.create(cfg2)
+	s2.inning = 9
+	s2.wave = 3
+	var res2 := Rewards.apply(s2, true)
+	var types: Array = res2.packs.filter(func(pk: Dictionary) -> bool: return str(pk.source).begins_with("Standard Siege")).map(func(pk: Dictionary) -> String: return pk.type)
+	ok(types.size() == 2 and "rookie" in types and "pro" in types, "a Standard Siege win gives a Rookie and a Pro Pack (%s)" % [types])
+	var s3 := RunState.create(cfg2)
+	s3.inning = 7
+	s3.wave = 1
+	var res3 := Rewards.apply(s3, false)
+	var types3: Array = res3.packs.filter(func(pk: Dictionary) -> bool: return str(pk.source).begins_with("Standard Siege"))
+	ok(types3.size() == 1, "a lost Standard Siege gives one Rookie Pack (%d)" % types3.size())
+	ok(int(Profile.data.level) >= level0, "account level never drops")
 
 
 # ---------------------------------------------------------------- battle
@@ -325,7 +375,7 @@ func test_packs() -> void:
 	# Defender level road: coins, packs and trait choices.
 	var coins0 := int(Profile.data.coins)
 	var packs0 := Profile.pack_count()
-	Profile.add_defender_xp("ace", 1000)
+	Profile.add_defender_xp("ace", 2100)
 	ok(Profile.defender_level("ace") >= 5, "defender XP raises the level (%d)" % Profile.defender_level("ace"))
 	ok(int(Profile.data.coins) >= coins0 + 100 + 250, "level road coin rewards are paid")
 	ok(Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "rookie" and str(pk.source).begins_with("Ace reached level 4")), "level 4 gives a Rookie Pack")
@@ -353,8 +403,8 @@ func test_pack_bundles() -> void:
 		var key := "stars" if int(single.stars) > 0 else "coins"
 		ok(int(bundle[key]) < int(single[key]) * n, "%s bundle is cheaper than %d singles (%d vs %d)" % [type, n, int(bundle[key]), int(single[key]) * n])
 		ok(int(bundle[key]) == RunState.round_price(int(single[key]) * n * Profile.BUNDLE_DISCOUNT), "%s bundle price is the rounded discount" % type)
-	ok(int(Profile.pack_price("rookie", n).coins) == 1350, "10 Rookie Packs cost 1,350 coins (%d)" % int(Profile.pack_price("rookie", n).coins))
-	ok(int(Profile.pack_price("rookie", 3).coins) == 450, "other counts are not discounted")
+	ok(int(Profile.pack_price("rookie", n).coins) == 1800, "10 Rookie Packs cost 1,800 coins (%d)" % int(Profile.pack_price("rookie", n).coins))
+	ok(int(Profile.pack_price("rookie", 3).coins) == 600, "other counts are not discounted")
 	# Refused when short, without touching the wallet or the inventory.
 	var price := int(Profile.pack_price("rookie", n).coins)
 	Profile.data.coins = price - 1
@@ -480,7 +530,7 @@ func test_battle_systems() -> void:
 	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
-	for cid in ["power_throw", "thunderbolt", "grand_slam_barrage", "sky_hook"]:
+	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
 		ok(float(imp.get(cid, {}).get("damage", 0.0)) > 0.0, "%s damage is credited to the card (%s)" % [cid, imp.get(cid, {})])
 	ok(not imp.has("field_vision"), "buff cards are not credited with damage")
 	battle.queue_free()

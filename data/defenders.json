@@ -2,18 +2,7 @@
  "_comment": "Defender definitions. Stats are level-1 values; each character level adds level_growth (multiplicative) to damage and special_power. interval = seconds between throws. range/throw_speed in metres(/s). accuracy 0-100.",
  "level_growth": 0.06,
  "max_level": 10,
- "xp_curve": [
-  0,
-  120,
-  300,
-  560,
-  900,
-  1350,
-  1900,
-  2600,
-  3450,
-  4500
- ],
+ "xp_curve": [0, 250, 650, 1250, 2050, 3100, 4400, 6000, 7900, 10200],
  "level_rewards": {
   "2": {"coins": 100}, "3": {"trait": 1}, "4": {"pack": "rookie"}, "5": {"coins": 250},
   "6": {"trait": 2}, "7": {"pack": "pro"}, "8": {"coins": 400}, "9": {"trait": 3}, "10": {"pack": "champion"}

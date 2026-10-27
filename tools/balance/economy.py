@@ -61,13 +61,13 @@ def round_price(v):
 # (game time from the simulator plus ~40 s per inning of setup/dugout and ~1 min of results/packs).
 # Measured with tools/balance/simulate.py on the Update 5 balance (fresh profile, starter deck).
 GAME_TABLE = {
-	("quick", True): {"coins": 870, "outs": 190, "cleared": 3, "minutes": 7.0},
-	("quick", False): {"coins": 560, "outs": 120, "cleared": 2, "minutes": 5.5},
-	("standard", True): {"coins": 3300, "outs": 640, "cleared": 9, "minutes": 22.0},
-	("standard", False): {"coins": 1900, "outs": 400, "cleared": 6, "minutes": 15.0},
-	("endless", False): {"coins": 2600, "outs": 520, "cleared": 9, "minutes": 20.0},
-	("ranked", True): {"coins": 870, "outs": 190, "cleared": 3, "minutes": 7.0},
-	("ranked", False): {"coins": 560, "outs": 120, "cleared": 2, "minutes": 5.5},
+	("quick", True): {"coins": 750, "outs": 165, "cleared": 3, "minutes": 6.0},
+	("quick", False): {"coins": 650, "outs": 140, "cleared": 2, "minutes": 5.0},
+	("standard", True): {"coins": 3300, "outs": 700, "cleared": 9, "minutes": 20.0},
+	("standard", False): {"coins": 2300, "outs": 500, "cleared": 6, "minutes": 14.0},
+	("endless", False): {"coins": 3000, "outs": 650, "cleared": 9, "minutes": 18.0},
+	("ranked", True): {"coins": 750, "outs": 165, "cleared": 3, "minutes": 6.0},
+	("ranked", False): {"coins": 650, "outs": 140, "cleared": 2, "minutes": 5.0},
 }
 
 
@@ -97,6 +97,9 @@ class Data:
 		m = re.search(r"func xp_to_next.*?return\s+(\d+)\s*\+\s*(\d+)\s*\*", open(os.path.join(ROOT, prof)).read(), re.S)
 		self.xp_base, self.xp_step = int(m.group(1)), int(m.group(2))
 		self.levelup_coins = gd_number(prof, r"data\.coins \+= (\d+)\n\t\tadd_pack", int)
+		rw = open(os.path.join(ROOT, "src/core/rewards.gd")).read()
+		self.rw = {k: float(re.search(r"const %s\s*:=\s*([\d.]+)" % k, rw).group(1))
+			for k in ["COIN_SHARE", "COINS_PER_INNING", "WIN_COINS", "DEFENDER_XP_SHARE", "DEFENDER_XP_PER_OUT"]}
 
 	def xp_to_next(self, level):
 		return self.xp_base + self.xp_step * (level - 1)
@@ -123,6 +126,7 @@ class Player:
 		self.stats = {"outs": 0, "wins_quick": 0, "wins_standard": 0, "games": 0, "packs_earned": 0, "packs_bought": 0,
 			"coins_earned": 0, "upgrades": 0, "coins_upgrades": 0, "coins_packs": 0, "coins_gear": 0, "best_endless": 0}
 		self.achieved = set()
+		self.pack_src = {}
 		self.timeline = []
 
 	# ---- rewards.gd mirror
@@ -131,24 +135,21 @@ class Player:
 		m, df = self.d.modes[mode], self.d.diffs[self.a.difficulty]
 		mult = m.get("reward_mult", 1.0) * df.get("reward", 1.0)
 		cleared = g["cleared"]
-		coins = int(round((g["coins"] * 0.55 + cleared * 22 + (160 if won else 0)) * mult))
+		R = self.d.rw
+		coins = int(round((g["coins"] * R["COIN_SHARE"] + cleared * R["COINS_PER_INNING"] + (R["WIN_COINS"] if won else 0)) * mult))
 		xp = max(15, int(round((g["outs"] * 2.0 + cleared * 30 + (220 if won else 0)) * mult)))
 		self.coins += coins
 		self.stats["coins_earned"] += coins
 		self.add_xp(xp)
 		outs_each = g["outs"] / 6.0
 		for i, did in enumerate(self.team):
-			self.add_def_xp(did, int(round((xp * 0.55 + outs_each * 3) * (1.5 if i == 0 else 1.0))))
+			self.add_def_xp(did, int(round((xp * R["DEFENDER_XP_SHARE"] + outs_each * R["DEFENDER_XP_PER_OUT"]) * (1.5 if i == 0 else 1.0))))
 		self.add_pack("rookie")
 		if mode == "standard":
-			for _ in range(cleared // 3):
-				self.add_pack("rookie")
 			if won:
 				self.add_pack("champion" if self.a.difficulty in ("veteran", "legend") else "pro")
-		elif mode == "quick" and won:
-			self.add_pack("rookie")
 		elif mode == "endless":
-			for _ in range(min(cleared // 3, 4)):
+			for _ in range(min(cleared // 5, 2)):
 				self.add_pack("rookie")
 			self.stats["best_endless"] = max(self.stats["best_endless"], cleared + 1)
 		elif mode == "ranked" and won:
@@ -172,12 +173,13 @@ class Player:
 			self.xp -= self.d.xp_to_next(self.level)
 			self.level += 1
 			self.coins += self.d.levelup_coins
-			self.add_pack("pro" if self.level % 5 == 0 else "rookie")
+			self.add_pack("pro" if self.level % 5 == 0 else "rookie", "account level")
 			for x in self.d.defenders:
 				u = x.get("unlock", {})
 				if u.get("type") == "level" and self.level >= int(u["value"]) and x["id"] not in self.unlocked:
 					self.unlocked.add(x["id"])
 					self.packs.append(("signature", x["signature"]))
+					self.pack_src["signature"] = self.pack_src.get("signature", 0) + 1
 
 	def add_def_xp(self, did, n):
 		self.def_xp[did] += n
@@ -188,12 +190,13 @@ class Player:
 			r = self.d.level_rewards.get(str(lv), {})
 			self.coins += int(r.get("coins", 0))
 			if "pack" in r:
-				self.add_pack(r["pack"])
+				self.add_pack(r["pack"], "defender level")
 		self.def_level[did] = lv
 
-	def add_pack(self, t, card=None):
-		self.packs.append((t, card))
+	def add_pack(self, t, src="game"):
+		self.packs.append((t, None))
 		self.stats["packs_earned"] += 1
+		self.pack_src[src] = self.pack_src.get(src, 0) + 1
 
 	# ---- Profile.roll_pack mirror
 	def open_packs(self):
@@ -263,7 +266,7 @@ class Player:
 			self.coins -= self.d.gear_prices[self.gear_owned]
 			self.stats["coins_gear"] += self.d.gear_prices[self.gear_owned]
 			self.gear_owned += 1
-		if self.collection_done():
+		if self.collection_done() and all(c["level"] >= self.d.max_level for c in self.cards.values()):
 			return
 		rookie = self.d.packs["rookie"]["price_coins"]
 		bundle = self.d.bundle_price("rookie")
@@ -279,9 +282,8 @@ class Player:
 		cs = self.d.packs["champion"]["price_stars"]
 		while self.stars >= cs:
 			self.stars -= cs
-			self.add_pack("champion")
-			self.stats["packs_earned"] -= 1
-			self.stats["packs_bought"] += 1
+			self.packs.append(("champion", None))
+			self.pack_src["stars (champion)"] = self.pack_src.get("stars (champion)", 0) + 1
 
 	def buy(self, t, n, price):
 		self.coins -= price
@@ -423,6 +425,11 @@ def main():
 	print("\nPer hour (whole run): %.1f packs earned, %.1f bought, %.1f card upgrades, %d coins earned." % (
 		statistics.mean(s["packs_earned"] for s in last) / hours, statistics.mean(s["packs_bought"] for s in last) / hours,
 		statistics.mean(s["upgrades"] for s in last) / hours, statistics.mean(s["coins_earned"] for s in last) / hours))
+	src = {}
+	for p in players:
+		for k, v in p.pack_src.items():
+			src[k] = src.get(k, 0) + v
+	print("Packs per hour by source: " + ", ".join("%s %.1f" % (k, v / len(players) / hours) for k, v in sorted(src.items())))
 	print("Rookie bundle: %d coins = %.1f h of coin income; Pro bundle %d coins." % (data.bundle_price("rookie"),
 		data.bundle_price("rookie") / (statistics.mean(s["coins_earned"] for s in last) / hours), data.bundle_price("pro")))
 	if args.json:
