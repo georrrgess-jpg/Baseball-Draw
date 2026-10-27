@@ -23,7 +23,7 @@ const HAND_GAP := 12.0
 
 var _hand_box: HandTray
 var _card_views: Array = []        # one per hand slot: CardView, or null for an empty slot
-var _energy_bar: Control
+var _energy_bar: EnergyBar
 var _energy_label: Label
 var _deck_label: Label
 var _draw_bar: ProgressBar
@@ -31,6 +31,8 @@ var _unit_panel: PanelContainer
 var _unit_box: VBoxContainer
 var _banner: Label
 var _banner_sub: Label
+var _banner_busy := false
+var _banner_queue: Array = []
 var _flash: ColorRect
 var _boss_panel: PanelContainer
 var _boss_bar: ProgressBar
@@ -39,6 +41,7 @@ var _boss_enemy: Enemy
 var _start_btn: Button
 var _speed_btn: Button
 var _setup_panel: PanelContainer
+var _formation_cards: Array[Button] = []
 var _practice_panel: PanelContainer
 var _card_tip: PanelContainer
 var _card_tip_label: RichTextLabel
@@ -292,8 +295,8 @@ func _build_unit_panel() -> void:
 
 
 func _build_banner() -> void:
-	_banner = UITheme.title("", 60, Color.WHITE)
-	_banner.add_theme_constant_override("outline_size", 12)
+	_banner = UITheme.title("", 48, Color.WHITE)
+	_banner.add_theme_constant_override("outline_size", 10)
 	_banner.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_banner.position = Vector2(-700, 175)
@@ -301,7 +304,7 @@ func _build_banner() -> void:
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.modulate.a = 0.0
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_banner.pivot_offset = Vector2(700, 40)
+	_banner.pivot_offset = Vector2(700, 30)
 	root.add_child(_banner)
 
 
@@ -331,29 +334,20 @@ func _build_controls() -> void:
 	tl.position = Vector2(14, 14)
 	tl.add_theme_constant_override("separation", 8)
 	root.add_child(tl)
-	var pause := UITheme.small_button("II", UITheme.BLUE, 18)
-	pause.custom_minimum_size = Vector2(46, 0)
-	pause.tooltip_text = "Pause (Esc)"
-	pause.pressed.connect(toggle_pause)
-	tl.add_child(pause)
-	_speed_btn = UITheme.small_button("1x", UITheme.GOLD, 18)
-	_speed_btn.tooltip_text = "Fast-forward (Shift)"
-	_speed_btn.custom_minimum_size = Vector2(64, 0)
-	_speed_btn.pressed.connect(func() -> void:
+	tl.add_child(_icon_button("pause", "Pause  (Esc)", toggle_pause))
+	_speed_btn = _icon_button("fast_forward", "Game speed  (Shift)", func() -> void:
 		battle.cycle_speed()
 		refresh())
+	_speed_btn.get_child(0).queue_free()   # the speed button shows its icon next to the text
+	_speed_btn.icon = DB.icon("fast_forward")
+	_speed_btn.text = "1x"
+	_speed_btn.custom_minimum_size = Vector2(84, 46)
 	tl.add_child(_speed_btn)
-	var map_btn := UITheme.small_button("MAP", UITheme.BLUE, 18)
-	map_btn.tooltip_text = "Top-down tactical view (M)"
-	map_btn.pressed.connect(func() -> void: battle.cam.toggle_tactical())
-	tl.add_child(map_btn)
-	var range_btn := UITheme.small_button("RANGES", UITheme.BLUE, 18)
-	range_btn.tooltip_text = "Show every defender's throwing range (F)"
-	range_btn.pressed.connect(func() -> void:
+	tl.add_child(_icon_button("map", "Top-down tactical view  (M)", func() -> void: battle.cam.toggle_tactical()))
+	tl.add_child(_icon_button("range", "Show every defender's throwing range  (F)", func() -> void:
 		var show: bool = not battle.defenders[0].show_range
 		for df in battle.defenders:
-			df.set_show_range(show))
-	tl.add_child(range_btn)
+			df.set_show_range(show)))
 
 	_start_btn = UITheme.menu_button("PLAY BALL!", UITheme.SCARLET, 40)
 	_start_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -362,6 +356,21 @@ func _build_controls() -> void:
 	_start_btn.tooltip_text = "Begin the next wave (Space)"
 	_start_btn.pressed.connect(func() -> void: battle.begin_wave())
 	root.add_child(_start_btn)
+
+
+## Square icon button for the battle toolbar (icon + tooltip with its hotkey).
+func _icon_button(icon_name: String, tip: String, action: Callable) -> Button:
+	var b := UITheme.small_button("", UITheme.BLUE, 20)
+	b.custom_minimum_size = Vector2(46, 46)
+	var ic := UITheme.icon_rect(icon_name, 26, Color(0.88, 0.93, 1.0))
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ic.set_anchors_preset(Control.PRESET_CENTER)
+	ic.position = Vector2(-13, -13)
+	ic.size = Vector2(26, 26)
+	b.add_child(ic)
+	b.tooltip_text = tip
+	b.pressed.connect(action)
+	return b
 
 
 func _build_setup_panel() -> void:
@@ -379,13 +388,25 @@ func _build_setup_panel() -> void:
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	vb.add_child(grid)
+	_formation_cards.clear()
 	for fid in DB.formation_order:
 		var f: Dictionary = DB.formations[fid]
-		var b := UITheme.small_button(f.name, UITheme.SCARLET, 19)
-		b.custom_minimum_size = Vector2(138, 34)
-		b.tooltip_text = f.text
-		b.pressed.connect(func() -> void: battle.apply_formation(fid))
+		var b := UITheme.small_button("", UITheme.SCARLET, 17)
+		b.custom_minimum_size = Vector2(138, 92)
+		b.tooltip_text = "%s — %s" % [f.name, f.text]
+		b.pressed.connect(func() -> void:
+			battle.apply_formation(fid)
+			_update_formation_cards())
+		var fc := FormationCard.new()
+		fc.positions = f.get("positions", [])
+		fc.title = str(f.name)
+		fc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		fc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(fc)
+		b.set_meta("fid", fid)
+		_formation_cards.append(b)
 		grid.add_child(b)
+	_update_formation_cards()
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	var mirror := UITheme.small_button("Mirror", UITheme.BLUE, 19)
@@ -410,6 +431,13 @@ func _build_setup_panel() -> void:
 	_synergy_box = VBoxContainer.new()
 	_synergy_box.add_theme_constant_override("separation", 2)
 	vb.add_child(_synergy_box)
+
+func _update_formation_cards() -> void:
+	for b: Button in _formation_cards:
+		var on: bool = is_instance_valid(battle) and battle.run.formation == str(b.get_meta("fid"))
+		(b.get_child(0) as FormationCard).active = on
+		b.get_child(0).queue_redraw()
+
 
 func _save_custom_formation() -> void:
 	var by_id := {}
@@ -615,6 +643,7 @@ func _on_card_denied(index: int, reason: String) -> void:
 
 
 func _on_card_hover(cv: CardView, on: bool) -> void:
+	_update_cards.call_deferred()
 	if not on:
 		_card_tip.visible = false
 		return
@@ -626,6 +655,13 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 		t += " · Cooldown %ds" % int(c.cooldown)
 	t += " · Level %d\n" % lvl
 	t += DB.card_text(cv.card_id, lvl)
+	var details := str(c.get("details", ""))
+	if details != "":
+		# The full rules text (the card face shows the short version).
+		for key in c.get("params", {}).keys():
+			var v := DB.card_param(cv.card_id, key, lvl)
+			details = details.replace("{%s}" % key, str(int(round(v))) if absf(v - roundf(v)) < 0.05 or v >= 10.0 else "%.1f" % v)
+		t += "\n[color=#B8C4D6][font_size=17]%s[/font_size][/color]" % details
 	var linked: String = c.get("linked", "")
 	if linked != "":
 		var on_field := false
@@ -644,6 +680,16 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 
 func _update_cards() -> void:
 	var cs: CardSystem = battle.cards
+	var preview := 0
+	for i in _card_views.size():
+		var v: CardView = _card_views[i] if is_instance_valid(_card_views[i]) else null
+		if v and (v._hover or i == battle.targeting_index) and i < cs.hand.size() and cs.hand[i] != "":
+			preview = cs.cost_of(cs.hand[i])
+			if v._hover:
+				break
+	if _energy_bar.preview_cost != preview:
+		_energy_bar.preview_cost = preview
+		_energy_bar.queue_redraw()
 	for i in _card_views.size():
 		var cv: CardView = _card_views[i] if is_instance_valid(_card_views[i]) else null
 		if cv == null or i >= cs.hand.size() or cs.hand[i] == "":
@@ -972,19 +1018,53 @@ func _process(_delta: float) -> void:
 
 # ---------------------------------------------------------------- notifications
 
+## Call-outs ("DOUBLE PLAY!", "INNING 3"): one at a time, queued (max 2 waiting). A call-out of
+## the same kind as the one showing (a growing combo) updates it in place instead of stacking.
 func banner(text: String, color: Color) -> void:
+	if _banner_busy and _banner_kind(text) == _banner_kind(_banner.text):
+		_banner.text = text
+		_banner.add_theme_color_override("font_color", color)
+		_banner.scale = Vector2(1.12, 1.12)
+		_run_banner_tween(false)
+		return
+	if _banner_busy:
+		if _banner_queue.size() >= 2:
+			_banner_queue.pop_front()
+		_banner_queue.append([text, color])
+		return
 	_banner.text = text
 	_banner.add_theme_color_override("font_color", color)
 	_banner.scale = Vector2(0.6, 0.6)
 	_banner.modulate.a = 0.0
+	_run_banner_tween(true)
+
+
+func _run_banner_tween(fresh: bool) -> void:
+	_banner_busy = true
 	if _banner_tween and _banner_tween.is_valid():
 		_banner_tween.kill()
 	_banner_tween = create_tween()
 	_banner_tween.set_parallel(true)
-	_banner_tween.tween_property(_banner, "modulate:a", 1.0, 0.12)
-	_banner_tween.tween_property(_banner, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_banner_tween.chain().tween_interval(0.9)
-	_banner_tween.chain().tween_property(_banner, "modulate:a", 0.0, 0.3)
+	_banner_tween.tween_property(_banner, "modulate:a", 1.0, 0.12 if fresh else 0.05)
+	_banner_tween.tween_property(_banner, "scale", Vector2.ONE, 0.25 if fresh else 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_banner_tween.chain().tween_interval(0.85)
+	_banner_tween.chain().tween_property(_banner, "modulate:a", 0.0, 0.25)
+	_banner_tween.chain().tween_callback(_banner_finished)
+
+
+func _banner_finished() -> void:
+	_banner_busy = false
+	if not _banner_queue.is_empty():
+		var nxt: Array = _banner_queue.pop_front()
+		banner(str(nxt[0]), nxt[1])
+
+
+static func _banner_kind(t: String) -> String:
+	var out := ""
+	for ch in t:
+		if not ch.is_valid_int():
+			out += ch
+	return out
 
 
 func flash(c: Color) -> void:
@@ -1196,27 +1276,61 @@ func show_results(result: Dictionary) -> void:
 
 class EnergyBar extends Control:
 	var value := 5.0
+	var preview_cost := 0       # cost of the hovered/selected card: shown on the bar
+	var _t := 0.0
+
+	func _process(delta: float) -> void:
+		if preview_cost > 0:
+			_t += delta
+			queue_redraw()
 
 	func _draw() -> void:
 		var n := 10
 		var gap := 4.0
 		var w := (size.x - gap * (n - 1)) / n
+		var pulse := 0.5 + 0.5 * sin(_t * 7.0)
+		var spend_from := value - float(preview_cost)   # segments above this would be spent
 		for i in n:
 			var r := Rect2(i * (w + gap), 0, w, size.y)
 			draw_rect(r, Color(0.02, 0.05, 0.1, 0.9))
 			var fill := clampf(value - i, 0.0, 1.0)
 			if fill > 0.0:
 				var c := UITheme.ENERGY if fill >= 1.0 else UITheme.ENERGY.darkened(0.45)
+				if preview_cost > 0 and spend_from >= 0.0 and float(i) + 1.0 > spend_from:
+					c = c.lerp(Color.WHITE, 0.35 + 0.3 * pulse)   # what this card would spend
 				draw_rect(Rect2(r.position, Vector2(r.size.x * fill, r.size.y)), c)
 				if fill >= 1.0:
 					draw_rect(Rect2(r.position, Vector2(r.size.x, r.size.y * 0.35)), Color(1, 1, 1, 0.25))
-			draw_rect(r, Color(1, 1, 1, 0.18), false, 1.0)
+			if preview_cost > 0 and spend_from < 0.0 and i < preview_cost and float(i) + 1.0 > value:
+				draw_rect(r, Color(1.0, 0.35, 0.3, 0.55 + 0.4 * pulse), false, 2.0)   # missing energy
+			else:
+				draw_rect(r, Color(1, 1, 1, 0.18), false, 1.0)
 
 
-## The hand area: draws empty slots (with the next-card timer in the first one) behind the cards.
+## The hand area: draws empty slots behind the cards. The first one is the next card: a card
+## back that fills with gold as the draw timer runs, with the seconds left.
 class HandTray:
 	extends Control
 	var hud: Node
+	var _box_empty: StyleBoxFlat
+	var _box_next: StyleBoxFlat
+	var _box_fill: StyleBoxFlat
+
+	func _ready() -> void:
+		_box_empty = StyleBoxFlat.new()
+		_box_empty.bg_color = Color(0.02, 0.04, 0.08, 0.28)
+		_box_empty.border_color = Color(1, 1, 1, 0.12)
+		_box_empty.set_border_width_all(2)
+		_box_empty.set_corner_radius_all(12)
+		_box_next = StyleBoxFlat.new()
+		_box_next.bg_color = Color(0.06, 0.1, 0.2, 0.82)
+		_box_next.border_color = Color(UITheme.GOLD, 0.45)
+		_box_next.set_border_width_all(2)
+		_box_next.set_corner_radius_all(12)
+		_box_fill = StyleBoxFlat.new()
+		_box_fill.bg_color = Color(UITheme.GOLD, 0.2)
+		_box_fill.corner_radius_bottom_left = 12
+		_box_fill.corner_radius_bottom_right = 12
 
 	func _process(_d: float) -> void:
 		queue_redraw()
@@ -1231,14 +1345,62 @@ class HandTray:
 			if not empty:
 				continue
 			var r := Rect2(hud._slot_pos(i), hud.HAND_CARD)
-			draw_rect(r, Color(0.02, 0.04, 0.08, 0.35))
-			draw_rect(r, Color(1, 1, 1, 0.16), false, 2.0)
-			if first_empty:
-				first_empty = false
-				var p := cs.next_draw_progress()
-				var fh := r.size.y * p
-				draw_rect(Rect2(r.position.x, r.end.y - fh, r.size.x, fh), Color(UITheme.GOLD, 0.16))
-				var f := UITheme.font_body_bold()
-				var t := "NEXT CARD"
-				var tw := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
-				draw_string(f, r.get_center() + Vector2(-tw * 0.5, 6), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.45))
+			if not first_empty:
+				draw_style_box(_box_empty, r)
+				continue
+			first_empty = false
+			var p := cs.next_draw_progress()
+			draw_style_box(_box_next, r)
+			var fh := (r.size.y - 4.0) * p
+			if fh > 1.0:
+				draw_style_box(_box_fill, Rect2(r.position.x + 2, r.end.y - 2 - fh, r.size.x - 4, fh))
+			# Card-back emblem: a diamond with a ball.
+			var c := r.get_center() + Vector2(0, -14)
+			var d := 30.0
+			var col := Color(UITheme.GOLD, 0.35 + 0.4 * p)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -d), c + Vector2(d, 0), c + Vector2(0, d), c + Vector2(-d, 0)]), Color(col, 0.18))
+			draw_polyline(PackedVector2Array([c + Vector2(0, -d), c + Vector2(d, 0), c + Vector2(0, d), c + Vector2(-d, 0), c + Vector2(0, -d)]), col, 2.0, true)
+			draw_circle(c, 9.0, Color(1, 1, 1, 0.3 + 0.5 * p))
+			var f := UITheme.font_body_bold()
+			var t := "NEXT CARD"
+			var tw := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+			draw_string(f, Vector2(r.get_center().x - tw * 0.5, r.end.y - 52), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.6))
+			if hud.battle.state == "wave":
+				var secs := "%ds" % int(ceil((1.0 - p) * cs.draw_interval))
+				var sw := f.get_string_size(secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
+				draw_string(f, Vector2(r.get_center().x - sw * 0.5, r.end.y - 24), secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(UITheme.GOLD, 0.9))
+
+
+## Formation preset button face: a mini diamond with the six defender spots, and the name.
+class FormationCard:
+	extends Control
+	var positions: Array = []
+	var title := ""
+	var active := false
+
+	func _draw() -> void:
+		var area := Rect2(Vector2(8, 6), Vector2(size.x - 16, size.y - 30))
+		# Field x -24..24, z -22 (deep outfield) .. 14 (behind home), uniform scale, centred.
+		var k := minf(area.size.x / 48.0, area.size.y / 36.0)
+		var origin := area.get_center() - Vector2(0.0, -4.0) * k
+		var to_px := func(x: float, z: float) -> Vector2:
+			return origin + Vector2(x, z) * k
+		var grass := Color(0.25, 0.6, 0.3, 0.55 if active else 0.35)
+		var home: Vector2 = to_px.call(0.0, 10.0)
+		var arc := PackedVector2Array([home])
+		for i in 13:
+			var a := deg_to_rad(-135.0 + 90.0 * i / 12.0)
+			arc.append(home + Vector2(cos(a), sin(a)) * 30.0 * k)
+		draw_colored_polygon(arc, grass)
+		var bases := [to_px.call(0.0, 10.0), to_px.call(9.5, 0.5), to_px.call(0.0, -9.0), to_px.call(-9.5, 0.5)]
+		draw_colored_polygon(PackedVector2Array(bases), Color(0.75, 0.5, 0.3, 0.6 if active else 0.4))
+		for p in positions:
+			var c: Vector2 = to_px.call(float(p[0]), float(p[1]))
+			draw_circle(c, 4.2, Color(0, 0, 0, 0.5))
+			draw_circle(c, 3.2, UITheme.GOLD if active else Color(0.9, 0.95, 1.0))
+		var f := UITheme.font_body_bold()
+		var fs := 17
+		var tw := f.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		draw_string(f, Vector2((size.x - tw) * 0.5, size.y - 8), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UITheme.GOLD if active else Color.WHITE)
+		if active:
+			draw_rect(Rect2(Vector2(2, 2), size - Vector2(4, 4)), Color(UITheme.GOLD, 0.9), false, 2.0)
