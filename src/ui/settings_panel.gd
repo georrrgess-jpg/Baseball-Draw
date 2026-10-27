@@ -74,12 +74,18 @@ func _ready() -> void:
 	side.add_child(sv)
 	_search = LineEdit.new()
 	_search.placeholder_text = "Search settings..."
-	_search.right_icon = DB.icon("search")
 	_search.clear_button_enabled = true
 	_search.custom_minimum_size = Vector2(0, 48)
+	_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search.add_theme_font_size_override("font_size", UITheme.FS_BODY)
 	_search.text_changed.connect(func(_t: String) -> void: _apply_filter())
-	sv.add_child(_search)
+	var srow := HBoxContainer.new()
+	srow.add_theme_constant_override("separation", 8)
+	var sic := UITheme.icon_rect("search", 26, UITheme.MUTED)
+	sic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	srow.add_child(sic)
+	srow.add_child(_search)
+	sv.add_child(srow)
 	sv.add_child(UITheme.hsep(0.08))
 	for c in CATEGORIES:
 		var b := UITheme.button(c[1].to_upper(), "secondary", 26, c[2])

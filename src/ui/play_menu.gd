@@ -360,7 +360,7 @@ func _arena_tile(id: String) -> Button:
 	b.button_pressed = selected
 	b.disabled = not unlocked
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(286, 186)
+	b.custom_minimum_size = Vector2(266, 176)
 	b.add_theme_stylebox_override("normal", UITheme.panel_style(Color(0, 0, 0, 0.4), Color(1, 1, 1, 0.12), 2, 10, 0))
 	b.add_theme_stylebox_override("hover", UITheme.panel_style(Color(0, 0, 0, 0.2), Color(accent, 0.9), 3, 10, 0))
 	b.add_theme_stylebox_override("pressed", UITheme.panel_style(Color(0, 0, 0, 0.2), accent.lightened(0.2), 4, 10, 0))
@@ -423,7 +423,7 @@ func _arena_tile(id: String) -> Button:
 	var sub := "%s: %s" % [a.modifier.name, a.modifier.text] if unlocked else Profile.arena_unlock_text(id)
 	var sl := UITheme.label(sub, UITheme.FS_MIN, accent.lightened(0.3) if unlocked else Color(1.0, 0.7, 0.6), UITheme.font_body_bold())
 	sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sl.custom_minimum_size = Vector2(260, 0)
+	sl.custom_minimum_size = Vector2(240, 0)
 	sv.add_child(sl)
 	if not unlocked:
 		var lk := VBoxContainer.new()

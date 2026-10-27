@@ -200,6 +200,27 @@ func _overview_tab() -> Control:
 		var unl := _rank_unlock_text(i)
 		p.tooltip_text = "%s: %s RP%s" % [dv.name, UITheme.format_int(int(dv.rp_required)), ("\nUnlocks " + unl) if unl != "" else ""]
 		ladder.add_child(p)
+
+	# Closest achievements: what to aim for next.
+	var open: Array = []
+	for id in DB.achievement_order:
+		if not Profile.data.achievements.has(id):
+			open.append(id)
+	open.sort_custom(func(a: String, b: String) -> bool: return Profile.achievement_progress(a) > Profile.achievement_progress(b))
+	if not open.is_empty():
+		var ap := UITheme.card_panel(UITheme.BORDER, 16)
+		vb.add_child(ap)
+		var av := VBoxContainer.new()
+		av.add_theme_constant_override("separation", 10)
+		ap.add_child(av)
+		av.add_child(UITheme.section_header("ALMOST THERE", "target", UITheme.GOLD, UITheme.FS_H3))
+		var ag := GridContainer.new()
+		ag.columns = 3
+		ag.add_theme_constant_override("h_separation", 10)
+		ag.add_theme_constant_override("v_separation", 10)
+		av.add_child(ag)
+		for id in open.slice(0, 3):
+			ag.add_child(_achievement_tile(id))
 	return r[0]
 
 
