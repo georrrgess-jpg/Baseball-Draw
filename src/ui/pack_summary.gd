@@ -174,7 +174,7 @@ func _build_slot(e: Dictionary) -> void:
 	for pair in [[main_text, main_col, true], [sub_text, sub_col, false]]:
 		if pair[0] == "":
 			continue
-		var l := UITheme.label(pair[0], 18 if pair[2] else 14, pair[1], UITheme.font_display() if pair[2] else UITheme.font_body_bold())
+		var l := UITheme.label(pair[0], 18 if pair[2] else UITheme.FS_MIN, pair[1], UITheme.font_display() if pair[2] else UITheme.font_body_bold())
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 		l.add_theme_constant_override("outline_size", 5)

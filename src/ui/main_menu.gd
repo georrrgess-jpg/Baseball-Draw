@@ -12,7 +12,16 @@ var _ball: MeshInstance3D
 var _throw_t := 1.5
 var _buttons: Array[Button] = []
 var _continue_btn: Button
+var _hero: Button
 var _profile_box: VBoxContainer
+var _caption: VBoxContainer
+## Idle showcase: every few seconds one defender shows off and the camera leans toward them.
+var _show_t := 5.0
+var _focus := Vector3.ZERO
+var _focus_t := 0.0
+var _focus_w := 0.0
+
+const COL_W := 580.0
 
 
 func _ready() -> void:
@@ -76,9 +85,20 @@ func _spawn_team() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	# Slow cinematic orbit in front of home plate.
-	camera.position = Vector3(-0.4 + sin(_t * 0.06) * 0.8, 1.8 + sin(_t * 0.09) * 0.15, 16.6 + cos(_t * 0.05) * 0.4)
-	camera.look_at(Vector3(2.4 + sin(_t * 0.04) * 0.3, 2.3, 4.0), Vector3.UP)
+	# Slow cinematic drift in front of home plate: a gentle push-in on entry, then a lazy
+	# figure-eight sway. During a showcase the camera leans toward the defender showing off.
+	var push := 1.0 - exp(-_t * 0.6)
+	var pos := Vector3(-0.4 + sin(_t * 0.07) * 1.1, 1.8 + sin(_t * 0.11) * 0.18, 18.2 - push * 1.6 + cos(_t * 0.05) * 0.5)
+	var look := Vector3(2.4 + sin(_t * 0.045) * 0.45, 2.3 + sin(_t * 0.08) * 0.08, 4.0)
+	_focus_t -= delta
+	_focus_w = move_toward(_focus_w, 1.0 if _focus_t > 0.0 else 0.0, delta * 0.7)
+	var w := smoothstep(0.0, 1.0, _focus_w) * 0.35
+	camera.position = pos.lerp(pos + (_focus - pos) * 0.12, w)
+	camera.look_at(look.lerp(_focus, w), Vector3.UP)
+	_show_t -= delta
+	if _show_t <= 0.0 and models.size() > 0:
+		_show_t = randf_range(7.0, 10.0)
+		_showcase()
 	_throw_t -= delta
 	if _throw_t <= 0.0 and models.size() >= 2:
 		_throw_t = randf_range(2.4, 3.6)
@@ -123,7 +143,7 @@ func _build_ui() -> void:
 	# Left gradient for legibility.
 	var grad := TextureRect.new()
 	var g := Gradient.new()
-	g.set_color(0, Color(0.03, 0.05, 0.1, 0.92))
+	g.set_color(0, Color(0.03, 0.05, 0.1, 0.94))
 	g.set_color(1, Color(0.03, 0.05, 0.1, 0.0))
 	var gt := GradientTexture2D.new()
 	gt.gradient = g
@@ -131,165 +151,350 @@ func _build_ui() -> void:
 	gt.height = 4
 	grad.texture = gt
 	grad.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	grad.custom_minimum_size = Vector2(900, 0)
+	grad.custom_minimum_size = Vector2(980, 0)
 	grad.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	grad.stretch_mode = TextureRect.STRETCH_SCALE
 	grad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(grad)
 
 	var left := VBoxContainer.new()
-	left.position = Vector2(70, 40)
+	left.position = Vector2(70, 30)
+	left.custom_minimum_size = Vector2(COL_W, 0)
 	left.add_theme_constant_override("separation", 10)
 	ui.add_child(left)
 	var logo_path := "res://assets/textures/logo/logo.png"
 	if ResourceLoader.exists(logo_path):
 		var logo := TextureRect.new()
 		logo.texture = load(logo_path)
-		logo.custom_minimum_size = Vector2(620, 300)
+		logo.custom_minimum_size = Vector2(COL_W, 236)
 		logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		left.add_child(logo)
 	else:
 		left.add_child(UITheme.title("BASEBALL", 110, UITheme.OFFWHITE))
 		left.add_child(UITheme.title("DRAW", 150, UITheme.SCARLET))
-	var tag := UITheme.label("DRAW YOUR HAND. DEFEND THE DIAMOND.", 26, UITheme.OFFWHITE, UITheme.font_brush())
+	var tag := UITheme.label("DRAW YOUR HAND. DEFEND THE DIAMOND.", 24, UITheme.OFFWHITE, UITheme.font_brush())
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	left.add_child(tag)
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 10)
+	spacer.custom_minimum_size = Vector2(0, 6)
 	left.add_child(spacer)
 
-	var items := [
-		["PLAY", UITheme.SCARLET, func() -> void: Router.goto("play_menu")],
-		["CONTINUE RUN", UITheme.GREEN, func() -> void: Session.continue_saved_run()],
-		["CARD PACKS", UITheme.GOLD, func() -> void: Router.goto("packs")],
-		["CARDS & DECK", UITheme.BLUE, func() -> void:
+	# Continue (only when a run is saved) sits right above the hero PLAY button.
+	if Profile.has_saved_run():
+		var cr: Dictionary = Profile.data.current_run
+		_continue_btn = _wide_button("CONTINUE RUN", "save", UITheme.GREEN, 64, 34)
+		_continue_btn.tooltip_text = "Saved %s" % str(cr.get("saved_at", "")).replace("T", " ")
+		_add_subline(_continue_btn, "%s · Inning %d · %s" % [DB.mode(str(cr.get("mode_id", "standard"))).name,
+			int(cr.get("inning", 1)), DB.arena(str(cr.get("arena_id", "steel_yard"))).name], Color(0.75, 1.0, 0.85))
+		_continue_btn.pressed.connect(func() -> void: Session.continue_saved_run())
+		left.add_child(_continue_btn)
+		_buttons.append(_continue_btn)
+	var hero := _wide_button("PLAY", "play", UITheme.SCARLET, UITheme.BTN_H_HERO, 76, true)
+	hero.pressed.connect(func() -> void: Router.goto("play_menu"))
+	var last_mode := str(Profile.data.flags.get("last_mode", "standard"))
+	if not DB.mode(last_mode).has("name"):
+		last_mode = "standard"
+	_add_subline(hero, "%s  ·  %s  ·  %s" % [DB.mode(last_mode).name, DB.difficulty(str(Profile.data.difficulty)).name,
+		DB.arena(str(Profile.data.arena)).name], Color(1, 0.88, 0.85))
+	left.add_child(hero)
+	_buttons.append(hero)
+	_hero = hero
+
+	left.add_child(_group_label("COLLECTION"))
+	var coll := GridContainer.new()
+	coll.columns = 2
+	coll.add_theme_constant_override("h_separation", 10)
+	coll.add_theme_constant_override("v_separation", 10)
+	left.add_child(coll)
+	var ready := 0
+	for cid in DB.card_order:
+		if Profile.can_upgrade_card(cid):
+			ready += 1
+	var tiles := [
+		["CARD PACKS", "gift", UITheme.GOLD, func() -> void: Router.goto("packs"),
+			"%d" % Profile.pack_count() if Profile.pack_count() > 0 else "", UITheme.SCARLET],
+		["CARDS & DECK", "deck", UITheme.BLUE, func() -> void:
 			Session.menu_tab = "deck"
-			Router.goto("deck_builder")],
-		["UPGRADE CARDS", UITheme.BLUE, func() -> void: Router.goto("card_upgrades")],
-		["TEAM", UITheme.BLUE, func() -> void: Router.goto("roster")],
-		["PRACTICE", UITheme.PURPLE, func() -> void: Session.start(Session.new_run_config("practice"))],
-		["PROGRESSION", UITheme.GOLD, func() -> void: Router.goto("progression")],
-		["SETTINGS", UITheme.MUTED, func() -> void: Router.goto("settings")],
-		["EXIT", UITheme.SCARLET_DEEP, func() -> void:
-			Profile.save_now()
-			get_tree().quit()],
+			Router.goto("deck_builder"),
+			"%d NEW" % Profile.fresh_card_count() if Profile.fresh_card_count() > 0 else "", UITheme.SCARLET],
+		["UPGRADE CARDS", "upgrade", UITheme.GREEN, func() -> void: Router.goto("card_upgrades"),
+			"%d READY" % ready if ready > 0 else "", Color(0.16, 0.6, 0.35)],
+		["TEAM", "roster", UITheme.BLUE, func() -> void: Router.goto("roster"), "", UITheme.SCARLET],
 	]
-	var i := 0
-	for it in items:
-		var b := UITheme.menu_button(it[0], it[1], 38)
-		b.custom_minimum_size = Vector2(430, 52)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.pressed.connect(it[2])
-		left.add_child(b)
-		_buttons.append(b)
-		if it[0] == "CARD PACKS" and Profile.pack_count() > 0:
-			b.text = "CARD PACKS  (%d)" % Profile.pack_count()
+	for t in tiles:
+		var b := _wide_button(t[0], t[1], t[2], 62, 30)
+		b.custom_minimum_size.x = (COL_W - 10) / 2.0
+		b.pressed.connect(t[3])
+		if t[4] != "":
+			_add_badge(b, t[4], t[5])
+		if t[0] == "CARD PACKS" and Profile.pack_count() > 0:
 			var pulse := b.create_tween().set_loops()
-			pulse.tween_property(b, "self_modulate", Color(1.25, 1.15, 0.8), 0.7).set_trans(Tween.TRANS_SINE)
-			pulse.tween_property(b, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
-		if it[0] == "CARDS & DECK" and Profile.fresh_card_count() > 0:
-			b.text = "CARDS & DECK  (%d NEW)" % Profile.fresh_card_count()
-		if it[0] == "UPGRADE CARDS":
-			var ready := 0
-			for cid in DB.card_order:
-				if Profile.can_upgrade_card(cid):
-					ready += 1
-			if ready > 0:
-				b.text = "UPGRADE CARDS  (%d READY)" % ready
-		if it[0] == "CONTINUE RUN":
-			_continue_btn = b
-			b.disabled = not Profile.has_saved_run()
-			if Profile.has_saved_run():
-				var cr: Dictionary = Profile.data.current_run
-				b.tooltip_text = "%s · Inning %d · %s" % [DB.mode(cr.get("mode_id", "standard")).name, int(cr.get("inning", 1)), cr.get("saved_at", "")]
-		# Slide-in animation.
-		b.modulate.a = 0.0
-		var tw := b.create_tween()
-		tw.tween_interval(0.15 + i * 0.05)
-		tw.tween_property(b, "modulate:a", 1.0, 0.25)
+			pulse.tween_property(b, "self_modulate", Color(1.22, 1.12, 0.8), 0.8).set_trans(Tween.TRANS_SINE)
+			pulse.tween_property(b, "self_modulate", Color.WHITE, 0.8).set_trans(Tween.TRANS_SINE)
+		coll.add_child(b)
+		_buttons.append(b)
+
+	left.add_child(_group_label("MORE"))
+	var more := GridContainer.new()
+	more.columns = 2
+	more.add_theme_constant_override("h_separation", 10)
+	more.add_theme_constant_override("v_separation", 10)
+	left.add_child(more)
+	var rest := [
+		["PRACTICE", "practice", UITheme.PURPLE, func() -> void: Session.start(Session.new_run_config("practice")), "Test cards and runners freely. No rewards."],
+		["PROGRESSION", "progression", UITheme.GOLD, func() -> void: Router.goto("progression"), "Rank, achievements, stadiums, gear and history"],
+		["SETTINGS", "settings", UITheme.MUTED, func() -> void: Router.goto("settings"), "Display, graphics, audio, controls"],
+		["EXIT", "exit", UITheme.SCARLET_DEEP, func() -> void:
+			Profile.save_now()
+			get_tree().quit(), "Save and quit to desktop"],
+	]
+	for t in rest:
+		var b := _wide_button(t[0], t[1], t[2], 52, 26)
+		b.custom_minimum_size.x = (COL_W - 10) / 2.0
+		b.tooltip_text = t[4]
+		b.pressed.connect(t[3])
+		more.add_child(b)
+		_buttons.append(b)
+
+	# Staggered entrance.
+	var i := 0
+	for b in _buttons:
+		UITheme.animate_in(b, 0.12 + i * 0.045, 0.96)
 		i += 1
 
 	_build_profile_panel()
-	var ver := UITheme.label("v%s  ·  Made with Godot %s" % [ProjectSettings.get_setting("application/config/version"), Engine.get_version_info().string], 16, Color(1, 1, 1, 0.4))
-	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	ver.position = Vector2(-380, -36)
+	_build_showcase_caption()
+	var ver := UITheme.label("v%s  ·  Made with Godot %s" % [ProjectSettings.get_setting("application/config/version"), Engine.get_version_info().string], 16, Color(1, 1, 1, 0.45))
+	ver.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	ver.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	ver.offset_right = -32
+	ver.offset_bottom = -18
 	ui.add_child(ver)
 	if not bool(Profile.data.flags.get("tutorial_done", false)) and not "--no-help" in OS.get_cmdline_user_args():
 		_show_welcome()
 
 
+## A left-aligned menu button with an icon (all main-menu entries use this).
+func _wide_button(text: String, icon: String, accent: Color, height: float, size: int, hero := false) -> Button:
+	var b := UITheme.button(text, "primary" if hero else "secondary", size, icon, accent)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(COL_W, height)
+	b.add_theme_font_override("font", UITheme.font_display() if hero or height >= 60 else UITheme.font_header())
+	if hero:
+		b.add_theme_constant_override("icon_max_width", 64)
+		b.add_theme_constant_override("h_separation", 18)
+		for st in ["normal", "hover", "pressed", "focus"]:
+			var s: StyleBoxFlat = b.get_theme_stylebox(st).duplicate()
+			s.content_margin_left = 30
+			s.skew = Vector2(-0.12, 0)
+			s.shadow_color = Color(0, 0, 0, 0.45)
+			s.shadow_size = 10
+			s.shadow_offset = Vector2(0, 4)
+			b.add_theme_stylebox_override(st, s)
+	else:
+		# Thin coloured stripe on the left edge carries the button's category colour.
+		var s: StyleBoxFlat = b.get_theme_stylebox("normal").duplicate()
+		s.border_width_left = 6
+		s.border_color = Color(accent, 0.85)
+		b.add_theme_stylebox_override("normal", s)
+		b.add_theme_color_override("icon_normal_color", accent.lightened(0.25))
+	return b
+
+
+## A second, smaller line inside a big button (bottom-right), e.g. the selected mode.
+func _add_subline(b: Button, text: String, color: Color) -> void:
+	var l := UITheme.label(text, UITheme.FS_SMALL, color, UITheme.font_body_bold())
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	l.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	l.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	l.offset_right = -24
+	l.offset_bottom = -10
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(l)
+
+
+func _add_badge(b: Button, text: String, color: Color) -> void:
+	var bd := UITheme.badge(text, color)
+	bd.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	bd.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	bd.grow_vertical = Control.GROW_DIRECTION_BOTH
+	bd.offset_right = -12
+	b.add_child(bd)
+
+
+func _group_label(text: String) -> Control:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 10)
+	var l := UITheme.label(text, UITheme.FS_MIN, Color(1, 1, 1, 0.55), UITheme.font_body_bold())
+	hb.add_child(l)
+	var rule := ColorRect.new()
+	rule.color = Color(1, 1, 1, 0.12)
+	rule.custom_minimum_size = Vector2(0, 1)
+	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(rule)
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_top", 6)
+	m.add_child(hb)
+	return m
+
+
 func _build_profile_panel() -> void:
-	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.04, 0.07, 0.12, 0.88), Color(UITheme.GOLD, 0.35), 1, 12, 18))
+	var p := UITheme.card_panel(Color(UITheme.GOLD, 0.35), 18, Color(0.04, 0.07, 0.12, 0.88))
 	p.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	p.offset_left = -470.0
+	p.offset_left = -480.0
 	p.offset_right = -40.0
-	p.offset_top = 40.0
-	p.custom_minimum_size = Vector2(430, 0)
+	p.offset_top = 36.0
+	p.custom_minimum_size = Vector2(440, 0)
 	ui.add_child(p)
+	UITheme.animate_in(p, 0.25)
 	_profile_box = VBoxContainer.new()
 	_profile_box.add_theme_constant_override("separation", 8)
 	p.add_child(_profile_box)
 	var d: Dictionary = Profile.data
 	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 12)
+	head.add_theme_constant_override("separation", 14)
 	var div := Profile.division()
 	var emblem_path := "res://assets/textures/ui/rank_%s.png" % div.id
 	if ResourceLoader.exists(emblem_path):
 		var em := TextureRect.new()
 		em.texture = load(emblem_path)
-		em.custom_minimum_size = Vector2(84, 84)
+		em.custom_minimum_size = Vector2(88, 88)
 		em.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		em.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		em.tooltip_text = "%s division" % div.name
 		head.add_child(em)
 	var nb := VBoxContainer.new()
 	nb.add_theme_constant_override("separation", -2)
-	nb.add_child(UITheme.label(str(d.name).to_upper(), 34, UITheme.OFFWHITE, UITheme.font_display()))
-	nb.add_child(UITheme.label("%s DIVISION · %d RP" % [str(div.name).to_upper(), int(d.rp)], 20, Color(div.color), UITheme.font_body_bold()))
-	nb.add_child(UITheme.label("Account level %d" % int(d.level), 20, UITheme.MUTED, UITheme.font_body_bold()))
+	nb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nb.add_child(UITheme.label(str(d.name).to_upper(), 36, UITheme.OFFWHITE, UITheme.font_display()))
+	nb.add_child(UITheme.label("%s DIVISION  ·  %d RP" % [str(div.name).to_upper(), int(d.rp)], UITheme.FS_BODY, Color(div.color).lightened(0.15), UITheme.font_body_bold()))
+	var lvl_row := HBoxContainer.new()
+	lvl_row.add_theme_constant_override("separation", 8)
+	lvl_row.add_child(UITheme.label("LEVEL %d" % int(d.level), UITheme.FS_BODY, UITheme.GREEN, UITheme.font_body_bold()))
+	var xp := UITheme.bar(UITheme.GREEN, 10, Profile.xp_to_next(int(d.level)), int(d.xp))
+	xp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	xp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	xp.tooltip_text = "%d / %d XP to level %d" % [int(d.xp), Profile.xp_to_next(int(d.level)), int(d.level) + 1]
+	lvl_row.add_child(xp)
+	nb.add_child(lvl_row)
 	head.add_child(nb)
 	_profile_box.add_child(head)
-	var xp := ProgressBar.new()
-	xp.max_value = Profile.xp_to_next(int(d.level))
-	xp.value = int(d.xp)
-	xp.custom_minimum_size = Vector2(0, 10)
-	xp.show_percentage = false
-	xp.add_theme_stylebox_override("fill", UITheme.panel_style(UITheme.GREEN, Color(0, 0, 0, 0), 0, 4, 0))
-	xp.tooltip_text = "%d / %d XP" % [int(d.xp), Profile.xp_to_next(int(d.level))]
-	_profile_box.add_child(xp)
 	var cur := HBoxContainer.new()
-	cur.add_theme_constant_override("separation", 20)
+	cur.add_theme_constant_override("separation", 22)
 	var cb := HBoxContainer.new()
-	cb.add_child(UITheme.icon_rect("coin", 30, UITheme.GOLD))
+	cb.add_child(UITheme.icon_rect("coin", 28, UITheme.GOLD))
 	cb.add_child(UITheme.label(UITheme.format_int(int(d.coins)), 30, UITheme.GOLD, UITheme.font_header()))
 	cur.add_child(cb)
 	var sb := HBoxContainer.new()
-	sb.add_child(UITheme.icon_rect("star", 30, Color(0.7, 0.85, 1.0)))
-	sb.add_child(UITheme.label(UITheme.format_int(int(d.stars)), 30, Color(0.7, 0.85, 1.0), UITheme.font_header()))
+	sb.add_child(UITheme.icon_rect("star", 28, UITheme.STAR))
+	sb.add_child(UITheme.label(UITheme.format_int(int(d.stars)), 30, UITheme.STAR, UITheme.font_header()))
 	cur.add_child(sb)
 	var owned := 0
 	for cid in DB.card_order:
 		if Profile.is_card_owned(cid):
 			owned += 1
-	var cards := UITheme.label("Cards %d/%d" % [owned, DB.card_order.size()], 20, UITheme.MUTED, UITheme.font_body_bold())
+	var cards := HBoxContainer.new()
+	cards.add_child(UITheme.icon_rect("collection", 28, UITheme.OFFWHITE))
+	cards.add_child(UITheme.label("%d/%d" % [owned, DB.card_order.size()], 30, UITheme.OFFWHITE, UITheme.font_header()))
+	cards.tooltip_text = "Cards collected"
 	cur.add_child(cards)
 	_profile_box.add_child(cur)
 	_profile_box.add_child(UITheme.hsep())
-	_profile_box.add_child(UITheme.header("RECENT PROGRESS", 24, UITheme.GOLD))
+	_profile_box.add_child(UITheme.section_header("RECENT GAMES", "inning", UITheme.GOLD, 24))
 	var hist: Array = d.history
 	if hist.is_empty():
-		var none := UITheme.label("No games played yet. Hit PLAY to start your first siege!", 18, UITheme.MUTED)
+		var none := UITheme.label("No games played yet. Hit PLAY to start your first game!", UITheme.FS_SMALL, UITheme.MUTED)
 		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_profile_box.add_child(none)
 	for h in hist.slice(0, 3):
-		var txt := "%s  %s · %s · inning %d · %s pts" % ["W" if h.won else "L", DB.mode(h.mode).name, DB.difficulty(h.difficulty).name, int(h.inning), UITheme.format_int(int(h.score))]
-		_profile_box.add_child(UITheme.label(txt, 18, UITheme.GREEN if h.won else Color(1.0, 0.55, 0.5), UITheme.font_body()))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var pill := UITheme.badge("W" if h.won else "L", Color(0.13, 0.55, 0.3) if h.won else Color(0.6, 0.15, 0.17), UITheme.FS_MIN)
+		pill.custom_minimum_size = Vector2(30, 0)
+		pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(pill)
+		var txt := UITheme.label("%s · %s · inn. %d" % [DB.mode(h.mode).name, DB.difficulty(h.difficulty).name, int(h.inning)], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body())
+		txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		txt.clip_text = true
+		row.add_child(txt)
+		row.add_child(UITheme.label(UITheme.format_int(int(h.score)), UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_body_bold()))
+		_profile_box.add_child(row)
 	if Profile.promotion_available():
-		_profile_box.add_child(UITheme.label("★ Promotion Challenge to %s available!" % Profile.next_division().name, 19, UITheme.GOLD, UITheme.font_body_bold()))
+		_profile_box.add_child(UITheme.label("★ Promotion Challenge to %s available!" % Profile.next_division().name, UITheme.FS_BODY, UITheme.GOLD, UITheme.font_body_bold()))
 	var next_unlock := _next_unlock_text()
 	if next_unlock != "":
-		_profile_box.add_child(UITheme.label(next_unlock, 17, Color(0.75, 0.85, 1.0)))
+		var nu := HBoxContainer.new()
+		nu.add_theme_constant_override("separation", 8)
+		nu.add_child(UITheme.icon_rect("lock", 20, Color(0.75, 0.85, 1.0)))
+		nu.add_child(UITheme.label(next_unlock, UITheme.FS_MIN + 1, Color(0.75, 0.85, 1.0)))
+		_profile_box.add_child(nu)
+
+
+# ---------------------------------------------------------------- idle showcase
+
+## Bottom-right caption naming the defender who is showing off.
+func _build_showcase_caption() -> void:
+	_caption = VBoxContainer.new()
+	_caption.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_caption.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_caption.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_caption.offset_right = -40
+	_caption.offset_bottom = -56
+	_caption.alignment = BoxContainer.ALIGNMENT_END
+	_caption.add_theme_constant_override("separation", -6)
+	_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_caption.modulate.a = 0.0
+	ui.add_child(_caption)
+
+
+func _showcase() -> void:
+	var idle: Array = []
+	for i in models.size():
+		if models[i].action == "":
+			idle.append(i)
+	if idle.is_empty():
+		return
+	var i: int = idle[randi() % idle.size()]
+	var m: CharacterModel = models[i]
+	var id: String = Profile.data.team[i]
+	# Face the camera, then play a signature move (or celebrate for a moment).
+	var to := camera.global_position - m.global_position
+	var tw := create_tween()
+	tw.tween_property(m, "rotation:y", atan2(to.x, to.z), 0.35).set_trans(Tween.TRANS_SINE)
+	var moves: Array = ["special", "pitch", "victory"]
+	var move: String = moves[randi() % moves.size()]
+	tw.tween_callback(func() -> void:
+		if move == "victory" or not m.has_anim(move):
+			var base := m.base_anim
+			m.play_base("celebrate")
+			get_tree().create_timer(2.6).timeout.connect(func() -> void:
+				if is_instance_valid(m):
+					m.play_base(base))
+		else:
+			m.play_action(move, 1.0))
+	_focus = m.global_position + Vector3(0, 1.6, 0)
+	_focus_t = 3.4
+	# Caption.
+	for c in _caption.get_children():
+		c.queue_free()
+	var d := DB.defender(id)
+	var nl := UITheme.label(str(d.name).to_upper(), 44, Color(DB.defender_accent(id)).lightened(0.3), UITheme.font_display())
+	nl.add_theme_constant_override("outline_size", 8)
+	nl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_caption.add_child(nl)
+	var role: String = str(DB.roles.get(str(d.get("role", "")), {}).get("name", str(d.get("role", "")).capitalize()))
+	var sub := UITheme.label("#%d  ·  %s  ·  %s" % [int(d.get("number", 0)), role, str(d.get("title", ""))], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_caption.add_child(sub)
+	var ct := _caption.create_tween()
+	ct.tween_property(_caption, "modulate:a", 1.0, UITheme.T_MED)
+	ct.tween_interval(2.8)
+	ct.tween_property(_caption, "modulate:a", 0.0, 0.5)
 
 
 func _next_unlock_text() -> String:
@@ -303,20 +508,20 @@ func _show_welcome() -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.08, 0.14, 0.96), Color(UITheme.SCARLET, 0.7), 2, 12, 22))
 	p.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	p.position = Vector2(-600, -290)
+	p.position = Vector2(-600, -330)
 	p.custom_minimum_size = Vector2(560, 0)
 	ui.add_child(p)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 8)
 	p.add_child(vb)
-	vb.add_child(UITheme.header("WELCOME, MANAGER!", 34, UITheme.GOLD))
+	vb.add_child(UITheme.section_header("WELCOME, MANAGER!", "info", UITheme.GOLD, 34))
 	var txt := UITheme.label("Rival runners are storming the Steel Yard. Your six defenders throw at them automatically — you position the team and play ability cards to stop runners before they reach home plate.\n\nYour first game is a short Quick Defense with step-by-step tips. Finish it to earn your first card pack!", 19, UITheme.OFFWHITE)
 	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	txt.custom_minimum_size = Vector2(520, 0)
 	vb.add_child(txt)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 10)
-	var go := UITheme.small_button("Play the first game", UITheme.SCARLET, 22)
+	var go := UITheme.button("PLAY THE FIRST GAME", "primary", 26, "play")
 	go.pressed.connect(func() -> void:
 		Profile.data.flags.tutorial_done = true
 		Profile.save_soon()
@@ -324,10 +529,11 @@ func _show_welcome() -> void:
 		cfg.difficulty = "rookie"
 		Session.start(cfg))
 	hb.add_child(go)
-	var later := UITheme.small_button("Look around first", UITheme.BLUE, 22)
+	var later := UITheme.button("Look around first", "ghost", 22)
 	later.pressed.connect(func() -> void:
 		Profile.data.flags.tutorial_done = true
 		Profile.save_soon()
 		p.queue_free())
 	hb.add_child(later)
 	vb.add_child(hb)
+	UITheme.animate_in(p, 0.6)

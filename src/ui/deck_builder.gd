@@ -1013,7 +1013,7 @@ func _stat(icon: String, title: String, value: String, col: Color) -> Control:
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", -6)
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(UITheme.label(title, 15, UITheme.MUTED, UITheme.font_body_bold()))
+	vb.add_child(UITheme.label(title, UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
 	var v := UITheme.label(value, 22, col, UITheme.font_body_bold())
 	v.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(v)

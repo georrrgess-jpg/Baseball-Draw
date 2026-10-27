@@ -159,6 +159,7 @@ func _ready() -> void:
 	hud = hud_script.new()
 	hud.battle = self
 	add_child(hud)
+	RunHighlights.attach(self)   # run summary + highlights for the Results screen
 
 	Audio.play_ambience(["stadium_crowd", "wind_industrial"])
 	if practice:
