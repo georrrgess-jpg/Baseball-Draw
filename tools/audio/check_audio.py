@@ -79,7 +79,9 @@ def flags(d: dict, cat: str, name: str) -> list:
     if "seam_ratio" in d:
         if d["seam_ratio"] > 1.0 or d["seam_dratio"] > 1.0:
             out.append(f"seam {d['seam_ratio']:.2f}/{d['seam_dratio']:.2f}")
-        if abs(d["seam_level_db"]) > 6.0:
+        # Arena stems start on an accented downbeat (crash / heartbeat kick), so a level step at the
+        # seam is musical there; the jump/derivative ratios above still catch real discontinuities.
+        if abs(d["seam_level_db"]) > 6.0 and cat != "music_layer":
             out.append(f"seam level {d['seam_level_db']:+.1f} dB")
     else:
         if d["first"] > 0.05:
@@ -96,6 +98,42 @@ def flags(d: dict, cat: str, name: str) -> list:
             out.append("peak>-1")
     if d["hf8k"] > 0.08:
         out.append(f"HF {d['hf8k'] * 100:.0f}%")
+    return out
+
+
+def stem_report(man: dict) -> list:
+    """Adaptive arena stems: identical lengths, and loudness / peak of the layer combinations
+    the game plays (calm; calm+wave; +boss; +tense; all)."""
+    arenas = sorted({e["arena"] for e in man.values() if e.get("category") == "music_layer"})
+    if not arenas:
+        return []
+    out = ["", "### Arena stems (in-game level = LUFS + stem volume)", "",
+           "| arena | samples equal | calm | calm+wave | +boss | +tense | all | all peak dBFS | flags |",
+           "|---|---|---|---|---|---|---|---|---|"]
+    combos = [("calm",), ("calm", "wave"), ("calm", "wave", "boss"), ("calm", "wave", "tense"),
+              ("calm", "wave", "boss", "tense")]
+    for a in arenas:
+        st = {}
+        for layer in ("calm", "wave", "boss", "tense"):
+            e = man.get(f"{a}_{layer}")
+            if e:
+                st[layer] = read_audio(os.path.join(ROOT, e["path"].replace("res://", "")))
+        lens = {x.shape[-1] for x in st.values()}
+        n = min(lens)
+        vol = float(man[f"{a}_calm"].get("volume_db", 0.0))
+        vals = []
+        pk = 0.0
+        for c in combos:
+            x = sum(st[k][:, :n] for k in c)
+            vals.append(loudness(x)["integrated"] + vol)
+            pk = float(lin2db(np.max(np.abs(x))))
+        fl = []
+        if len(lens) != 1:
+            fl.append(f"lengths {sorted(lens)}")
+        if vals[0] < vals[1] - 9:
+            fl.append("calm much quieter")
+        out.append(f"| {a} | {'yes' if len(lens) == 1 else 'NO'} | " + " | ".join(f"{v:.1f}" for v in vals)
+                   + f" | {pk:.1f} | {', '.join(fl) or 'ok'} |")
     return out
 
 
@@ -132,11 +170,12 @@ def main():
     args = ap.parse_args()
     with open(os.path.join(AUDIO, "manifest.json")) as fh:
         man = {e["name"]: e for e in json.load(fh)["files"]}
-    files = sorted(glob.glob(os.path.join(AUDIO, "*", "*.wav")) + glob.glob(os.path.join(AUDIO, "*", "*.ogg")))
+    files = sorted(glob.glob(os.path.join(AUDIO, "**", "*.wav"), recursive=True)
+                   + glob.glob(os.path.join(AUDIO, "**", "*.ogg"), recursive=True))
     rows = []
     hdr = ("| file | dur s | ch | peak dBFS | true pk | RMS dBFS | LUFS | DC | seam (jump/deriv ratio) | "
-           "centroid Hz | >8k % | flags |")
-    lines = [hdr, "|" + "---|" * 12]
+           "centroid Hz | >8k % | play dB | in game | flags |")
+    lines = [hdr, "|" + "---|" * 14]
     nflag = 0
     total_bytes = 0
     for p in files:
@@ -149,15 +188,18 @@ def main():
         total_bytes += os.path.getsize(p)
         lufs = d["lufs"] if cat != "sfx" else d["mom_max"]
         seam = f"{d['seam_ratio']:.2f}/{d['seam_dratio']:.2f}" if "seam_ratio" in d else "-"
+        vol = float(e.get("volume_db", 0.0))
         lines.append(f"| {d['file']} | {d['dur']:.2f} | {d['ch']} | {d['peak_db']:.1f} | {d['tp_db']:.1f} | "
                      f"{d['rms_db']:.1f} | {lufs:.1f}{'' if cat != 'sfx' else ' (M)'} | {d['dc']:.4f} | {seam} | "
-                     f"{d['centroid']:.0f} | {d['hf8k'] * 100:.1f} | {', '.join(fl) or 'ok'} |")
+                     f"{d['centroid']:.0f} | {d['hf8k'] * 100:.1f} | {vol:+.1f} | {lufs + vol:.1f} | "
+                     f"{', '.join(fl) or 'ok'} |")
         rows.append(d)
         if args.plots and (args.plot_only is None or name in args.plot_only):
             os.makedirs(args.plots, exist_ok=True)
             plot(p, os.path.join(args.plots, name + ".png"))
     lines.append("")
     lines.append(f"{len(files)} files, {total_bytes / 1e6:.2f} MB total, {nflag} with flags")
+    lines += stem_report(man)
     text = "\n".join(lines)
     print(text)
     if args.md:
