@@ -297,6 +297,9 @@ func flip(e: Dictionary, fast: bool) -> void:
 		return
 	e.revealed = true
 	var r := DB.rarity_index(e.rarity)
+	var c := DB.card(e.id)
+	# The grid cards are small: hovering a revealed card shows its full text.
+	(e.view as CardView).tooltip_text = "%s — %s\n%s\n\n%s" % [c.name, str(c.rarity).capitalize(), DB.card_text(e.id, Profile.card_level(e.id)), str(c.get("details", ""))]
 	var h: Control = e.holder
 	var rays: Rays = e.rays
 	var tw := create_tween()
