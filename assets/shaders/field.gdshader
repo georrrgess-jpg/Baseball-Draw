@@ -189,7 +189,7 @@ void fragment() {
 	col = mix(col, chalk_color * (0.9 + 0.1 * n2), chalk * 0.95 * worn);
 
 	// ---- On-deck circles (team colour with a chalk ring).
-	vec2 od = vec2(abs(p.x) - 6.8, p.y - 12.4);
+	vec2 od = vec2(abs(p.x) - 7.6, p.y - 9.0);
 	float odd = length(od);
 	float od_fill = 1.0 - smoothstep(0.78, 0.82, odd);
 	col = mix(col, team_color * (0.85 + 0.2 * n3), od_fill * 0.85);

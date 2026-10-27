@@ -198,11 +198,11 @@ func _on_boss_spawned(e: Node) -> void:
 
 func _on_score_changed() -> void:
 	if battle and str(battle.get("state")) == "wave":
-		crowd.cheer(0.45, 0.35)
+		crowd.cheer(0.3, 0.35)
 
 
 func _on_card_cast(_id: String) -> void:
-	crowd.cheer(0.55, 0.5)
+	crowd.cheer(0.4, 0.5)
 
 
 func _on_game_over(won: bool) -> void:

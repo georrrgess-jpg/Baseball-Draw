@@ -58,11 +58,12 @@ void vertex() {
 	bool hide = (part == 5 && !has_cap) || (part == 6 && has_cap) || (part == 7 && !has_finger);
 
 	// How strongly this fan joins each reaction.
-	float keen = clamp(energy * 1.4, 0.0, 1.0);
+	// A small reaction moves only the keenest fans (fully); a big one moves everybody.
+	float gloom = hash(phase + 5.1);
 	float d = mod(seat_ang - wave_pos + 3.14159, 6.2831) - 3.14159;
 	float wave_w = wave_amt * exp(-d * d * 9.0);
-	float cheer_w = cheer * keen;
-	float groan_w = groan * (0.4 + 0.6 * energy) * (1.0 - cheer_w);
+	float cheer_w = smoothstep(1.0 - cheer * 1.1, 1.12 - cheer * 1.1, energy) * step(0.01, cheer);
+	float groan_w = smoothstep(1.0 - groan * 1.1, 1.12 - groan * 1.1, gloom) * step(0.01, groan) * (1.0 - cheer_w);
 	float clap_w = smoothstep(0.35, 0.85, excitement) * step(0.35, energy) * (1.0 - cheer_w) * (1.0 - groan_w);
 	float stand_w = max(max(stand * step(0.15, energy), wave_w), cheer_w * step(0.6, energy) * 0.9);
 	stand_w = smoothstep(0.0, 1.0, stand_w);

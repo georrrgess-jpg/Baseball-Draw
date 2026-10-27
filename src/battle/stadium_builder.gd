@@ -84,7 +84,7 @@ func _build_life(parent: Node3D) -> void:
 		mascot.build(u.team, u.trim, Color(0.95, 0.94, 0.9))
 		root.add_child(mascot)
 		mascot.home = _dugout_door
-		mascot.spot = Vector3(-8.6, 0, 7.6)
+		mascot.spot = Vector3(-9.4, 0, 6.2)
 	life = StadiumLife.new()
 	life.name = "StadiumLife"
 	root.add_child(life)
