@@ -11,6 +11,7 @@ instance uniform float chip = 1.0;          // white "damage taken" segment that
 instance uniform float pulse = 0.0;         // 1 on a hit, decays to 0 (scale pop + white flash)
 instance uniform float shield = 0.0;
 instance uniform float visible_alpha = 1.0;
+instance uniform float stack = 0.0;         // rows to lift the bar by (bunched runners, see Battle._stack_bars)
 uniform vec2 bar_size = vec2(1.3, 0.24);    // world size of the quad (matches the QuadMesh)
 uniform float min_px = 58.0;                // minimum on-screen width in pixels at 1000 px viewport height
 uniform float max_grow = 3.2;               // cap on the distance compensation
@@ -39,6 +40,7 @@ void vertex() {
 	vec2 v = VERTEX.xy * s;
 	// Keep the bottom edge where the unscaled bar's bottom edge was.
 	v.y += bar_size.y * 0.5 * (grow - 1.0);
+	v.y += stack * bar_size.y * grow * 1.2;
 	VERTEX = origin + vec3(v, 0.0);
 	NORMAL = vec3(0.0, 0.0, 1.0);
 }

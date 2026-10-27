@@ -9,6 +9,7 @@ extends Node3D
 ## flight time and landing point are unchanged.
 
 const MAX_TRAIL := 12
+const TRAIL_M := {"comet": 5.0, "fire": 4.5, "spiral": 6.0, "wobble": 6.0, "hook": 9.0, "heavy": 5.0}
 const TRAIL_LEN := {"comet": 18, "fire": 16, "spiral": 24, "wobble": 22, "hook": 44, "heavy": 18}
 
 class Ball:
@@ -220,8 +221,9 @@ func _step(b: Ball, delta: float) -> void:
 	b.node.global_position = pos
 	b.mesh.rotate_x(delta * 30.0)
 	b.points.push_front(pos)
-	if b.points.size() > b.max_trail:
+	if b.points.size() > b.max_trail * 2:
 		b.points.pop_back()
+	_trim_trail(b)
 	_draw_trail(b)
 	if k >= 1.0:
 		b.active = false
@@ -297,6 +299,18 @@ func _trail_particles(b: Ball, pos: Vector3, delta: float) -> void:
 				vfx.emit_one("magic", pos, Vector3(0, -0.3, 0), Color(0.6, 0.95, 1.0), 0.8, 1.0)
 
 
+## Trails are capped by length in metres rather than by point count, so they look the same
+## at any frame rate (a 30 fps frame used to stretch a plain throw's trail to ~10 m).
+func _trim_trail(b: Ball) -> void:
+	var max_len: float = TRAIL_M.get(b.trail_kind, 3.6)
+	var total := 0.0
+	for i in range(1, b.points.size()):
+		total += b.points[i].distance_to(b.points[i - 1])
+		if total > max_len:
+			b.points.resize(i + 1)
+			return
+
+
 func _draw_trail(b: Ball) -> void:
 	b.imesh.clear_surfaces()
 	if b.points.size() < 2 or _camera == null:
@@ -362,6 +376,7 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> bool:
 	Audio.play("crit_hit" if p.get("crit", false) else "ball_hit", -4.0 if p.get("crit", false) else -7.0, 0.08, 40)
 	if p.get("crit", false):
 		battle.vfx.burst("crit", at, p.get("color", Color.WHITE))
+		battle.cam.punch(0.35)
 	if p.has("fx"):
 		battle.vfx.cards.ball_impact(String(p.fx), at, p.get("color", Color.WHITE), t)
 	if p.has("burn") and t.alive:

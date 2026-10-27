@@ -361,6 +361,7 @@ func _release() -> void:
 			return
 	var payload := _build_payload(target, bool(_pending_payload.get("fastball", false)))
 	battle.projectiles.launch(model.hand_position(), target, s_throw_speed * (1.4 if payload.get("fastball", false) else 1.0), payload)
+	battle.vfx.arm_swoosh(model, Color(data.accent))
 	# Quick Hands: a second throw at a different runner.
 	if trait_id == "quick_hands" and randf() < 0.3:
 		var other := _second_target(target)
@@ -453,6 +454,7 @@ func _tick_dash(delta: float) -> void:
 		if to.length() < 0.9:
 			model.play_action("catch", 1.6)
 			Audio.play("glove_catch", -4.0)
+			battle.vfx.catch_pop(model.glove_position(), Color(data.accent))
 			var dmg := effective_damage() * 2.0
 			var dealt := _dash_target.take_damage(dmg, {"source": self, "kind": "tag"})
 			battle.on_damage_dealt(self, _dash_target, dealt, false)

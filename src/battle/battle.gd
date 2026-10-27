@@ -15,6 +15,11 @@ signal card_denied(index: int, reason: String)
 signal defender_moved(defender: Defender)
 signal run_scored(runs: int)
 signal boss_spawned(enemy: Enemy)
+## A boss entrance cinematic started / ended (not played in auto tests or the guided first game).
+signal boss_intro_started(enemy: Enemy)
+signal boss_intro_finished(enemy: Enemy)
+## A boss was put out (fires with the final hit, before the slow motion and the banner).
+signal boss_defeated(enemy: Enemy)
 
 const COMBO_WINDOW := 1.35
 const BREAK_TIME := 12.0
@@ -41,7 +46,7 @@ var cam: CameraRig
 var stadium: StadiumBuilder
 var hud: Node
 var field_mat: ShaderMaterial
-var shield_dome: MeshInstance3D
+var shield_dome: Node3D
 
 var state := "loading"           # setup | wave | break | dugout | results
 var wave_info: Dictionary = {}
@@ -81,6 +86,10 @@ var _danger_ring: MeshInstance3D
 var _preview_marked: Array = []
 var _danger := 0.0
 var _danger_warned := 0.0
+var _boss_intro_node: BossIntro
+var _intro_seen := {}
+var _slowmo_tw: Tween
+var _slowmo_base := 1.0
 
 
 func _ready() -> void:
@@ -173,6 +182,11 @@ func _ready() -> void:
 			cam.cinematic = true
 		elif a == "--no-hud":
 			hud.visible = false
+		elif a.begins_with("--fx-scenario="):
+			var sc := FxScenario.new()
+			sc.battle = self
+			sc.scenario = a.split("=")[1]
+			add_child(sc)
 	if auto_test:
 		var ap := Autopilot.new()
 		ap.battle = self
@@ -612,6 +626,9 @@ func finish_run(won: bool) -> void:
 	run.finished = true
 	run.won = won
 	set_state("results")
+	_stop_slow_motion()
+	if _boss_intro_node and is_instance_valid(_boss_intro_node):
+		_boss_intro_node.abort()
 	Engine.time_scale = 1.0
 	_cancel_targeting()
 	for e in enemies:
@@ -674,21 +691,30 @@ func spawn_enemy(id: String, route: Route, start_d := 0.0, opts: Dictionary = {}
 		if hud.has_method("show_boss"):
 			hud.show_boss(e)
 		boss_spawned.emit(e)
-		_boss_intro(route)
+		_boss_intro(e, route)
 	return e
 
 
-## Brief camera move to the boss's gate, then back to where the player was looking.
-func _boss_intro(route: Route) -> void:
-	if auto_test or cam.cinematic:
+## Boss entrance (see BossIntro): camera to the gate, gate burst, name card, camera back.
+## Skipped in auto tests, during the guided first game, while another cinematic holds the
+## camera, and in Practice after the first time each boss is spawned.
+func _boss_intro(e: Enemy, route: Route) -> void:
+	if auto_test or cam.cinematic or (hud and hud.get_node_or_null("Tutorial") != null):
 		return
-	var saved := [cam._t_focus, cam._t_yaw, cam._t_pitch, cam._t_distance]
-	var gate := route.points[0]
-	cam.cinematic = true
-	cam.set_view(gate.lerp(Field.HOME, 0.18), cam._t_yaw, -30.0, 24.0)
-	get_tree().create_timer(2.4).timeout.connect(func() -> void:
-		cam.set_view(saved[0], saved[1], saved[2], saved[3])
-		cam.cinematic = false)
+	if practice and _intro_seen.has(e.id):
+		return
+	_intro_seen[e.id] = true
+	if _boss_intro_node and is_instance_valid(_boss_intro_node):
+		_boss_intro_node.abort()
+	var bi := BossIntro.new()
+	bi.name = "BossIntro"
+	bi.battle = self
+	bi.boss = e
+	bi.gate = route.points[0]
+	bi.finished.connect(func() -> void: boss_intro_finished.emit(e))
+	_boss_intro_node = bi
+	add_child(bi)
+	boss_intro_started.emit(e)
 
 
 func _process_spawns(delta: float) -> void:
@@ -723,6 +749,8 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 	run.coins_earned += coin
 	run.score += 10 + e.coins * 2
 	vfx.burst("out", e.center())
+	if not e.is_boss:
+		cam.punch(0.6 if (e.affix != "" or e.id in ["captain", "slugger"]) else 0.3)
 	if coin >= 12:
 		vfx.text_popup(e.center() + Vector3(0.7, 0.4, 0), "+%d" % coin, UITheme.GOLD, 0.75, 0.9)
 	Audio.play("enemy_out", -6.0, 0.06, 60)
@@ -852,10 +880,44 @@ func _on_boss_defeated(e: Enemy) -> void:
 	if not practice:
 		Profile.bump_stat("boss_" + e.id)
 	notify("%s DEFEATED!" % e.data.name.to_upper(), UITheme.GOLD)
-	vfx.burst("confetti", e.center() + Vector3(0, 3, 0))
+	if _boss_intro_node and is_instance_valid(_boss_intro_node):
+		_boss_intro_node.abort()
+	e.hit_stop(0.16)
+	vfx.boss_finale(e.center(), BossIntro.color_for(e.id))
+	slow_motion(0.85, 0.3)
 	crowd_cheer(1.0)
-	cam.shake(0.5)
+	cam.shake(0.6)
+	cam.punch(1.3)
 	Audio.play("crowd_cheer")
+	boss_defeated.emit(e)
+
+
+## Brief slow motion (boss finales): the game clock eases down to `factor` and back over
+## `real_time` seconds. Everything keeps simulating on game time, so results are the same,
+## and input is never blocked. Respects later speed changes (see cycle_speed).
+func slow_motion(real_time: float, factor: float) -> void:
+	if _slowmo_tw and _slowmo_tw.is_valid():
+		_slowmo_tw.kill()
+		Engine.time_scale = _slowmo_base
+	_slowmo_base = Engine.time_scale
+	_slowmo_tw = create_tween().set_ignore_time_scale(true)
+	_slowmo_tw.tween_method(func(k: float) -> void:
+		# Drop in fast (first 12 %), hold, then ease back up over the last half.
+		var f := 1.0
+		if k < 0.12:
+			f = lerpf(1.0, factor, k / 0.12)
+		elif k < 0.5:
+			f = factor
+		else:
+			f = lerpf(factor, 1.0, smoothstep(0.5, 1.0, k))
+		Engine.time_scale = _slowmo_base * f, 0.0, 1.0, real_time)
+	_slowmo_tw.tween_callback(func() -> void: Engine.time_scale = _slowmo_base)
+
+
+func _stop_slow_motion() -> void:
+	if _slowmo_tw and _slowmo_tw.is_valid():
+		_slowmo_tw.kill()
+		Engine.time_scale = _slowmo_base
 
 
 func add_shield(n: int) -> void:
@@ -866,10 +928,9 @@ func add_shield(n: int) -> void:
 	score_changed.emit()
 
 
+## The shield ring, pips and the dome flare follow run.shields on their own (VFX._update_dome).
 func _update_shield_dome() -> void:
-	shield_dome.visible = run.shields > 0
-	if run.shields > 0:
-		(shield_dome.material_override as ShaderMaterial).set_shader_parameter("strength", 0.6 + 0.4 * run.shields)
+	pass
 
 
 # ---------------------------------------------------------------- combat helpers
@@ -1105,9 +1166,59 @@ func _process(delta: float) -> void:
 	_hud_timer -= delta
 	if _hud_timer <= 0.0:
 		_hud_timer = 0.1
+		_stack_bars()
 		if hud.has_method("refresh"):
 			hud.refresh()
 	_prof_mark("hud")
+
+
+## Bunched runners: health bars that would overlap on screen are lifted into rows (up to
+## four), nearest runner lowest. Purely visual; runs ten times a second.
+func _stack_bars() -> void:
+	var c3 := cam.camera
+	if c3 == null:
+		return
+	var vh := get_viewport().get_visible_rect().size.y
+	var right := c3.global_transform.basis.x
+	var cam_pos := c3.global_position
+	var list: Array = []
+	for e in enemies:
+		if not e.bar_shown() or e.is_boss:
+			e.bar_stack = 0.0
+			continue
+		var bi: Array = e.bar_info()
+		var a: Vector3 = bi[0]
+		if c3.is_position_behind(a):
+			continue
+		var sp := c3.unproject_position(a)
+		var w := c3.unproject_position(a + right * float(bi[1])).distance_to(sp)
+		var want := float(bi[3]) * clampf(vh / 1000.0, 0.8, 2.2)
+		var bw := clampf(w, want, want * 1.7)
+		var bh := bw * float(bi[2]) / float(bi[1])
+		list.append([e, sp, bw, bh, cam_pos.distance_squared_to(a), 0])
+	if list.size() < 2:
+		for it in list:
+			it[0].bar_stack = 0.0
+		return
+	list.sort_custom(func(x, y) -> bool: return x[4] < y[4])
+	for i in list.size():
+		var me: Array = list[i]
+		var row := 0
+		while row < 3:
+			var my_y: float = me[1].y - row * me[3] * 1.2
+			var hit := false
+			for j in i:
+				var o: Array = list[j]
+				if absf(me[1].x - o[1].x) < (me[2] + o[2]) * 0.5:
+					var oy: float = o[1].y - int(o[5]) * o[3] * 1.2
+					if absf(my_y - oy) < (me[3] + o[3]) * 0.55:
+						hit = true
+						break
+			if not hit:
+				break
+			row += 1
+		me[5] = row
+		me[0].bar_stack = float(row)
 
 
 ## Pulses a red ring around home plate as runners close in, with an occasional warning.
@@ -1165,6 +1276,7 @@ func _update_scoreboard() -> void:
 func cycle_speed() -> void:
 	speed_index = (speed_index + 1) % SPEEDS.size()
 	Engine.time_scale = SPEEDS[speed_index]
+	_slowmo_base = SPEEDS[speed_index]
 	Audio.ui("ui_toggle")
 
 

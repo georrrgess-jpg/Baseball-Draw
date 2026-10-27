@@ -90,6 +90,10 @@ var _bar_hold := 0.0
 var _bar_pulse := 0.0
 var _bar_anim := false
 var _death_vel := Vector3.ZERO
+var bar_stack := 0.0                # target row for the health bar (set by Battle._stack_bars)
+var _bar_stack := 0.0
+var _stop_t := 0.0                  # cosmetic hit-stop left (real seconds)
+var _stop_pos := Vector3.INF
 
 ## Health bar styles: world size of the quad, minimum on-screen width, accent trim, ticks.
 const BAR_STYLES := {
@@ -383,6 +387,8 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 	_bar_hit(before, bool(info.get("dot", false)))
 	if dmg >= 1.0:
 		_hit_feedback(dmg, info)
+		if not info.get("dot", false) and (info.get("crit", false) or hp <= 0.0):
+			hit_stop(0.075 if hp <= 0.0 else 0.05)
 		if (dmg > max_hp * 0.18 or info.get("crit", false)) and model.action == "" and hp > 0.0 and not is_boss and not is_airborne():
 			model.play_action("hit", 1.3)
 	if hp <= 0.0:
@@ -417,6 +423,38 @@ func _hit_feedback(dmg: float, info: Dictionary) -> void:
 	if _impact_gap <= 0.0 or crit or big:
 		_impact_gap = 0.08
 		vfx.hit_impact(info.get("at", center()), dir, info.get("color", Color(1.0, 0.9, 0.7)), strength, crit, big)
+
+
+## Health bar geometry for Battle._stack_bars: [anchor, world width, world height, min_px].
+func bar_info() -> Array:
+	var bs: Dictionary = BAR_STYLES["boss" if is_boss else ("elite" if affix != "" or id in ["captain", "slugger"] else "runner")]
+	return [_hp_bar.global_position, bs.size.x, bs.size.y, bs.min_px]
+
+
+func bar_shown() -> bool:
+	return alive and _hp_bar.visible
+
+
+## Hit-stop: the runner's drawn model freezes on the impact pose for a few frames and
+## trembles, while the simulation keeps running underneath (it catches up when released).
+func hit_stop(time: float) -> void:
+	if time > _stop_t:
+		_stop_t = time
+		_stop_pos = Vector3.INF
+
+
+func _tick_stop(delta: float) -> void:
+	_stop_t -= delta / maxf(Engine.time_scale, 0.01)
+	if model.anim:
+		model.anim.speed_scale = 0.0 if _stop_t > 0.0 else 1.0
+	if _stop_t <= 0.0:
+		_stop_t = 0.0
+		_stop_pos = Vector3.INF
+		return
+	if _stop_pos == Vector3.INF:
+		_stop_pos = model.global_position
+	var jit := (global_transform.basis * _hit_dir) * (0.05 if Engine.get_process_frames() % 2 == 0 else -0.05)
+	model.global_position = _stop_pos + jit
 
 
 func _bar_hit(before: float, dot: bool) -> void:
@@ -487,6 +525,9 @@ func die(info: Dictionary = {}) -> void:
 
 func tick(delta: float) -> void:
 	if not alive:
+		if _stop_t > 0.0:
+			_tick_stop(delta)
+			return
 		_death_t += delta
 		_tick_hit(delta)
 		_tick_death(delta)
@@ -505,6 +546,11 @@ func tick(delta: float) -> void:
 	_update_status_fx(delta)
 	_tick_hit(delta)
 	_tick_bar(delta)
+	if _bar_stack != bar_stack:
+		_bar_stack = move_toward(_bar_stack, bar_stack, delta / maxf(Engine.time_scale, 0.01) * 8.0)
+		_hp_bar.set_instance_shader_parameter("stack", _bar_stack)
+	if _stop_t > 0.0:
+		_tick_stop(delta)
 
 
 ## Out: the runner is knocked back with a hop, falls (defeat animation), then shrinks away.
