@@ -1316,7 +1316,7 @@ const _PIP_ANGLES := [PI, 0.0, PI * 0.5]   # left, right, then behind the plate 
 
 func _pip_rest(i: int) -> Vector3:
 	var a: float = _PIP_ANGLES[i]
-	return Vector3(cos(a) * SHIELD_RING_R, 0.62, sin(a) * SHIELD_RING_R)
+	return Vector3(cos(a) * SHIELD_RING_R, 0.8, sin(a) * SHIELD_RING_R)
 
 
 func _update_dome(delta: float) -> void:
@@ -1351,7 +1351,7 @@ func _update_dome(delta: float) -> void:
 			var k: float = _pip_k[i]
 			var pop := 1.0 + 0.5 * sin(k * PI) * float(target > 0.0)
 			pip.position = _pip_rest(i) + Vector3(0, 0.08 * sin(tt * 2.2 + i * 1.7), 0)
-			pip.scale = Vector3.ONE * 0.95 * k * pop
+			pip.scale = Vector3.ONE * 1.35 * k * pop
 			pip.set_instance_shader_parameter("color", Color(0.45 + 0.55 * _dome_flare, 0.9 + 0.1 * _dome_flare, 1.0, 1.0))
 	var ring_target := (0.55 + 0.45 * _dome_flare) if s > 0 else _dome_flare
 	var ring_k: float = _shield_ring.get_instance_shader_parameter("progress")

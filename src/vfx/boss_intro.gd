@@ -47,7 +47,8 @@ func _ready() -> void:
 	var cam := battle.cam
 	_saved = [cam._t_focus, cam._t_yaw, cam._t_pitch, cam._t_distance]
 	cam.cinematic = true
-	cam.set_view(gate.lerp(Field.HOME, 0.16), cam._t_yaw, -27.0, 23.0)
+	# The boss stands in the upper half of the frame, above the name card.
+	cam.set_view(gate.lerp(Field.HOME, 0.08), cam._t_yaw, -24.0, 24.0)
 	cam.shake(0.2)
 	_build_card()
 
@@ -76,7 +77,8 @@ func _build_card() -> void:
 	_band.add_theme_stylebox_override("panel", sb)
 	var bh := 178.0 * ui
 	_band.size = Vector2(vs.x * 0.74, bh)
-	_band.position = Vector2(vs.x * 0.13, vs.y * 0.17)
+	# Lower-middle of the screen: the boss stands above it at the gate, the hand stays clear below.
+	_band.position = Vector2(vs.x * 0.13, vs.y * 0.5)
 	_band.pivot_offset = _band.size * 0.5
 	_root.add_child(_band)
 	_tag = _label(TAGS.get(boss.id, "BOSS"), int(22 * ui), Color(1.0, 0.32, 0.25), UITheme.font_header())
