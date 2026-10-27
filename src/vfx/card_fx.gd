@@ -308,8 +308,11 @@ func called_shot_impact(at: Vector3, boss: bool) -> void:
 	var s := 1.5 if boss else 1.0
 	impact_flash(at, GOLD, 1.9 * s, 8.0, int(26 * s))
 	vfx.emit_one("ring", at, Vector3.ZERO, Color(1.0, 0.95, 0.75), 2.6 * s, 1.2)
-	vfx.shockwave(_flat(at), 3.2 * s, GOLD, 0.45, 0.08)
-	vfx.shockwave(_flat(at), 2.0 * s, Color(1.0, 0.95, 0.8), 0.3, 0.05, 0.05)
+	vfx.shockwave(_flat(at), 4.2 * s, GOLD, 0.55, 0.1)
+	vfx.shockwave(_flat(at), 2.4 * s, Color(1.0, 0.95, 0.8), 0.35, 0.06, 0.05)
+	vfx.sphere_pulse(_flat(at, 0.2), 2.6 * s, Color(GOLD, 0.6), 0.5)
+	vfx.burst("gold", at)
+	vfx.shake(0.2 * s)
 	vfx.decal("crater", _flat(at), 1.6 * s, Color(0.25, 0.16, 0.08, 0.7), GOLD, 2.5)
 	vfx.beam(_flat(at), 1.1 * s, 12.0, GOLD, 0.45)
 	vfx.spray("debris", _flat(at, 0.3), 8, Color(0.5, 0.37, 0.27), 7.0, Vector3.UP, 0.8, 0.8, 1.0)
@@ -1023,9 +1026,19 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 		"seventh_inning_stretch":
 			focus = Field.MOUND + Vector3(0, 6, -10)
 			view = Vector3(0.0, -18.0, 52.0)
-		"heat_wave", "grand_relay", "thunderbolt", "pickoff", "sky_hook", "diving_catch", "power_catch":
+		"heat_wave", "grand_relay", "thunderbolt", "pickoff", "sky_hook", "diving_catch", "power_catch", "called_shot", "line_drive":
 			focus = target.lerp(Field.MOUND, 0.35)
 			view = Vector3(25.0, -42.0, 34.0)
+		"tag_at_the_plate":
+			# A runner arrives at the plate shortly after the cast and is tagged out.
+			focus = Field.HOME + Vector3(0, 0, -1.5)
+			view = Vector3(160.0, -32.0, 19.0)
+		"perfect_game", "bullpen_call":
+			focus = Field.MOUND + Vector3(0, 0, 2)
+			view = Vector3(0.0, -46.0, 50.0)
+		"hot_corner":
+			focus = target.lerp(Field.MOUND, 0.5)
+			view = Vector3(25.0, -40.0, 28.0)
 	if cam_arg != "":
 		var v := cam_arg.split(",")
 		view = Vector3(float(v[0]), float(v[1]), float(v[2]))
@@ -1049,6 +1062,10 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 			df_target = df
 	battle.effects.execute(card_id, level, {"point": target, "enemy": lead[0] if not lead.is_empty() else null, "defender": df_target, "valid": true})
 	print("[VFX] cast %s" % card_id)
+	if card_id in ["tag_at_the_plate", "perfect_game"]:
+		# A runner reaches the plate during the tag window.
+		var home_route: Route = battle.routes[battle.routes.size() - 1]
+		battle.spawn_enemy("runner", home_route, home_route.length - 2.4, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 1.0})
 	if times.is_empty() or out_dir == "":
 		return
 	DirAccess.make_dir_recursive_absolute(out_dir)

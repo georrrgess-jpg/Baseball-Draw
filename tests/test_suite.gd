@@ -780,6 +780,7 @@ func test_update5_content() -> void:
 		ok(seen.has(id), "packs can contain %s" % id)
 	Profile.reset_profile()
 	# The new runner and elite affix.
+	ok(int(DB.achievements.full_collection.goal) == DB.cards.size(), "the Full Deck achievement asks for every card")
 	ok(DB.enemies.has("base_stealer") and DB.portrait("base_stealer") != null, "Base Stealer defined with a portrait")
 	ok(DB.elite_affixes.any(func(a: Dictionary) -> bool: return a.id == "shielded"), "Shielded elite affix defined")
 	var cfg := Session.new_run_config("standard")
