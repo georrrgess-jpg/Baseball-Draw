@@ -132,11 +132,18 @@ func _draw_moment(display: Font, header: Font) -> void:
 			draw_colored_polygon(pts, col)
 		var r := 70.0 * (0.8 + 0.2 * appear) + 6.0 * sin(_t * 8.0)
 		draw_circle(c, r, Color(0.97, 0.96, 0.92))
+		# Two curved seams with stitches, rocking slightly.
+		var rock := sin(_t * 3.0) * 0.12
 		for side in [-1.0, 1.0]:
-			for i in 9:
-				var a := lerpf(-1.1, 1.1, i / 8.0) + _t * 2.0
-				var p := c + Vector2(side * r * 0.55 * cos(a * 0.7), r * 0.8 * sin(a * 0.7 + 0.0))
-				draw_line(p - Vector2(8, 0), p + Vector2(8, 0), Color(0.85, 0.1, 0.12), 4.0)
+			var sc := c + Vector2(side * r * 1.3, 0).rotated(rock)
+			var base := (PI if side > 0.0 else 0.0) + rock
+			draw_arc(sc, r * 0.82, base - 0.75, base + 0.75, 16, Color(0.85, 0.1, 0.12), 3.0)
+			for i in 7:
+				var a := base + lerpf(-0.65, 0.65, i / 6.0)
+				var p := sc + Vector2(cos(a), sin(a)) * r * 0.82
+				var tang := Vector2(-sin(a), cos(a)) * 7.0
+				var nrm := Vector2(cos(a), sin(a)) * 5.0
+				draw_line(p - nrm - tang * 0.4, p + nrm + tang * 0.4, Color(0.85, 0.1, 0.12), 3.0)
 		for y in range(0, int(h), 4):
 			draw_line(Vector2(0, y), Vector2(w, y), Color(0, 0, 0, 0.3), 1.0)
 	# Caption bar slides in from the left.

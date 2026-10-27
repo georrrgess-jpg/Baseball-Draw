@@ -83,7 +83,7 @@ static func fan_mesh(low := false) -> ArrayMesh:
 		return _fan_mesh_low
 	if not low and _fan_mesh:
 		return _fan_mesh
-	var seg := 5 if low else 7
+	var seg := 4 if low else 7
 	var k := MeshKit.new(true)
 	var off := STAND_OFFSET
 	k.stand_offset = off
@@ -116,11 +116,13 @@ static func fan_mesh(low := false) -> ArrayMesh:
 		k.box(Vector3(sx, SHOULDER.y - 0.11, 0), Vector3(0.12, 0.24, 0.12), ["+y"])
 		_part(k, part, 1, 1.0)
 		k.box(Vector3(sx, SHOULDER.y - 0.36, 0), Vector3(0.09, 0.26, 0.09), ["+y"])
-		k.box(Vector3(sx, SHOULDER.y - 0.52, 0), Vector3(0.11, 0.08, 0.1))
+		if not low:
+			k.box(Vector3(sx, SHOULDER.y - 0.52, 0), Vector3(0.11, 0.08, 0.1))
 	# Foam finger on the right hand (variant): a big mitt and the pointing finger.
 	_part(k, 7, 5, 1.0)
 	k.box(Vector3(SHOULDER.x, SHOULDER.y - 0.62, 0.0), Vector3(0.17, 0.2, 0.07))
-	k.box(Vector3(SHOULDER.x, SHOULDER.y - 0.82, 0.0), Vector3(0.06, 0.2, 0.06), ["+y"])
+	if not low:
+		k.box(Vector3(SHOULDER.x, SHOULDER.y - 0.82, 0.0), Vector3(0.06, 0.2, 0.06), ["+y"])
 	# Legs: seated (thighs forward, shins down) with explicit standing positions.
 	_part(k, 4, 2, 0.85)
 	_leg_box(k, Vector3(0, 0.5, 0.17), Vector3(0.34, 0.14, 0.46), Vector3(0, 0.67, 0.03), Vector3(0.34, 0.46, 0.14))

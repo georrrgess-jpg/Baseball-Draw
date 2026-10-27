@@ -74,7 +74,7 @@ func _make_burst(amount: int, tex: Texture2D) -> GPUParticles3D:
 	pm.scale_curve = sct
 	p.process_material = pm
 	var q := QuadMesh.new()
-	q.size = Vector2(0.55, 0.55)
+	q.size = Vector2(0.85, 0.85)
 	q.material = _spark_material(tex)
 	p.draw_pass_1 = q
 	p.visibility_aabb = AABB(Vector3(-20, -20, -20), Vector3(40, 40, 40))
@@ -166,7 +166,7 @@ func _launch(origin: Vector3, apex: Vector3, col: Color) -> void:
 		rocket.emitting = false
 		var b := _bursts[idx]
 		b.global_position = apex
-		(b.process_material as ParticleProcessMaterial).color = col * 1.6
+		(b.process_material as ParticleProcessMaterial).color = col * 1.25
 		b.restart()
 		b.emitting = true
 		# Silent until an audio pass adds a "firework" effect (unknown names are ignored).
