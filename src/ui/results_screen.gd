@@ -15,6 +15,7 @@ const T_PACKS := 3.4
 const T_TEAM := 4.0
 
 var _rv: VBoxContainer
+const DAILY_ACCENT := Color("#FF8A3D")
 
 
 func _ready() -> void:
@@ -59,7 +60,12 @@ func _ready() -> void:
 		return
 
 	var mode := DB.mode(result.get("mode", "standard"))
-	var sub := UITheme.header("%s  ·  %s  ·  %s" % [mode.name, DB.difficulty(result.get("difficulty", "standard")).name, DB.arena(result.get("arena", "steel_yard")).name], 30, UITheme.MUTED)
+	var daily: Dictionary = result.get("daily", {})
+	var mode_name: String = mode.name
+	if not daily.is_empty():
+		mode_name = "DAILY CHALLENGE  ·  %s" % DailyChallenge.pretty_date(str(daily.get("date", "")))
+	var sub := UITheme.header("%s  ·  %s  ·  %s" % [mode_name, DB.difficulty(result.get("difficulty", "standard")).name, DB.arena(result.get("arena", "steel_yard")).name], 30,
+		DAILY_ACCENT.lightened(0.2) if not daily.is_empty() else UITheme.MUTED)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(sub)
 
@@ -283,6 +289,11 @@ func _build_highlights() -> Control:
 	var st: Dictionary = result.get("stats", {})
 	var hl: Dictionary = st.get("highlights", {})
 	var cards: Array = []
+	var daily: Dictionary = result.get("daily", {})
+	if not daily.is_empty():
+		var dt := _daily_tile(daily)
+		hv.add_child(dt)
+		UITheme.animate_in(dt, T_BODY + 0.3)
 	# 1. Biggest combo.
 	var combo: Dictionary = hl.get("best_combo", {})
 	var mc := int(combo.get("n", st.get("max_combo", 0)))
@@ -341,6 +352,126 @@ func _build_highlights() -> Control:
 			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_child(l)
 			hv.add_child(_late(row, T_TEAM))
+	var mastery: Array = result.get("mastery", [])
+	if not mastery.is_empty():
+		hv.add_child(_late(UITheme.section_header("CARD MASTERY", "star", UITheme.GOLD, UITheme.FS_H3), T_TEAM))
+		var k := 0
+		for m in mastery.slice(0, 4):
+			hv.add_child(_mastery_row(m, T_TEAM + 0.2 + k * 0.35))
+			k += 1
+		if mastery.size() > 4:
+			var more := UITheme.label("+%d more card%s played" % [mastery.size() - 4, "" if mastery.size() == 5 else "s"], UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+			hv.add_child(_late(more, T_TEAM + 1.6))
+	return p
+
+
+## Daily Challenge result: score against today's best, the streak and the daily bonus.
+func _daily_tile(d: Dictionary) -> Control:
+	var p := UITheme.tile_panel(DAILY_ACCENT, 14, true)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	p.add_child(vb)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	vb.add_child(head)
+	head.add_child(UITheme.icon_rect("calendar", 26, DAILY_ACCENT.lightened(0.25)))
+	var h := UITheme.label("DAILY CHALLENGE", 30, DAILY_ACCENT.lightened(0.25), UITheme.font_display())
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(h)
+	if bool(d.get("new_best", false)):
+		var nb := UITheme.badge("NEW BEST!", UITheme.GOLD.darkened(0.25), UITheme.FS_SMALL)
+		nb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		head.add_child(_late(nb, T_BODY + 1.0))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	vb.add_child(row)
+	var sc := VBoxContainer.new()
+	sc.add_theme_constant_override("separation", -6)
+	sc.add_child(UITheme.label(UITheme.format_int(int(d.get("score", 0))), 44, UITheme.GOLD, UITheme.font_display()))
+	sc.add_child(UITheme.label("SCORE", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
+	row.add_child(sc)
+	var bv := VBoxContainer.new()
+	bv.add_theme_constant_override("separation", -6)
+	bv.add_child(UITheme.label(UITheme.format_int(int(d.get("best", 0))), 44, UITheme.OFFWHITE, UITheme.font_display()))
+	bv.add_child(UITheme.label("BEST TODAY", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
+	row.add_child(bv)
+	var sv := VBoxContainer.new()
+	sv.add_theme_constant_override("separation", -6)
+	var streak := int(d.get("streak", 0))
+	sv.add_child(UITheme.label("%d" % streak, 44, DAILY_ACCENT.lightened(0.2), UITheme.font_display()))
+	sv.add_child(UITheme.label("DAY STREAK", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
+	sv.tooltip_text = "Best streak: %d days" % int(d.get("best_streak", 0))
+	row.add_child(sv)
+	var lines: Array = []
+	if bool(d.get("first_today", false)):
+		lines.append("First game today: +%d coins" % int(d.get("bonus_coins", 0)))
+	for pk in d.get("bonus_packs", []):
+		lines.append("Daily bonus: %s" % DB.pack(str(pk)).get("name", str(pk)))
+	if lines.is_empty():
+		lines.append("Attempt %d today. Next challenge in %s." % [int(d.get("attempts", 1)), DailyChallenge.countdown_text()])
+	for t in lines:
+		var l := UITheme.label(t, UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vb.add_child(l)
+	return p
+
+
+## One card's mastery gain: plays added, the bar fills, and a "MASTERY ★2!" pop when a star is earned.
+func _mastery_row(m: Dictionary, delay: float) -> Control:
+	var cid := str(m.get("id", ""))
+	var c := DB.card(cid)
+	var sb := int(m.get("stars_before", 0))
+	var sa := int(m.get("stars_after", 0))
+	var earned := sa > sb
+	var p := UITheme.tile_panel(Color(UITheme.GOLD, 0.6 if earned else 0.18), 8, earned)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 10)
+	p.add_child(hb)
+	var art := TextureRect.new()
+	art.texture = DB.card_texture(cid)
+	art.custom_minimum_size = Vector2(44, 44)
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	hb.add_child(art)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 2)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(vb)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	vb.add_child(top)
+	var nm := UITheme.label(str(c.get("name", cid)), UITheme.FS_BODY, DB.category_color(str(c.get("category", ""))).lightened(0.35), UITheme.font_header())
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nm.clip_text = true
+	top.add_child(nm)
+	var stars := MasteryUI.Stars.new(sb, 18.0)
+	stars.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(stars)
+	var before := int(m.get("before", 0))
+	var after := int(m.get("after", 0))
+	var bar := UITheme.bar(UITheme.GOLD, 8, 1.0, CardMastery.progress(before))
+	vb.add_child(bar)
+	var info := UITheme.label("+%d mastery" % int(m.get("plays", 0)), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+	vb.add_child(info)
+	var tw := create_tween()
+	tw.tween_interval(delay)
+	if earned:
+		tw.tween_property(bar, "value", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(func() -> void:
+			Audio.play("achievement", -4.0)
+			stars.set_filled(sa)
+			info.text = "MASTERY %s!" % "★".repeat(sa) + ("  Gold frame unlocked" if sa >= CardMastery.MAX_STARS else "")
+			info.add_theme_color_override("font_color", UITheme.GOLD)
+			info.add_theme_font_size_override("font_size", UITheme.FS_SMALL)
+			p.modulate = Color(1.5, 1.4, 1.1)
+			p.pivot_offset = p.size * 0.5
+			p.scale = Vector2(1.06, 1.06)
+			bar.value = 0.0)
+		tw.tween_property(p, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(p, "modulate", Color.WHITE, 0.4)
+	tw.tween_property(bar, "value", CardMastery.progress(after), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	p.tooltip_text = CardMastery.status_text(after)
+	UITheme.animate_in(p, delay - 0.15)
 	return p
 
 
@@ -377,11 +508,14 @@ func _build_buttons() -> Control:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 16)
 	col.add_child(buttons)
-	var again := UITheme.button("PLAY AGAIN", "primary", 32, "play")
-	again.custom_minimum_size = Vector2(300, 64)
 	var cfg0: Dictionary = battle.run.config if battle and battle.run else {}
+	var is_daily: bool = cfg0.has("daily") or not (result.get("daily", {}) as Dictionary).is_empty()
+	var again := UITheme.button("RETRY DAILY" if is_daily else "PLAY AGAIN", "primary", 32, "play", DAILY_ACCENT.darkened(0.15) if is_daily else Color(0, 0, 0, 0))
+	again.custom_minimum_size = Vector2(300, 64)
 	again.tooltip_text = "Same mode, difficulty, stadium and deck: %s · %s · %s" % [DB.mode(str(cfg0.get("mode", "standard"))).name,
 		DB.difficulty(str(cfg0.get("difficulty", "standard"))).name, DB.arena(str(cfg0.get("arena", "steel_yard"))).name]
+	if is_daily:
+		again.tooltip_text = "Play today's Daily Challenge again and beat your best score"
 	again.pressed.connect(_play_again)
 	buttons.add_child(again)
 	var deck := UITheme.button("CARDS & DECK", "secondary", 28, "deck")
@@ -392,7 +526,8 @@ func _build_buttons() -> Control:
 	menu.custom_minimum_size = Vector2(240, 64)
 	menu.pressed.connect(func() -> void: Router.goto("main_menu"))
 	buttons.add_child(menu)
-	var note := UITheme.label("Play Again uses the same mode, difficulty, stadium and deck.", UITheme.FS_MIN, UITheme.MUTED)
+	var note := UITheme.label("Retry uses today's rules again; your best score counts." if is_daily
+		else "Play Again uses the same mode, difficulty, stadium and deck.", UITheme.FS_MIN, UITheme.MUTED)
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(note)
 	UITheme.animate_in(col, T_BODY + 0.4)
@@ -403,6 +538,9 @@ func _build_buttons() -> Control:
 ## formation (a new seed). Promotion Challenges go back to the Play screen, since the
 ## challenge depends on the current division.
 func _play_again() -> void:
+	if battle.run.config.has("daily"):
+		Session.start(DailyChallenge.config_for())   # today's rules (a new day brings new ones)
+		return
 	var cfg: Dictionary = battle.run.config.duplicate(true)
 	if str(cfg.get("mode", "")) == "ranked":
 		Router.goto("play_menu")
@@ -426,7 +564,7 @@ func _play_again() -> void:
 	if team.size() < Profile.data.team.size():
 		team = Profile.data.team.duplicate()
 	cfg.team = team
-	Profile.clear_run()
+	Profile.clear_run(true)
 	Session.start(cfg)
 
 

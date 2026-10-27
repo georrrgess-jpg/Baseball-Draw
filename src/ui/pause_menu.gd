@@ -65,8 +65,9 @@ func _ready() -> void:
 			get_tree().paused = false
 			Router.goto("main_menu"))
 	else:
-		var save_quit := _btn("SAVE & QUIT", "secondary", "save", UITheme.GOLD)
-		save_quit.tooltip_text = "Your run is saved at the start of each inning. Continue it from the main menu."
+		var daily := battle.run.is_daily()   # Daily Challenge games are never saved mid-game
+		var save_quit := _btn("QUIT TO MENU" if daily else "SAVE & QUIT", "secondary", "exit" if daily else "save", UITheme.GOLD)
+		save_quit.tooltip_text = "Daily games are not saved: quitting drops this attempt (no score)." if daily else "Your run is saved at the start of each inning. Continue it from the main menu."
 		save_quit.pressed.connect(func() -> void:
 			get_tree().paused = false
 			Router.goto("main_menu"))
@@ -75,7 +76,7 @@ func _ready() -> void:
 		abandon.pressed.connect(func() -> void:
 			_close()
 			battle.abandon())
-		var note := UITheme.label("Save & Quit resumes from the start of this inning.", UITheme.FS_MIN, UITheme.MUTED)
+		var note := UITheme.label("Daily games can't be continued later. Forfeit to record your score." if daily else "Save & Quit resumes from the start of this inning.", UITheme.FS_MIN, UITheme.MUTED)
 		note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(note)
 	UITheme.animate_in(panel, 0.0, 0.95)

@@ -48,6 +48,7 @@ var _detail: VBoxContainer
 var _tab_btns := {}
 var _rarity_btns := {}
 var _search: LineEdit
+var _sets_row: HBoxContainer
 var _press_id := ""
 var _press_pos := Vector2.ZERO
 var _press_from := -1
@@ -241,6 +242,7 @@ func _rebuild_deck(hidden := -1, slide_from := -1) -> void:
 		cv.set_card(cid, Profile.card_level(cid))
 		cv.custom_minimum_size = SLOT_SIZE
 		cv.size = SLOT_SIZE
+		cv.mastery = CardMastery.stars(cid)
 		cv.tooltip_text = "Click to remove · drag to reorder"
 		var idx := i
 		cv.gui_input.connect(func(e: InputEvent) -> void: _card_input(e, cid, cv, idx))
@@ -678,6 +680,12 @@ func _build_collection() -> Control:
 		_refresh_collection())
 	row2.add_child(sort)
 
+	# Collection book: set completion per category, with a one-time reward per set.
+	_sets_row = HBoxContainer.new()
+	_sets_row.add_theme_constant_override("separation", 8)
+	vb.add_child(_sets_row)
+	_refresh_sets()
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -807,6 +815,7 @@ func _make_grid_card(cid: String) -> Control:
 	cv.size = GRID_CARD
 	cv.owned = owned
 	cv.show_level = owned
+	cv.mastery = CardMastery.stars(cid)
 	cv.selected = cid == selected
 	cv.count_badge = _badge_for(cid)
 	cv.gui_input.connect(func(e: InputEvent) -> void: _card_input(e, cid, cv, -1))
@@ -884,6 +893,159 @@ func _inspect(id: String) -> void:
 	_refresh_detail()
 
 
+# ================================================================ collection sets
+
+func _refresh_sets() -> void:
+	if _sets_row == null:
+		return
+	for c in _sets_row.get_children():
+		c.queue_free()
+	for sid in CollectionSets.ids():
+		_sets_row.add_child(_set_tile(sid))
+
+
+func _set_tile(sid: String) -> Control:
+	var inf := CollectionSets.info(sid)
+	var prog := CollectionSets.progress(sid)
+	var complete := CollectionSets.is_complete(sid)
+	var claimed := CollectionSets.is_claimed(sid)
+	var claimable := complete and not claimed
+	var col: Color = DB.category_color(sid) if sid in DB.CATEGORY_ORDER else UITheme.GOLD
+	var tile := UITheme.tile_panel(Color(UITheme.GOLD if claimable else col, 0.9 if claimable else 0.35), 8, claimable)
+	tile.name = "Set_" + sid
+	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tile.custom_minimum_size = Vector2(150, 0)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	tile.add_child(vb)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	vb.add_child(top)
+	top.add_child(UITheme.icon_rect(str(inf[2]), 20, col.lightened(0.2)))
+	var nm := UITheme.label(str(inf[1]), UITheme.FS_MIN, UITheme.OFFWHITE, UITheme.font_body_bold())
+	nm.clip_text = true
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(nm)
+	if claimed:
+		top.add_child(UITheme.icon_rect("check", 20, UITheme.GREEN))
+	else:
+		top.add_child(UITheme.label("%d/%d" % [int(prog.owned), int(prog.total)], UITheme.FS_SMALL, UITheme.GOLD if complete else UITheme.OFFWHITE, UITheme.font_header()))
+	var pack_name: String = DB.pack(CollectionSets.reward_pack(sid)).get("name", "Pack")
+	if claimable:
+		var b := UITheme.button("CLAIM %s" % pack_name.to_upper(), "primary", UITheme.FS_MIN, "gift", UITheme.GOLD.darkened(0.25))
+		b.custom_minimum_size = Vector2(0, 32)
+		b.pressed.connect(func() -> void: _claim_set(sid))
+		vb.add_child(b)
+		var pulse := tile.create_tween().set_loops()
+		pulse.tween_property(tile, "self_modulate", Color(1.25, 1.15, 0.85), 0.7).set_trans(Tween.TRANS_SINE)
+		pulse.tween_property(tile, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
+	else:
+		var bar := UITheme.bar(UITheme.GREEN if claimed else col, 8, float(maxi(1, int(prog.total))), float(prog.owned))
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		vb.add_child(bar)
+	if claimed:
+		tile.tooltip_text = "%s set complete. Reward claimed: %s." % [str(inf[1]).capitalize(), pack_name]
+	else:
+		var left := int(prog.total) - int(prog.owned)
+		tile.tooltip_text = "%s set: %d of %d cards collected. Collect %s for a %s." % [str(inf[1]).capitalize(), int(prog.owned), int(prog.total),
+			"the last %d" % left if left > 0 else "them all", pack_name] if not claimable else "Set complete! Claim your %s." % pack_name
+	return tile
+
+
+## Claims a set's reward with a short celebration: the pack drops in over a burst of light.
+func _claim_set(sid: String) -> void:
+	var pack := CollectionSets.claim(sid)
+	if pack == "":
+		return
+	Audio.play("achievement")
+	Audio.play("crowd_cheer", -10.0)
+	_refresh_sets()
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.z_index = 50
+	add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0.01, 0.02, 0.05, 0.0)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+	dim.create_tween().tween_property(dim, "color:a", 0.72, 0.25)
+	var cc := CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(cc)
+	var p := UITheme.card_panel(Color(UITheme.GOLD, 0.8), 28, Color(0.05, 0.07, 0.12, 0.97), 2)
+	p.custom_minimum_size = Vector2(560, 0)
+	cc.add_child(p)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	p.add_child(vb)
+	var inf := CollectionSets.info(sid)
+	var t := UITheme.title("%s SET COMPLETE!" % str(inf[1]) if sid != "all" else "COLLECTION COMPLETE!", 48, UITheme.GOLD)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(t)
+	var art_box := CenterContainer.new()
+	art_box.custom_minimum_size = Vector2(0, 230)
+	vb.add_child(art_box)
+	var rays := _Rays.new()
+	rays.custom_minimum_size = Vector2(260, 230)
+	art_box.add_child(rays)
+	var art := PackArt.new(pack)
+	art.custom_minimum_size = Vector2(130, 200)
+	art.position = Vector2(65, 15)
+	art.pivot_offset = Vector2(65, 100)
+	art.scale = Vector2(0.2, 0.2)
+	art.rotation = -0.5
+	rays.add_child(art)
+	var at := art.create_tween().set_parallel()
+	at.tween_property(art, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	at.tween_property(art, "rotation", 0.0, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var l := UITheme.label("+1 %s added to your packs" % str(DB.pack(pack).get("name", "Pack")), UITheme.FS_LEAD, UITheme.OFFWHITE, UITheme.font_body_bold())
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(l)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	vb.add_child(row)
+	var open := UITheme.button("OPEN PACKS", "primary", UITheme.FS_LEAD, "gift", UITheme.GOLD.darkened(0.25))
+	open.pressed.connect(func() -> void:
+		_save_before_leaving()
+		Router.goto("packs"))
+	row.add_child(open)
+	var ok := UITheme.button("NICE!", "secondary", UITheme.FS_LEAD)
+	ok.pressed.connect(func() -> void:
+		var ft := layer.create_tween()
+		ft.tween_property(layer, "modulate:a", 0.0, 0.18)
+		ft.tween_callback(layer.queue_free))
+	row.add_child(ok)
+	UITheme.animate_in(p, 0.0, 0.85)
+
+
+func _save_before_leaving() -> void:
+	if _dirty and deck.size() == Profile.DECK_SIZE:
+		Profile.set_deck(deck)
+		_dirty = false
+
+
+## Slowly turning light rays behind a reward.
+class _Rays extends Control:
+	var _t := 0.0
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		var c := size * 0.5
+		for i in 12:
+			var a := _t * 0.35 + TAU * i / 12.0
+			var w := 0.12
+			var r := maxf(size.x, size.y) * 0.62
+			draw_colored_polygon(PackedVector2Array([c, c + Vector2(cos(a - w), sin(a - w)) * r, c + Vector2(cos(a + w), sin(a + w)) * r]),
+				Color(1.0, 0.82, 0.3, 0.16))
+		draw_circle(c, 70.0, Color(1.0, 0.85, 0.4, 0.12))
+
+
 # ================================================================ inspector
 
 func _build_inspector() -> Control:
@@ -916,6 +1078,7 @@ func _refresh_detail() -> void:
 	big.set_card(selected, lvl)
 	big.custom_minimum_size = Vector2(180, 252)
 	big.owned = owned
+	big.mastery = CardMastery.stars(selected)
 	big.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(big)
 	var stats := VBoxContainer.new()
@@ -936,6 +1099,8 @@ func _refresh_detail() -> void:
 	var desc := UITheme.label(DB.card_text(selected, lvl), 22, UITheme.OFFWHITE)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail.add_child(desc)
+	if owned or Profile.card_plays(selected) > 0:
+		_detail.add_child(MasteryUI.block(selected))
 
 	var linked: String = c.get("linked", "")
 	if linked != "":

@@ -70,6 +70,13 @@ static func create(cfg: Dictionary) -> RunState:
 	r.deck = cfg.get("deck", []).duplicate()
 	r.formation = cfg.get("formation", "balanced")
 	r.modifiers = cfg.get("modifiers", []).duplicate()
+	# Modifiers that change the starting rules (Daily Challenge, e.g. "no base shields").
+	for mid in r.modifiers:
+		var md := DailyChallenge.modifier_def(str(mid))
+		if md.has("start_shields"):
+			r.shields = int(md.start_shields)
+		if md.has("run_limit_add"):
+			r.run_limit = maxi(1, r.run_limit + int(md.run_limit_add))
 	if r.mode_id == "practice":
 		r.run_limit = 999
 		r.waves_per_inning = 0
@@ -87,11 +94,18 @@ func is_practice() -> bool:
 	return mode_id == "practice"
 
 
+func is_daily() -> bool:
+	return config.has("daily")
+
+
 func is_final_inning() -> bool:
 	return max_innings > 0 and inning >= max_innings
 
 
 func boss_for_inning(i: int) -> String:
+	var fixed: Variant = config.get("bosses")
+	if typeof(fixed) == TYPE_DICTIONARY and not (fixed as Dictionary).is_empty():
+		return str(fixed.get(str(i), ""))
 	var m := DB.mode(mode_id)
 	if m.has("bosses"):
 		return str(m.bosses.get(str(i), ""))
@@ -130,7 +144,7 @@ func modifier_total(key: String) -> float:
 	if am.has(key):
 		total += float(am[key])
 	for mid in modifiers:
-		var md: Dictionary = DB.endless_modifiers.get(mid, {})
+		var md := DailyChallenge.modifier_def(str(mid))
 		if md.has(key):
 			total += float(md[key])
 	return total
@@ -138,6 +152,8 @@ func modifier_total(key: String) -> float:
 
 func card_level(card_id: String) -> int:
 	var base := Profile.card_level(card_id) if Profile.is_card_owned(card_id) else 1
+	if config.has("card_level"):   # Daily Challenge: every card at the same level for everyone
+		base = int(config.card_level)
 	return clampi(base + int(card_level_bonus.get(card_id, 0)), 1, DB.card_max_level + 2)
 
 

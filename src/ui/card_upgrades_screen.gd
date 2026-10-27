@@ -211,6 +211,7 @@ func _make_tile(id: String) -> Control:
 	cv.set_card(id, lvl)
 	cv.custom_minimum_size = TILE_CARD
 	cv.show_level = false
+	cv.mastery = CardMastery.stars(id)
 	cv.selected = id == selected
 	cv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	cv.clicked.connect(func(_c: CardView) -> void: _select(id))
@@ -357,6 +358,7 @@ func _refresh_detail() -> void:
 	top.add_child(_d_holder)
 	_d_card = CardView.new(selected, lvl)
 	_d_card.set_card(selected, lvl)
+	_d_card.mastery = CardMastery.stars(selected)
 	_d_card.custom_minimum_size = BIG_CARD
 	_d_card.size = BIG_CARD
 	_d_card.pivot_offset = BIG_CARD * 0.5
@@ -409,6 +411,7 @@ func _refresh_detail() -> void:
 			grid.add_child(arrow)
 			grid.add_child(UITheme.label("+%d%%" % int(round((nxt / maxf(now, 0.0001) - 1.0) * 100.0)), 19, Color(UITheme.GREEN, 0.75), UITheme.font_body_bold()))
 			_d_stats.append([cur, now, nxt, key])
+	_detail.add_child(MasteryUI.strip(selected))
 
 	if maxed:
 		var done := UITheme.label("This card is fully upgraded. Nice work!", 22, UITheme.GOLD, UITheme.font_body_bold())

@@ -69,12 +69,15 @@ func default_profile() -> Dictionary:
 		"packs": [],          # unopened packs: {"type", "source", "card" (signature packs)}
 		"packs_opened": 0,
 		"flags": {"tutorial_done": false},
+		# Daily Challenge records: best score per day (last 30 days) and the streak of days played.
+		"daily": {"streak": 0, "best_streak": 0, "last_date": "", "played": 0, "wins": 0, "days": {}},
+		"sets_claimed": {},   # collection set id -> date its one-time reward was claimed
 	}
 	for id in DB.defender_order:
 		var unlocked: bool = DB.defender(id).get("unlock", {}).get("type", "") == "default"
 		p.defenders[id] = {"unlocked": unlocked, "level": 1, "xp": 0, "traits": {}}
 	for id in DB.card_order:
-		p.cards[id] = {"owned": id in STARTER_CARDS, "level": 1, "copies": 0}
+		p.cards[id] = {"owned": id in STARTER_CARDS, "level": 1, "copies": 0, "plays": 0}
 	return p
 
 
@@ -141,6 +144,7 @@ func _sanitize() -> void:
 		var c: Dictionary = data.cards[id]
 		c.level = clampi(int(c.get("level", 1)), 1, DB.card_max_level)
 		c.copies = int(c.get("copies", 0))
+		c["plays"] = maxi(0, int(c.get("plays", 0)))
 	var deck: Array = []
 	for id in data.deck:
 		if DB.cards.has(id) and is_card_owned(id) and not id in deck:
@@ -177,6 +181,23 @@ func _sanitize() -> void:
 			packs.append(pk)
 	data.packs = packs
 	data.packs_opened = int(data.packs_opened)
+	# Daily Challenge records and set rewards (added in Update 5; older saves get the defaults).
+	var dl: Dictionary = data.daily
+	for k in ["streak", "best_streak", "played", "wins"]:
+		dl[k] = maxi(0, int(dl.get(k, 0)))
+	dl.last_date = str(dl.get("last_date", ""))
+	if typeof(dl.get("days")) != TYPE_DICTIONARY:
+		dl.days = {}
+	for date in dl.days.keys():
+		if typeof(dl.days[date]) != TYPE_DICTIONARY:
+			dl.days.erase(date)
+			continue
+		var day: Dictionary = dl.days[date]
+		day.best = int(day.get("best", 0))
+		day.attempts = int(day.get("attempts", 0))
+	for sid in data.sets_claimed.keys():
+		if not sid in CollectionSets.ids():
+			data.sets_claimed.erase(sid)
 
 
 func save_now() -> void:
@@ -422,6 +443,20 @@ func card_level(id: String) -> int:
 
 func card_copies(id: String) -> int:
 	return int(data.cards.get(id, {}).get("copies", 0))
+
+
+## Card mastery: times the card was played in real games (CardMastery turns this into stars).
+func card_plays(id: String) -> int:
+	return int(data.cards.get(id, {}).get("plays", 0))
+
+
+func add_card_plays(id: String, n: int) -> void:
+	if not data.cards.has(id) or n <= 0:
+		return
+	var before := CardMastery.stars_for(card_plays(id))
+	data.cards[id]["plays"] = card_plays(id) + n
+	if CardMastery.stars_for(card_plays(id)) > before and CardMastery.stars_for(card_plays(id)) >= CardMastery.MAX_STARS:
+		set_stat_max("cards_mastered", CardMastery.mastered_count())
 
 
 ## Adds a card to the collection; extra copies feed upgrades. Returns true if newly unlocked.
@@ -768,12 +803,19 @@ func has_saved_run() -> bool:
 	return typeof(data.current_run) == TYPE_DICTIONARY and not data.current_run.is_empty()
 
 
+## Daily Challenge games never take the Continue Run slot (they cannot be continued).
 func store_run(run_dict: Variant) -> void:
+	if typeof(run_dict) == TYPE_DICTIONARY and (run_dict as Dictionary).get("config", {}).has("daily"):
+		return
 	data.current_run = run_dict
 	save_now()
 
 
-func clear_run() -> void:
+## Clears the saved run. While a Daily Challenge game is on screen the player's saved
+## regular run is kept (the battle clears the slot when any game ends); `force` always clears.
+func clear_run(force := false) -> void:
+	if not force and Router.current == "battle" and Session.run_config.has("daily"):
+		return
 	data.current_run = null
 	save_soon()
 
