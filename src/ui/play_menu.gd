@@ -60,7 +60,7 @@ func _ready() -> void:
 	_mode_info.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var info_panel := UITheme.tile_panel(UITheme.BORDER, 14)
 	info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	info_panel.add_child(_mode_info)
+	info_panel.add_child(_vscroll(_mode_info))
 	mv.add_child(info_panel)
 
 	# ---- Difficulty + stadium
@@ -124,7 +124,7 @@ func _ready() -> void:
 	right.add_child(sp)
 	_summary = VBoxContainer.new()
 	_summary.add_theme_constant_override("separation", 8)
-	sp.add_child(_summary)
+	sp.add_child(_vscroll(_summary))
 	_fill_summary()
 	_start = UITheme.button("START  ▶", "primary", 48, "")
 	_start.custom_minimum_size = Vector2(400, 92)
@@ -139,13 +139,23 @@ func _ready() -> void:
 	_select_mode(last if not Profile.has_saved_run() else "quick", true)
 
 
+## Wraps a column so it scrolls instead of pushing the layout off-screen at large UI scales.
+func _vscroll(c: Control) -> ScrollContainer:
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(c)
+	return sc
+
+
 # ---------------------------------------------------------------- modes
 
 func _mode_card(id: String, accent: Color, icon: String, facts: String) -> Button:
 	var m := DB.mode(id)
 	var b := Button.new()
 	b.toggle_mode = true
-	b.custom_minimum_size = Vector2(0, 84)
+	b.custom_minimum_size = Vector2(0, 78)
 	b.focus_mode = Control.FOCUS_NONE
 	var mk := func(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
 		var s := UITheme.panel_style(bg, border, bw, 10, 0)
@@ -360,7 +370,8 @@ func _arena_tile(id: String) -> Button:
 	b.button_pressed = selected
 	b.disabled = not unlocked
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(266, 176)
+	b.custom_minimum_size = Vector2(266, 204)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.add_theme_stylebox_override("normal", UITheme.panel_style(Color(0, 0, 0, 0.4), Color(1, 1, 1, 0.12), 2, 10, 0))
 	b.add_theme_stylebox_override("hover", UITheme.panel_style(Color(0, 0, 0, 0.2), Color(accent, 0.9), 3, 10, 0))
 	b.add_theme_stylebox_override("pressed", UITheme.panel_style(Color(0, 0, 0, 0.2), accent.lightened(0.2), 4, 10, 0))

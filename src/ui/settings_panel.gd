@@ -120,6 +120,8 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():   # screenshot helpers
 		if a.begins_with("--settings-tab="):
 			_show_category(a.split("=")[1], true)
+		elif a == "--run-benchmark":
+			get_tree().create_timer(1.0).timeout.connect(_run_benchmark)
 		elif a.begins_with("--settings-search="):
 			_search.text = a.split("=")[1]
 			_apply_filter()

@@ -69,9 +69,9 @@ func _ready() -> void:
 	vb.add_child(body)
 	var left := _build_summary()
 	body.add_child(left)
-	var mid := _build_rewards()
+	var mid := _scrollify(_build_rewards())
 	body.add_child(mid)
-	var right := _build_highlights()
+	var right := _scrollify(_build_highlights())
 	body.add_child(right)
 	var k := 0
 	for c in [left, mid, right]:
@@ -491,6 +491,18 @@ func _progress_tile(id: String, d: Dictionary, delay: float) -> Control:
 		tw.tween_property(p, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(p, "modulate", Color.WHITE, 0.4)
 	tw.tween_property(bar, "value", after, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	return p
+
+
+## Lets a panel's column scroll when it does not fit (large UI scale), keeping the buttons on screen.
+func _scrollify(p: PanelContainer) -> PanelContainer:
+	var vb := p.get_child(0)
+	p.remove_child(vb)
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(vb)
+	p.add_child(sc)
 	return p
 
 
