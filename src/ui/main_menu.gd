@@ -58,6 +58,8 @@ func _ready() -> void:
 	_ball.visible = false
 	add_child(_ball)
 
+	if "--skip-welcome" in OS.get_cmdline_user_args():   # screenshot helper: a returning player
+		Profile.data.flags.tutorial_done = true
 	_build_ui()
 	UITheme.apply_debug_ui_scale(self)
 	Audio.play_music("menu_theme")
