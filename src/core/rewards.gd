@@ -10,6 +10,9 @@ const COINS_PER_INNING := 15
 const WIN_COINS := 100
 const DEFENDER_XP_SHARE := 0.3     # of the account XP, for every defender on the team
 const DEFENDER_XP_PER_OUT := 1
+# First-hour pacing (Update 6): the first win ever pays a Pro Pack and coins on top.
+const FIRST_WIN_COINS := 150
+const FIRST_WIN_PACK := "pro"
 
 
 static func innings_cleared(run: RunState, won: bool) -> int:
@@ -94,6 +97,14 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 			Profile.bump_stat("no_card_wins")
 	Profile.bump_stat("runs_played")
 	Profile.bump_stat("clean_innings", float(run.stats.get("clean_innings", 0)))
+	Profile.bump_stat("caught_stealing", float(run.stats.get("caught_stealing", 0)))
+	# First win ever: a one-time bonus so the first session pays well.
+	var first_win := false
+	if won and not bool(Profile.data.flags.get("first_win_bonus", false)):
+		Profile.data.flags["first_win_bonus"] = true
+		first_win = true
+		Profile.add_coins(FIRST_WIN_COINS)
+		Profile.add_pack(FIRST_WIN_PACK, "First win bonus")
 	var records: Array = []
 	if run.mode_id == "endless":
 		var reached := run.inning
@@ -116,6 +127,11 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 	var daily := {}
 	if run.is_daily():
 		daily = DailyChallenge.record_result(run, won)
+	# Missions: end-of-game events (live ones already counted during the game).
+	Missions.on_run(run, won, cleared)
+	var level_rewards: Array = []
+	for l in range(level_before + 1, int(Profile.data.level) + 1):
+		level_rewards.append({"level": l, "text": LevelRoad.reward_text(l)})
 
 	var new_achievements: Array = []
 	for id in Profile.data.achievements.keys():
@@ -130,6 +146,8 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 		"division_before": division_before, "records": records, "achievements": new_achievements,
 		"stats": run.stats.duplicate(true), "date": Time.get_datetime_string_from_system(),
 		"mastery": mastery, "daily": daily,
+		"missions": Missions.take_fresh(), "level_rewards": level_rewards,
+		"first_win": first_win, "first_win_coins": FIRST_WIN_COINS if first_win else 0,
 	}
 	Profile.add_history({"won": won, "mode": run.mode_id, "difficulty": run.difficulty_id, "arena": run.arena_id,
 		"inning": run.inning, "score": run.score, "outs": run.outs_total, "runs": run.runs, "date": result.date})

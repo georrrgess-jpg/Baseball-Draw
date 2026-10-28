@@ -250,11 +250,13 @@ static func record_result(run: RunState, won: bool) -> Dictionary:
 			d["last_date"] = date
 		d["best_streak"] = maxi(int(d.get("best_streak", 0)), int(d.streak))
 		d["played"] = int(d.get("played", 0)) + 1
+		Profile.bump_stat("dailies_finished")
 	if won and not bool(day.get("win_rewarded", false)):
 		day["win_rewarded"] = true
 		Profile.add_pack(str(rw.get("win_pack", "pro")), "Daily Challenge win")
 		bonus_packs.append(str(rw.get("win_pack", "pro")))
 		d["wins"] = int(d.get("wins", 0)) + 1
+		Profile.bump_stat("daily_wins")
 	days[date] = day
 	_prune(days)
 	Profile.set_stat_max("daily_streak", float(d.get("streak", 0)))

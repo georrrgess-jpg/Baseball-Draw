@@ -20,10 +20,30 @@ const THEMES := {
 }
 
 
-## Effective inning used for scaling (Quick Defense ramps faster).
+## Effective inning used for scaling (Quick Defense ramps faster; Endless starts a little
+## further up the curve via "inning_offset" so its first innings are not a warm-up).
 static func effective_inning(run: RunState) -> float:
-	var scale := float(DB.mode(run.mode_id).get("inning_scale", 1.0))
-	return 1.0 + float(run.inning - 1) * scale
+	var m := DB.mode(run.mode_id)
+	var scale := float(m.get("inning_scale", 1.0))
+	return 1.0 + float(run.inning - 1) * scale + float(m.get("inning_offset", 0.0))
+
+
+## Endless: innings without a boss get a mini-boss in their last wave from "mini_boss_from"
+## on (a Captain early, then a Slugger, always with an elite affix). Returns "" or the runner id.
+static func mini_boss_for(run: RunState, wave_index: int) -> String:
+	var m := DB.mode(run.mode_id)
+	if not m.has("mini_boss_from") or wave_index != run.waves_per_inning - 1 or run.boss_for_inning(run.inning) != "":
+		return ""
+	if run.inning < int(m.mini_boss_from):
+		return ""
+	return "captain" if run.inning < int(m.get("mini_boss_slugger_from", 4)) else "slugger"
+
+
+## Per-mode fine tuning on top of the difficulty (data/modes.json "tuning": {difficulty or
+## "all": {"enemy_hp", "budget"}}), so Quick Defense and Standard Siege can be balanced apart.
+static func mode_tuning(run: RunState, key: String) -> float:
+	var t: Dictionary = DB.mode(run.mode_id).get("tuning", {})
+	return float(t.get("all", {}).get(key, 1.0)) * float(t.get(run.difficulty_id, {}).get(key, 1.0))
 
 
 static func hp_multiplier(run: RunState) -> float:
@@ -31,7 +51,7 @@ static func hp_multiplier(run: RunState) -> float:
 	var mult := 1.0 + 0.24 * (ei - 1.0)
 	if ei > 6.0:
 		mult *= pow(1.08, ei - 6.0)
-	mult *= float(DB.difficulty(run.difficulty_id).enemy_hp)
+	mult *= float(DB.difficulty(run.difficulty_id).enemy_hp) * mode_tuning(run, "enemy_hp")
 	mult *= 1.0 + run.modifier_total("enemy_hp")
 	return mult
 
@@ -52,7 +72,7 @@ static func generate(run: RunState, wave_index: int, route_count: int) -> Dictio
 	var is_last := wave_index == run.waves_per_inning - 1
 	var boss := run.boss_for_inning(run.inning) if is_last else ""
 
-	var budget := (8.0 + 4.8 * (ei - 1.0) + 2.6 * float(wave_index)) * float(diff.budget)
+	var budget := (8.0 + 4.8 * (ei - 1.0) + 2.6 * float(wave_index)) * float(diff.budget) * mode_tuning(run, "budget")
 	if ei > 9.0:
 		budget *= pow(1.08, ei - 9.0)
 	if boss != "":
@@ -89,6 +109,12 @@ static func generate(run: RunState, wave_index: int, route_count: int) -> Dictio
 
 	if boss != "":
 		groups.append(_group(boss, 1, rng.randi() % route_count, t + 3.0, 1.0, ""))
+	var mini := mini_boss_for(run, wave_index)
+	if mini != "":
+		var affixes: Array = DB.elite_affixes.filter(func(a: Dictionary) -> bool: return a.id != "slippery")
+		var affix: String = affixes[rng.randi() % affixes.size()].id if not affixes.is_empty() else ""
+		groups.append(_group(mini, 1, rng.randi() % route_count, t + 4.0, 1.0, affix))
+		budget -= float(DB.enemies[mini].cost)
 
 	var weights: Dictionary = THEMES.get(theme, THEMES.mixed)
 	var safety := 0
@@ -123,7 +149,7 @@ static func generate(run: RunState, wave_index: int, route_count: int) -> Dictio
 	var preview := {}
 	for g in groups:
 		preview[g.enemy] = int(preview.get(g.enemy, 0)) + int(g.count)
-	return {"groups": groups, "boss": boss, "theme": theme, "preview": preview, "total": _total(groups)}
+	return {"groups": groups, "boss": boss, "theme": theme, "preview": preview, "total": _total(groups), "mini_boss": mini}
 
 
 static func _group(id: String, count: int, route: int, start: float, interval: float, affix: String) -> Dictionary:

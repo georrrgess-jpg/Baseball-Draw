@@ -1,0 +1,12 @@
+{
+  "_comment": "Account level road (Update 6): the reward for reaching each account level, shown on the Progression screen. 'default' applies to every level, the last matching 'every' entry to multiples of n, 'levels' overrides single levels. Defender and stadium unlocks come from data/defenders.json and data/arenas.json and are shown on the road too. Early levels pay extra so the first hour feels generous (src/core/level_road.gd; mirrored by tools/balance/economy.py).",
+  "default": {"coins": 100, "packs": ["rookie"]},
+  "every": [{"n": 5, "coins": 150, "packs": ["pro"]}, {"n": 10, "coins": 250, "packs": ["pro", "rookie"]}],
+  "levels": {
+    "2": {"coins": 150, "packs": ["rookie", "rookie"]},
+    "3": {"coins": 150, "packs": ["rookie", "rookie"]},
+    "4": {"coins": 150, "packs": ["pro"]},
+    "5": {"coins": 250, "packs": ["pro", "rookie"]},
+    "6": {"coins": 150, "packs": ["rookie", "rookie"]}
+  }
+}
