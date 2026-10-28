@@ -130,7 +130,7 @@ WRECKERS = dict(Jersey="#2B2F36", Pants="#4C525C", Undershirt="#1B1F27", Belt="#
 
 ENEMIES = {
     "runner": dict(
-        number=13, accent="#FF7A1A", height=1.80, gait="runner",
+        number=13, accent="#FF7A1A", height=1.80, gait="runner", lite=1,
         skin="#C68B59", hair="#2A1A10", iris="#5A3A1A",
         headwear="helmet", eyeblack=True,
         body=dict(muscle=1.0),
@@ -138,7 +138,7 @@ ENEMIES = {
                   eye_open=0.9),
     ),
     "sprinter": dict(
-        number=7, accent="#FFD400", height=1.86, gait="sprinter",
+        number=7, accent="#FFD400", height=1.86, gait="sprinter", lite=1,
         skin="#7A4A2E", hair="#120B08", iris="#3A2414",
         headwear="aero", sunglasses=True, bare_arms=True, track_spikes=True, wristbands=True,
         colors=dict(Shoes="#FFD400", Sole="#1B1F27", Visor="#3A2A00"),
@@ -148,7 +148,7 @@ ENEMIES = {
         face=dict(jaw=0.4, chin=1.0, mouth="smile", smile=0.25, smirk=0.9, brow_angle=-0.4),
     ),
     "armored": dict(
-        number=66, accent="#8A939E", height=1.92, gait="heavy", heavy=0.45,
+        number=66, accent="#8A939E", height=1.92, gait="heavy", heavy=0.45, lite=1,
         skin="#E0AC86", hair="#5A3A22", iris="#4A5A6A",
         headwear="helmet", cage=True, brim=False, cap_metal=True, chunky=1.15,
         colors=dict(Cap="#9AA3AE", Metal="#9AA3AE", Gear="#5E666F"),
@@ -163,7 +163,7 @@ ENEMIES = {
                   mouth="smile", smile=-0.45, eye_open=0.78, nose_w=1.2),
     ),
     "jumper": dict(
-        number=3, accent="#9BE22D", height=1.84, gait="bouncy",
+        number=3, accent="#9BE22D", height=1.84, gait="bouncy", lite=1,
         skin="#E6B98E", hair="#C9781E", iris="#3E8E5E", hair_style="spiky",
         headwear="headband", knee_pads=True, springs=True, knee_size=1.1,
         colors=dict(Undershirt="#9BE22D", Gear="#9BE22D"),
@@ -171,7 +171,7 @@ ENEMIES = {
         face=dict(jaw=0.3, mouth="open", smile=0.9, brow_angle=0.35, eye=1.06),
     ),
     "swarmer": dict(
-        number=0, accent="#FF7A1A", height=1.22, gait="scurry", small=True,
+        number=0, accent="#FF7A1A", height=1.22, gait="scurry", small=True, lite=2,
         skin="#D8A27A", hair="#3A2A1E", iris="#4A3020",
         headwear="helmet", top_extra=0.02,
         stripe_mat="Belt", colors=dict(Cap="#FFB238"),
@@ -183,7 +183,7 @@ ENEMIES = {
                   brow_thick=1.2, ear=1.25, nose=1.1),
     ),
     "trickster": dict(
-        number=9, accent="#9B5DE5", height=1.86, gait="sneaky",
+        number=9, accent="#9B5DE5", height=1.86, gait="sneaky", lite=1,
         skin="#F0C8A8", hair="#1A1A1A", iris="#7A3FB0",
         headwear="beanie", mask=True,
         colors=dict(Cap="#9B5DE5", Cloth="#2A1640", Number="#D9B8FF"),
@@ -194,7 +194,7 @@ ENEMIES = {
                   brow_angle=-0.6, iris_look=0.7),
     ),
     "captain": dict(
-        number=1, accent="#C0392B", height=1.95, gait="captain",
+        number=1, accent="#C0392B", height=1.95, gait="captain", lite=1,
         skin="#B98058", hair="#3A2A1E", iris="#3A2414",
         headwear="cap", emblem="diamond", beard=True,
         colors=dict(Cap="#C0392B", Number="#F5B82E", Cloth="#7A1C14"),
@@ -206,7 +206,7 @@ ENEMIES = {
                   smile=0.25, smirk=0.35),
     ),
     "slugger": dict(
-        number=99, accent="#8B4513", height=2.40, gait="heavy", heavy=1.0,
+        number=99, accent="#8B4513", height=2.40, gait="heavy", heavy=1.0, lite=1,
         skin="#9A6342", hair="#1A120D", iris="#3A2414",
         headwear="helmet", full_beard=True, chunky=1.2,
         colors=dict(Cap="#A0522D", Bat="#C08A50"),
@@ -222,7 +222,7 @@ ENEMIES = {
                   mouth="grin", smile=-0.15, nose=1.2, nose_w=1.3, width=1.05),
     ),
     "base_stealer": dict(
-        number=24, accent="#FF3FB4", height=1.78, gait="stealer",
+        number=24, accent="#FF3FB4", height=1.78, gait="stealer", lite=1,
         skin="#E9BE9E", hair="#B5471B", iris="#2E8B57",
         headwear="helmet", mitts=True,
         colors=dict(Jersey="#2A1630", Glove="#FF3FB4", Cap="#FF3FB4", Glow="#FF4FD0"),
