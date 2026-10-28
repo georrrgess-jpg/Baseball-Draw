@@ -762,7 +762,7 @@ func _test_navigation() -> void:
 	_check(Hints.current_id() == "packs_rarity", "the next hint of the screen follows, one at a time (%s)" % Hints.current_id())
 	var stacked: Array = []
 	for c in get_tree().current_scene.find_children("*", "CanvasLayer", true, false):
-		if c.find_child("HintCard", true, false) != null and not c.is_queued_for_deletion():
+		if c.get_node_or_null("HintRoot") != null and not c.is_queued_for_deletion():   # a hint layer
 			stacked.append(str(c.get_path()))
 	_check(stacked.size() == 1, "exactly one hint on screen %s" % [stacked])
 	await _wait(0.8)
