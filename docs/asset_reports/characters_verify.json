@@ -74,7 +74,7 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0353
+   "min_z": -0.0352
   },
   "hit": {
    "foot_slide": 0.0,
@@ -135,7 +135,7 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0118
+   "min_z": -0.0121
   },
   "hit": {
    "foot_slide": 0.0,
@@ -185,7 +185,7 @@
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0127
+   "min_z": -0.0128
   }
  },
  "bruno": {
@@ -263,12 +263,12 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.2466
+   "min_z": -0.2471
   },
   "hit": {
    "foot_slide": 0.0,
    "length": 0.35,
-   "min_z": 0.0
+   "min_z": -0.0
   },
   "idle": {
    "foot_slide": 0.0,
@@ -313,7 +313,7 @@
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0187
+   "min_z": -0.0188
   }
  },
  "dex": {
@@ -647,7 +647,7 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0119
+   "min_z": -0.0122
   },
   "hit": {
    "foot_slide": 0.0,
@@ -1037,7 +1037,7 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0123
+   "min_z": -0.0127
   },
   "hit": {
    "foot_slide": 0.0,
@@ -1087,7 +1087,7 @@
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0172
+   "min_z": -0.0173
   }
  },
  "slugger": {
@@ -1098,7 +1098,7 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0283
+   "min_z": -0.0281
   },
   "hit": {
    "foot_slide": 0.0,
@@ -1220,7 +1220,7 @@
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.02
+   "min_z": -0.0192
   },
   "hit": {
    "foot_slide": 0.0,
@@ -1235,22 +1235,22 @@
   },
   "leap": {
    "length": 0.8,
-   "min_z": -0.0
+   "min_z": -0.003
   },
   "run": {
    "length": 0.7,
    "loop_seam": 0.0,
-   "min_z": -0.0047
+   "min_z": -0.004
   },
   "slam": {
    "foot_slide": 0.0,
    "length": 1.4,
-   "min_z": -0.0
+   "min_z": -0.0028
   },
   "sprint": {
    "length": 0.55,
    "loop_seam": 0.0,
-   "min_z": -0.0
+   "min_z": -0.004
   },
   "stunned": {
    "foot_slide": 0.0,
@@ -1260,7 +1260,7 @@
   },
   "swing": {
    "length": 1.0,
-   "min_z": -0.0
+   "min_z": -0.0039
   },
   "taunt": {
    "foot_slide": 0.0,
@@ -1270,18 +1270,18 @@
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0309
+   "min_z": -0.0303
   }
  },
  "trickster": {
   "celebrate": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": 0.0
+   "min_z": -0.0
   },
   "defeat": {
    "length": 1.2,
-   "min_z": -0.0126
+   "min_z": -0.0128
   },
   "hit": {
    "foot_slide": 0.0,
@@ -1331,7 +1331,7 @@
   "walk": {
    "length": 1.0,
    "loop_seam": 0.0,
-   "min_z": -0.0176
+   "min_z": -0.0177
   }
  }
 }

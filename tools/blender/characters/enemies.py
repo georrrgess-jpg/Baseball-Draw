@@ -97,6 +97,8 @@ class EnemyHero(Hero):
                 self.build_wristband(sd, m["JerseyTrim"])
             if cfg.get("mitts"):
                 self.build_slide_mitt(sd)
+            elif cfg.get("lite"):
+                self.build_fist(sd, m["Glove"])
             else:
                 self.build_hand(sd, m["Glove"])
         self.build_pants(knee_pants=False)
@@ -106,7 +108,80 @@ class EnemyHero(Hero):
         self.build_shoes(chunky=cfg.get("chunky", 1.0))
         self.build_numbers(front=True)
         self.extras()
+        if cfg.get("lite"):
+            self.lighten(cfg["lite"])
         return self.parts
+
+    # ------------------------------------------------------------------
+    # lighter meshes for the many-on-screen runner types
+    # ------------------------------------------------------------------
+    #: details too small to see from the battle camera (dropped when lite)
+    LITE_DROP = ("BeltLoop", "Laces", "ShoeStripe", "PlacketTrim", "EarHole", "VInsert",
+                 "HelmetBrimTrim", "Buckle")
+    #: per level: (name prefix -> decimate ratio); level 2 also drops the
+    #: front number and the stripes on socks / pants
+    LITE_RATIO = {
+        1: {"Pants": 0.55, "Torso": 0.7, "Helmet": 0.75, "Arm": 0.6, "ArmUpper": 0.6,
+            "Forearm": 0.6, "Sleeve": 0.6, "Shoe": 0.6, "Sock": 0.5, "Sole": 0.5,
+            "HelmetTrim": 0.5, "SleeveTrim": 0.5, "Belt": 0.5, "PantStripe": 0.5,
+            "SockStripe": 0.5, "HelmetStripe": 0.6, "Hair": 0.6, "Collar": 0.6, "VTrim": 0.6,
+            "Neck": 0.7, "Beanie": 0.7, "BeanieCuff": 0.6, "BeanieTail": 0.7,
+            "Greave": 0.6, "Gauntlet": 0.6, "Pauldron": 0.6, "PauldronRim": 0.5,
+            "ChestPlate": 0.6, "BackPlate": 0.6, "Cape": 0.6, "Spring": 0.5, "Beard": 0.7,
+            "Headband": 0.6, "HeadbandTail": 0.6, "KneePad": 0.6, "BatBand": 0.5,
+            "BatSpike": 0.6, "NumberBack": 0.65, "NumberBackOutline": 0.65},
+        2: {"Pants": 0.32, "Torso": 0.4, "Helmet": 0.42, "Head": 0.5, "Arm": 0.35,
+            "Sleeve": 0.35, "Shoe": 0.35, "Sock": 0.3, "Sole": 0.3, "HelmetTrim": 0.3,
+            "SleeveTrim": 0.35, "Belt": 0.35, "HelmetStripe": 0.4, "Hair": 0.35, "Collar": 0.4,
+            "VTrim": 0.4, "Neck": 0.5, "Nose": 0.5, "Ear": 0.5, "HelmetBrim": 0.5,
+            "EyeWhite": 0.6, "Brow": 0.6, "NumberBack": 0.5, "NumberBackOutline": 0.5},
+    }
+
+    def lighten(self, level):
+        import bpy
+        drop = set(self.LITE_DROP)
+        if level >= 2:
+            drop |= {"NumberFront", "NumberFrontOutline", "SockStripe", "PantStripe", "Teeth"}
+        ratios = self.LITE_RATIO[level]
+        keep = []
+        for o in self.parts:
+            base = o.name.split(".")[0].rstrip("0123456789")
+            if base in drop:
+                bpy.data.objects.remove(o, do_unlink=True)
+                continue
+            r = ratios.get(base)
+            if r is not None and r < 1.0:
+                is_decal = base.startswith(("Number", "Eye", "Brow"))
+                mod = o.modifiers.new("dec", 'DECIMATE')
+                mod.decimate_type = 'COLLAPSE'
+                mod.ratio = r
+                geo.apply_modifiers(o)
+                o.data.shade_smooth()
+                if is_decal:
+                    o.data.set_sharp_from_angle(angle=math.radians(38))
+            keep.append(o)
+        self.parts[:] = keep
+
+    def build_fist(self, side, mat):
+        """Batting-glove fist (one rounded block + thumb + cuff) in place of
+        the five-finger hand: same size and grip, a fraction of the triangles."""
+        k = self.s * self.p["hand_scale"]
+        W, f, n, t = self.hand_frame(side)
+        R = np.stack([t, n, f], 1)
+        c = W + f * 0.058 * k + n * 0.010 * k
+        v, fc = superellipsoid(c, (0.044 * k, 0.030 * k, 0.066 * k), R, nu=12, nv=8, e1=3.0,
+                               e2=2.6)
+        fc = orient_outward(v, fc, c)
+        self.add("Fist." + side, v, fc, mat, rigid="hand." + side)
+        tb = W + f * 0.040 * k + t * 0.036 * k + n * 0.016 * k
+        v, fc = superellipsoid(tb, (0.016 * k, 0.015 * k, 0.032 * k),
+                               np.stack([n, f, unit(t + f * 0.8)], 1), nu=8, nv=5)
+        fc = orient_outward(v, fc, tb)
+        self.add("Thumb." + side, v, fc, mat, rigid="hand." + side)
+        wr = self.p["wrist_r"] * self.s
+        v, fc = geo.tube([W - f * 0.03 * k, W, W + f * 0.02 * k], [wr * 0.95, wr, wr * 1.1],
+                         nseg=10, cap0=None, cap1=None, up=n)
+        self.add("Wrist." + side, v, fc, mat, rigid="hand." + side)
 
     # ------------------------------------------------------------------
     # helmets / hats

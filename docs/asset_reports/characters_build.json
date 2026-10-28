@@ -181,8 +181,8 @@
   "height": 1.903,
   "id": "armored",
   "kind": "enemy",
-  "seconds": 13.0,
-  "tris": 22475
+  "seconds": 70.6,
+  "tris": 14021
  },
  "base_stealer": {
   "anims": {
@@ -275,8 +275,8 @@
   "height": 1.764,
   "id": "base_stealer",
   "kind": "enemy",
-  "seconds": 6.0,
-  "tris": 16999
+  "seconds": 50.5,
+  "tris": 11515
  },
  "bruno": {
   "anims": {
@@ -460,8 +460,8 @@
   "height": 1.948,
   "id": "captain",
   "kind": "enemy",
-  "seconds": 7.4,
-  "tris": 20274
+  "seconds": 55.9,
+  "tris": 13591
  },
  "dex": {
   "anims": {
@@ -1016,8 +1016,8 @@
   "height": 1.849,
   "id": "jumper",
   "kind": "enemy",
-  "seconds": 12.7,
-  "tris": 19576
+  "seconds": 44.3,
+  "tris": 12244
  },
  "kai": {
   "anims": {
@@ -1572,8 +1572,8 @@
   "height": 1.783,
   "id": "runner",
   "kind": "enemy",
-  "seconds": 10.7,
-  "tris": 17986
+  "seconds": 56.4,
+  "tris": 11318
  },
  "slugger": {
   "anims": {
@@ -1662,8 +1662,8 @@
   "height": 2.379,
   "id": "slugger",
   "kind": "enemy",
-  "seconds": 8.2,
-  "tris": 24398
+  "seconds": 72.6,
+  "tris": 15430
  },
  "sprinter": {
   "anims": {
@@ -1756,8 +1756,8 @@
   "height": 1.845,
   "id": "sprinter",
   "kind": "enemy",
-  "seconds": 9.1,
-  "tris": 18794
+  "seconds": 49.7,
+  "tris": 12355
  },
  "swarmer": {
   "anims": {
@@ -1853,8 +1853,8 @@
   "height": 1.198,
   "id": "swarmer",
   "kind": "enemy",
-  "seconds": 74.0,
-  "tris": 17848
+  "seconds": 39.1,
+  "tris": 6661
  },
  "trickster": {
   "anims": {
@@ -1944,7 +1944,7 @@
   "height": 2.037,
   "id": "trickster",
   "kind": "enemy",
-  "seconds": 10.8,
-  "tris": 17601
+  "seconds": 48.6,
+  "tris": 11419
  }
 }
