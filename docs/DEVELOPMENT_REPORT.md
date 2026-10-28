@@ -568,3 +568,18 @@ Plan: `docs/plans/UPDATE_6_PLAN.md`. Scored reviews: `docs/plans/review/runners.
   * the Daily
   * try new cards
 * **Disabled buttons:** they say why, and Team links straight to the Pro Shop.
+
+**Verification**
+* Script check: 82 scripts, 0 failed.
+* System suite: 1,431 checks, 0 failed.
+* Full UI flow test: 172 checks, 0 failed. It adds the missions and navigation sections.
+* Card hit map: 0 of 175 dead points; 12 of 12 fast clicks cast.
+* Before/after comparison: `docs/screenshots/update6_before_after.jpg`.
+
+**Known limitations**
+* Not finished from the card review:
+  * Line Drive: nothing lingers after the hit.
+  * Splitter: the split balls are small.
+  * Hot Corner between throws: still mostly its ring.
+* Veteran Standard Siege sits under its 40 % autopilot target.
+* Frame rates are still unmeasured on a real GPU.
