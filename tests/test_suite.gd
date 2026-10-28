@@ -876,6 +876,9 @@ func test_update6_waves() -> void:
 	ok(WaveGenerator.mode_tuning(RunState.create(sv), "enemy_hp") < 1.0, "Standard Siege Veteran is eased")
 	sv.difficulty = "standard"
 	ok(WaveGenerator.mode_tuning(RunState.create(sv), "enemy_hp") == 1.0, "Standard Siege Standard is unchanged")
+	# Leave a fresh profile: the battle checks below measure card damage, which defender
+	# levels (from the Rewards.apply calls above) would raise.
+	Profile.reset_profile()
 
 
 func _find_text(n: Node, text: String) -> bool:
