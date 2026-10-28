@@ -4,7 +4,7 @@
      "tuning": {"veteran": {"enemy_hp": 0.92, "budget": 0.85}, "legend": {"enemy_hp": 0.92, "budget": 0.88}},
      "text": "The full nine-inning siege. Escalating waves, three bosses, big rewards.", "rewards": true, "reward_mult": 1.0},
     {"id": "quick", "name": "Quick Defense", "innings": 3, "waves_per_inning": 3, "bosses": {"3": "iron_slugger"}, "inning_scale": 2.4,
-     "tuning": {"rookie": {"enemy_hp": 1.1, "budget": 1.05}, "standard": {"enemy_hp": 1.08, "budget": 1.2}},
+     "tuning": {"rookie": {"enemy_hp": 1.2, "budget": 1.1}, "standard": {"enemy_hp": 1.12, "budget": 1.3}},
      "text": "A three-inning sprint to practise builds. Waves ramp up twice as fast.", "rewards": true, "reward_mult": 0.45},
     {"id": "endless", "name": "The Endless Ninth", "innings": 0, "waves_per_inning": 3, "boss_every": 3,
      "inning_offset": 1.5, "mini_boss_from": 2, "mini_boss_slugger_from": 4,
