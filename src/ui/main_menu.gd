@@ -228,7 +228,7 @@ func _build_ui() -> void:
 		["CARDS & DECK", "deck", UITheme.BLUE, func() -> void:
 			Session.menu_tab = "deck"
 			Router.goto("deck_builder"),
-			"SET REWARD" if CollectionSets.claimable_count() > 0 else ("%d NEW" % Profile.fresh_card_count() if Profile.fresh_card_count() > 0 else ""),
+			"REWARD!" if CollectionSets.claimable_count() > 0 else ("%d NEW" % Profile.fresh_card_count() if Profile.fresh_card_count() > 0 else ""),
 			UITheme.GOLD.darkened(0.3) if CollectionSets.claimable_count() > 0 else UITheme.SCARLET],
 		["UPGRADE CARDS", "upgrade", UITheme.GREEN, func() -> void: Router.goto("card_upgrades"),
 			"%d READY" % ready if ready > 0 else "", Color(0.16, 0.6, 0.35)],
@@ -332,12 +332,16 @@ func _add_subline(b: Button, text: String, color: Color) -> void:
 	b.add_child(l)
 
 
+## Notification-style badge on the button's top-right corner, overlapping the edge, so it never
+## covers the button's label (the half-width tiles have no room beside the text).
 func _add_badge(b: Button, text: String, color: Color) -> void:
 	var bd := UITheme.badge(text, color)
-	bd.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	bd.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	bd.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	bd.grow_vertical = Control.GROW_DIRECTION_BOTH
-	bd.offset_right = -12
+	bd.grow_vertical = Control.GROW_DIRECTION_END
+	bd.offset_right = 8
+	bd.offset_top = -12
+	bd.z_index = 1
 	b.add_child(bd)
 
 
