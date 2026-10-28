@@ -107,6 +107,10 @@ func _run() -> void:
 		await _test_daily()
 		_finish()
 		return
+	if "--ui-test-section=nav" in OS.get_cmdline_user_args():
+		await _test_navigation()
+		_finish()
+		return
 	if "--ui-test-section=packs" in OS.get_cmdline_user_args():
 		await _test_packs()
 		await _test_multi_packs()
@@ -329,6 +333,7 @@ func _run() -> void:
 	await _test_multi_packs()
 	await _test_deck_menus()
 	await _test_daily()
+	await _test_navigation()
 	await _test_tutorial()
 	_finish()
 
@@ -722,6 +727,100 @@ func _test_tutorial() -> void:
 		await _click(_button_center(go))
 		await _wait(0.6)
 	_check(bool(Profile.data.flags.get("battle_tutorial_done", false)) and not get_tree().paused, "tutorial completes and the game resumes")
+
+
+## Navigation and hints (Update 6): a screen's first-visit hint shows once, "GOT IT" moves
+## through the queue and marks hints seen, the "?" button replays them, Esc closes a hint before
+## it leaves the screen, and Esc returns to the main menu from every menu screen.
+func _test_navigation() -> void:
+	Profile.data.flags["tutorial_done"] = true
+	if (Profile.data.history as Array).is_empty():   # the main menu waits for a finished game
+		Profile.add_history({"won": true, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "inning": 3, "score": 100, "outs": 30, "runs": 0, "date": Time.get_datetime_string_from_system()})
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	Hints.force_enabled = true
+	Hints.reset_seen()
+	# 1. First visit of Card Packs: the intro hint shows by itself.
+	Router.goto("packs")
+	await _wait_scene("packs")
+	var shown := ""
+	for i in 30:
+		await _wait(0.1)
+		shown = Hints.current_id()
+		if shown != "":
+			break
+	_check(shown == "packs_intro", "first visit to Card Packs shows its hint (%s)" % shown)
+	var card: Node = Hints.current().find_child("HintCard", true, false) if Hints.current() else null
+	_check(card != null and (card as Control).get_global_rect().size.x > 300, "hint card is laid out")
+	var got := _find_button(Hints.current(), "GOT IT") if Hints.current() else null
+	_check(got != null, "hint has a GOT IT button")
+	if got:
+		await _click(_button_center(got))
+		await _wait(0.4)
+	_check(Hints.seen("packs_intro"), "GOT IT marks the hint seen")
+	_check(Hints.current_id() == "packs_rarity", "the next hint of the screen follows, one at a time (%s)" % Hints.current_id())
+	var stacked := 0
+	for c in get_tree().current_scene.find_children("*", "CanvasLayer", true, false):
+		if c.find_child("HintCard", true, false) != null:
+			stacked += 1
+	_check(stacked == 1, "exactly one hint on screen (%d)" % stacked)
+	got = _find_button(Hints.current(), "GOT IT") if Hints.current() else null
+	if got:
+		await _click(_button_center(got))
+		await _wait(0.4)
+	_check(not Hints.is_showing(), "hints closed after the last GOT IT")
+	_check(bool((Profile.data.flags.get("hints_seen", {}) as Dictionary).get("packs_rarity", false)), "seen flags stored in the profile")
+	# 2. Second visit: nothing shows.
+	await _key("pause")
+	_check(await _wait_scene("main_menu"), "Esc leaves Card Packs")
+	Router.goto("packs")
+	await _wait_scene("packs")
+	await _wait(1.6)
+	_check(not Hints.is_showing(), "a seen hint does not show again")
+	# 3. "?" replays the screen's hints; Esc closes the hint and stays on the screen.
+	var help := _find_button(get_tree().current_scene, "?")
+	_check(help != null, "Card Packs has a ? button")
+	if help:
+		await _click(_button_center(help))
+		await _wait(0.4)
+		_check(Hints.current_id() == "packs_intro", "? replays the screen's hints (%s)" % Hints.current_id())
+		await _key("pause")
+		await _wait(0.4)
+		_check(not Hints.is_showing() and Router.current == "packs", "Esc closes the hint first and stays on the screen")
+	Hints.force_enabled = false
+	# 4. Esc returns to the main menu from every menu screen.
+	for scene in ["play_menu", "packs", "deck_builder", "card_upgrades", "roster", "progression", "settings"]:
+		Router.goto(scene)
+		if not await _wait_scene(scene):
+			_check(false, "%s opens" % scene)
+			continue
+		await _wait(0.6)
+		_check(_find_button(get_tree().current_scene, "?") != null or scene == "progression", "%s has a ? button" % scene)
+		await _key("pause")
+		_check(await _wait_scene("main_menu"), "Esc returns to the main menu from %s" % scene)
+	# 5. A cross-link (Upgrade Cards -> Card Packs) returns to where it came from.
+	Router.goto("card_upgrades")
+	await _wait_scene("card_upgrades")
+	await _wait(0.5)
+	var link := _find_button(get_tree().current_scene, "GET CARD PACKS  ▶")
+	_check(link != null, "Upgrade Cards links to Card Packs")
+	if link:
+		await _click(_button_center(link))
+		await _wait_scene("packs")
+		await _wait(0.6)
+		await _key("pause")
+		_check(await _wait_scene("card_upgrades"), "Esc from Card Packs returns to Upgrade Cards (opened from there)")
+		await _wait(0.6)
+		await _key("pause")
+		_check(await _wait_scene("main_menu"), "Esc from Upgrade Cards then returns to the main menu")
+	# 6. The Daily shortcut opens the Play screen on the Daily Challenge.
+	Session.menu_tab = "daily"
+	Router.goto("play_menu")
+	await _wait_scene("play_menu")
+	await _wait(0.4)
+	_check(str(get_tree().current_scene.get("mode_id")) == "daily", "Play opens on the Daily Challenge from a shortcut")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
 
 
 func _wait_scene(name: String) -> bool:

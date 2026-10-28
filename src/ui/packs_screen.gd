@@ -631,6 +631,15 @@ func _build_ui() -> void:
 
 	# Let clicks on empty space reach the 3D stage (pack and cards); panels and buttons still catch theirs.
 	_pass_through(_screen)
+	# Esc first skips an opening/reveal (reveal all, then finish); from the shelf it leaves.
+	_screen.before_back = func() -> bool:
+		if state == "idle":
+			return false
+		if state in ["reveal", "done"]:
+			_on_action()
+		return true
+	_screen.set_help("packs", func() -> Dictionary:
+		return {"packs_intro": _action if _action.is_visible_in_tree() and not _action.disabled else _right})
 
 	_banner = Label.new()
 	_banner.add_theme_font_override("font", UITheme.font_display())

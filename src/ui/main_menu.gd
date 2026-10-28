@@ -205,6 +205,9 @@ func _build_ui() -> void:
 	left.add_child(hero)
 	_buttons.append(hero)
 	_hero = hero
+	if Profile.promotion_available():
+		_add_badge(hero, "PROMOTION", UITheme.GOLD.darkened(0.35))
+	_add_up_next(left)
 
 	left.add_child(_group_label("COLLECTION"))
 	var coll := GridContainer.new()
@@ -226,7 +229,7 @@ func _build_ui() -> void:
 			UITheme.GOLD.darkened(0.3) if CollectionSets.claimable_count() > 0 else UITheme.SCARLET],
 		["UPGRADE CARDS", "upgrade", UITheme.GREEN, func() -> void: Router.goto("card_upgrades"),
 			"%d READY" % ready if ready > 0 else "", Color(0.16, 0.6, 0.35)],
-		["TEAM", "roster", UITheme.BLUE, func() -> void: Router.goto("roster"), "", UITheme.SCARLET],
+		["TEAM", "roster", UITheme.BLUE, func() -> void: Router.goto("roster"), "NEW TRAIT" if _trait_ready() else "", Color(0.16, 0.45, 0.75)],
 	]
 	for t in tiles:
 		var b := _wide_button(t[0], t[1], t[2], 62, 30)
@@ -240,6 +243,8 @@ func _build_ui() -> void:
 			pulse.tween_property(b, "self_modulate", Color.WHITE, 0.8).set_trans(Tween.TRANS_SINE)
 		coll.add_child(b)
 		_buttons.append(b)
+		if t[0] == "UPGRADE CARDS" and ready == 0 and _new_player():
+			_deemphasise(b, "Upgrade cards with copies from packs. Open some packs first.")
 
 	left.add_child(_group_label("MORE"))
 	var more := GridContainer.new()
@@ -262,6 +267,8 @@ func _build_ui() -> void:
 		b.pressed.connect(t[3])
 		more.add_child(b)
 		_buttons.append(b)
+		if t[0] in ["PRACTICE", "PROGRESSION"] and _new_player():
+			_deemphasise(b, str(t[4]))
 
 	# Staggered entrance.
 	var i := 0
@@ -280,6 +287,7 @@ func _build_ui() -> void:
 	ui.add_child(ver)
 	if not bool(Profile.data.flags.get("tutorial_done", false)) and not "--no-help" in OS.get_cmdline_user_args():
 		_show_welcome()
+	_build_help()
 
 
 ## A left-aligned menu button with an icon (all main-menu entries use this).
@@ -345,6 +353,73 @@ func _group_label(text: String) -> Control:
 	m.add_theme_constant_override("margin_top", 6)
 	m.add_child(hb)
 	return m
+
+
+# ---------------------------------------------------------------- guidance (Update 6)
+
+## True until the player has finished a game (advanced tiles are toned down until then).
+func _new_player() -> bool:
+	return (Profile.data.history as Array).is_empty()
+
+
+func _trait_ready() -> bool:
+	for id in DB.defender_order:
+		if Profile.is_defender_unlocked(id) and Profile.pending_traits(id) > 0:
+			return true
+	return false
+
+
+## Tones a tile down (still clickable) and says when it becomes useful.
+func _deemphasise(b: Button, why: String) -> void:
+	b.self_modulate = Color(1, 1, 1, 0.5)
+	b.tooltip_text = why
+	b.mouse_entered.connect(func() -> void: b.self_modulate = Color.WHITE)
+	b.mouse_exited.connect(func() -> void: b.self_modulate = Color(1, 1, 1, 0.5))
+
+
+## "UP NEXT": the single most useful thing to do now (open packs, upgrade a card, a trait...),
+## as a slim one-click strip under PLAY. The Daily has its own panel, so it is not repeated here.
+func _add_up_next(parent: Control) -> void:
+	if _new_player():
+		return
+	var list: Array = NextSteps.suggestions(true).filter(func(sg: Dictionary) -> bool: return str(sg.id) != "promotion")
+	if list.is_empty():
+		return
+	var sg: Dictionary = list[0]
+	var b := NextSteps.button(sg, COL_W)
+	b.name = "UpNext"
+	b.text = "UP NEXT:  " + str(sg.text)
+	b.custom_minimum_size = Vector2(COL_W, UITheme.BTN_H_SMALL)
+	b.add_theme_font_size_override("font_size", UITheme.FS_BODY)
+	_add_subline(b, str(sg.get("detail", "")), Color(1, 1, 1, 0.6))
+	parent.add_child(b)
+	_buttons.append(b)
+
+
+## Tips: the "?" button (top right, left of the profile panel) and the first-visit hints, which
+## wait until the first game is done (the welcome panel covers the very first launch).
+func _build_help() -> void:
+	var targets := func() -> Dictionary:
+		var t := {"menu_home": _hero}
+		var dp := _right.get_node_or_null("DailyPanel") if _right else null
+		if dp:
+			t["menu_daily"] = dp
+		var pb := _profile_box.find_child("PromotionButton", true, false) if _profile_box else null
+		if pb:
+			t["menu_promotion"] = pb
+		return t
+	var extra := func() -> Array: return ["menu_promotion"] if Profile.promotion_available() else []
+	var help := Hints.help_button(self, "main_menu", targets, extra)
+	help.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	help.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	help.offset_right = -500.0
+	help.offset_left = -500.0 - UITheme.BTN_H
+	help.offset_top = 36.0
+	help.offset_bottom = 36.0 + UITheme.BTN_H
+	ui.add_child(help)
+	UITheme.animate_in(help, 0.5)
+	if bool(Profile.data.flags.get("tutorial_done", false)) and not _new_player():
+		Hints.first_visit(self, "main_menu", targets, extra.call(), 1.2)
 
 
 func _build_profile_panel() -> void:
@@ -435,7 +510,14 @@ func _build_profile_panel() -> void:
 		row.add_child(UITheme.label(UITheme.format_int(int(h.score)), UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_body_bold()))
 		_profile_box.add_child(row)
 	if Profile.promotion_available():
-		_profile_box.add_child(UITheme.label("★ Promotion Challenge to %s available!" % Profile.next_division().name, UITheme.FS_BODY, UITheme.GOLD, UITheme.font_body_bold()))
+		var pb := UITheme.button("PROMOTION TO %s  ▶" % str(Profile.next_division().name).to_upper(), "primary", UITheme.FS_BODY, "crown", UITheme.GOLD.darkened(0.3))
+		pb.name = "PromotionButton"
+		pb.custom_minimum_size = Vector2(0, UITheme.BTN_H_SMALL)
+		pb.tooltip_text = "You have enough rank points: win the Promotion Challenge to move up a division"
+		pb.pressed.connect(func() -> void:
+			Session.menu_tab = "ranked"
+			Router.goto("play_menu"))
+		_profile_box.add_child(pb)
 	var next_unlock := _next_unlock_text()
 	if next_unlock != "":
 		var nu := HBoxContainer.new()

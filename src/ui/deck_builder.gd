@@ -80,11 +80,30 @@ func _ready() -> void:
 		_update_deck_info()
 	_refresh_collection()
 	_refresh_detail()
+	set_help("collection" if collection_mode else "deck_builder", _hint_targets, _hint_features)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--claim-set="):   # screenshot helper: the set-complete moment
 			get_tree().create_timer(1.5).timeout.connect(_claim_set.bind(a.split("=")[1]))
 		if a.begins_with("--inspect="):   # screenshot helper: show a card in the inspector
 			_inspect.call_deferred(a.split("=")[1])
+
+
+## Hint arrows: the deck slots, the card inspector (mastery) and the collection sets row.
+func _hint_targets() -> Dictionary:
+	return {"deck_intro": _deck_panel, "deck_mastery": _detail, "deck_sets": _sets_row}
+
+
+## Feature hints shown automatically once the player has met them: mastery after a card has been
+## played in a real game, sets once the player has packs or has opened one.
+func _hint_features() -> Array:
+	var extra: Array = []
+	for cid in DB.card_order:
+		if Profile.card_plays(cid) > 0:
+			extra.append("deck_mastery")
+			break
+	if CollectionSets.claimable_count() > 0 or Profile.pack_count() > 0 or int(Profile.data.get("packs_opened", 0)) > 0:
+		extra.append("deck_sets")
+	return extra
 
 
 # ================================================================ deck panel
@@ -505,8 +524,7 @@ func _open_upgrades() -> void:
 	if deck.size() == Profile.DECK_SIZE:
 		Profile.set_deck(deck)
 		_dirty = false
-	CardUpgradesScreen.return_to = "deck_builder"
-	Router.goto("card_upgrades")
+	Router.open("card_upgrades")   # BACK returns here
 
 
 # ================================================================ input, drag & drop
@@ -732,7 +750,9 @@ func _build_collection() -> Control:
 	var go := UITheme.small_button("Open Card Packs  ▶", UITheme.BLUE, 21)
 	go.custom_minimum_size = Vector2(0, 44)
 	go.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	go.pressed.connect(func() -> void: Router.goto("packs"))
+	go.pressed.connect(func() -> void:
+		_save_before_leaving()
+		Router.open("packs"))
 	lh.add_child(go)
 	_locked_grid = _make_grid()
 	list.add_child(_locked_grid)
@@ -971,6 +991,7 @@ func _claim_set(sid: String) -> void:
 	layer.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.z_index = 50
 	add_child(layer)
+	push_overlay(layer)   # Esc closes the celebration first
 	var dim := ColorRect.new()
 	dim.color = Color(0.01, 0.02, 0.05, 0.0)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1016,7 +1037,7 @@ func _claim_set(sid: String) -> void:
 	var open := UITheme.button("OPEN PACKS", "primary", UITheme.FS_LEAD, "gift", UITheme.GOLD.darkened(0.25))
 	open.pressed.connect(func() -> void:
 		_save_before_leaving()
-		Router.goto("packs"))
+		Router.open("packs"))
 	row.add_child(open)
 	var ok := UITheme.button("NICE!", "secondary", UITheme.FS_LEAD)
 	ok.pressed.connect(func() -> void:
@@ -1155,7 +1176,9 @@ func _refresh_detail() -> void:
 		_detail.add_child(lk)
 		var go := UITheme.small_button("Open Card Packs  ▶", UITheme.BLUE, 22)
 		go.custom_minimum_size = Vector2(0, 46)
-		go.pressed.connect(func() -> void: Router.goto("packs"))
+		go.pressed.connect(func() -> void:
+			_save_before_leaving()
+			Router.open("packs"))
 		_detail.add_child(go)
 		return
 	if collection_mode:

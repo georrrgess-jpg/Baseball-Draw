@@ -13,6 +13,8 @@ var _team_strip: HBoxContainer
 var _drag := false
 var _yaw := 0.0
 var _screen: MenuScreen
+var _road_box: Control      # the level road of the selected defender (hint target)
+var _traits_head: Control   # the TRAINING TRAITS header (hint target)
 
 
 func _ready() -> void:
@@ -64,6 +66,16 @@ func _ready() -> void:
 	bottom.add_child(_team_strip)
 	selected = Profile.data.team[0]
 	_refresh()
+	_screen.set_help("roster", func() -> Dictionary:
+		return {"team_intro": _team_strip, "team_road": _road_box, "team_traits": _traits_head}, _hint_features)
+
+
+## Traits are explained automatically once a defender has reached a trait level.
+func _hint_features() -> Array:
+	for id in DB.defender_order:
+		if Profile.is_defender_unlocked(id) and Profile.pending_traits(id) > 0:
+			return ["team_traits"]
+	return []
 
 
 func _build_stage() -> void:
@@ -288,7 +300,8 @@ func _fill_info() -> void:
 	_info.add_child(row)
 	# Traits
 	_info.add_child(UITheme.hsep())
-	_info.add_child(UITheme.section_header("TRAINING TRAITS", "upgrade", UITheme.GOLD, UITheme.FS_H3))
+	_traits_head = UITheme.section_header("TRAINING TRAITS", "upgrade", UITheme.GOLD, UITheme.FS_H3)
+	_info.add_child(_traits_head)
 	for tier in DB.traits:
 		var tl := int(tier.level)
 		var hb := HBoxContainer.new()
@@ -300,7 +313,7 @@ func _fill_info() -> void:
 			b.toggle_mode = true
 			b.button_pressed = chosen == opt.id
 			b.disabled = lvl < tl
-			b.tooltip_text = opt.text
+			b.tooltip_text = opt.text + ("\nUnlocks when %s reaches level %d." % [d.name, tl] if lvl < tl else "")
 			var oid: String = opt.id
 			b.pressed.connect(func() -> void:
 				Profile.choose_trait(selected, tl, oid)
@@ -334,7 +347,19 @@ func _fill_info() -> void:
 		Audio.ui("ui_confirm")
 		_fill_info())
 	_info.add_child(gear_opt)
-	_info.add_child(UITheme.label("Buy gear in Progression → Pro Shop.", 16, UITheme.MUTED))
+	var shop_row := HBoxContainer.new()
+	shop_row.add_theme_constant_override("separation", 10)
+	var shop_l := UITheme.label("One piece of gear per defender. Buy more in the Pro Shop." if not Profile.data.gear_owned.is_empty()
+		else "No gear yet. Gear is bought with coins in the Pro Shop.", UITheme.FS_MIN, UITheme.MUTED)
+	shop_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	shop_row.add_child(shop_l)
+	var shop_b := UITheme.button("PRO SHOP  ▶", "ghost", UITheme.FS_SMALL, "", UITheme.GOLD)
+	shop_b.custom_minimum_size = Vector2(0, UITheme.BTN_H_SMALL)
+	shop_b.tooltip_text = "Progression → Pro Shop"
+	shop_b.pressed.connect(func() -> void: Router.open("progression", "Pro Shop"))
+	shop_row.add_child(shop_b)
+	_info.add_child(shop_row)
 	# Uniform (team-wide)
 	_info.add_child(UITheme.hsep())
 	_info.add_child(UITheme.section_header("TEAM UNIFORM", "special", UITheme.GOLD, UITheme.FS_H3))
@@ -399,6 +424,7 @@ func _level_section(id: String, lvl: int, accent: Color, unlocked: bool) -> Cont
 	var road := HBoxContainer.new()
 	road.add_theme_constant_override("separation", 4)
 	box.add_child(road)
+	_road_box = road
 	var next_text := ""
 	for l in range(1, DB.defender_max_level + 1):
 		var r := Profile.defender_level_reward(l)

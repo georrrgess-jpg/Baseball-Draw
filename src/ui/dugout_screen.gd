@@ -11,6 +11,7 @@ var _team_box: VBoxContainer
 var _offers: Array = []
 var _card_pick_layer: Control
 var _just_bought := ""
+var _next_btn: Button
 
 
 func _ready() -> void:
@@ -196,10 +197,38 @@ func _build() -> void:
 	var hint := UITheme.label("Temporary upgrades last for this run only. Permanent progress is earned at the end of the run.", UITheme.FS_SMALL, UITheme.MUTED)
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(hint)
+	bottom.add_child(Hints.help_button(self, "dugout", _hint_targets))
 	var go := UITheme.button("NEXT INNING  ▶", "primary", 40)
 	go.custom_minimum_size = Vector2(380, 74)
 	go.pressed.connect(_finish)
 	bottom.add_child(go)
+	_next_btn = go
+	# First visit: explain the dugout (never in the tutorial game).
+	if _hints_allowed():
+		Hints.first_visit(self, "dugout", _hint_targets)
+
+
+func _hint_targets() -> Dictionary:
+	return {"dugout_intro": _shop}
+
+
+func _hints_allowed() -> bool:
+	if battle == null or battle.auto_test or Profile.data.history.is_empty():
+		return false
+	return battle.hud.get_node_or_null("Tutorial") == null
+
+
+## Esc closes the card picker, otherwise opens the pause menu (Save & Quit lives there).
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("pause"):
+		return
+	get_viewport().set_input_as_handled()
+	if _card_pick_layer and is_instance_valid(_card_pick_layer):
+		Audio.ui("ui_back")
+		_card_pick_layer.queue_free()
+		_card_pick_layer = null
+	elif battle and battle.hud and battle.hud.has_method("toggle_pause"):
+		battle.hud.toggle_pause()
 
 
 func _card_panel(title: String, icon := "") -> PanelContainer:

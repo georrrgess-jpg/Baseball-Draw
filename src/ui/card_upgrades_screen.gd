@@ -82,6 +82,7 @@ func _ready() -> void:
 		if a.begins_with("--select-card=") and Profile.is_card_owned(a.split("=")[1]):   # screenshot helper
 			selected = a.split("=")[1]
 	_rebuild()
+	set_help("card_upgrades", func() -> Dictionary: return {"upgrades_intro": _detail})
 
 
 ## Debug/screenshot helper: `--grant-demo-cards` fills the profile with a varied collection.
@@ -129,7 +130,7 @@ func _build_top_bar() -> Control:
 		20, UITheme.MUTED, UITheme.font_body_bold()))
 	var packs := UITheme.menu_button("GET CARD PACKS  ▶", UITheme.BLUE, 26)
 	packs.custom_minimum_size = Vector2(290, 56)
-	packs.pressed.connect(func() -> void: Router.goto("packs"))
+	packs.pressed.connect(func() -> void: Router.open("packs"))
 	hb.add_child(packs)
 	return p
 
@@ -469,7 +470,7 @@ func _refresh_detail() -> void:
 		why.add_child(wl)
 		if Profile.card_copies(selected) < int(cost.copies):
 			var pk := UITheme.small_button("Card Packs  ▶", UITheme.BLUE, 20)
-			pk.pressed.connect(func() -> void: Router.goto("packs"))
+			pk.pressed.connect(func() -> void: Router.open("packs"))
 			why.add_child(pk)
 		_detail.add_child(why)
 	_add_how_it_works()

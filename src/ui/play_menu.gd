@@ -147,9 +147,13 @@ func _ready() -> void:
 	if Session.menu_tab == "daily":   # opened from the main menu's Daily Challenge tile
 		Session.menu_tab = ""
 		last = "daily"
+	elif Session.menu_tab == "ranked":   # "Promotion Challenge" from the main menu or Results
+		Session.menu_tab = ""
+		last = "ranked" if Profile.promotion_available() else last
 	elif Profile.has_saved_run():
 		last = "quick"
 	_select_mode(last, true)
+	set_help("play_menu", _hint_targets)
 
 
 func _process(delta: float) -> void:
@@ -330,6 +334,9 @@ func _after_mode_change(id: String, quiet: bool) -> void:
 		b.disabled = id in ["practice", "ranked", "daily"] and not fixed
 		b.mouse_filter = Control.MOUSE_FILTER_IGNORE if id == "daily" else Control.MOUSE_FILTER_STOP
 		b.button_pressed = k == (str(_daily.difficulty) if id == "daily" else str(Profile.data.difficulty))
+		# A disabled choice says why.
+		b.tooltip_text = {"practice": "Practice has no difficulty: nothing is at stake.",
+			"ranked": "The Promotion Challenge sets its own difficulty for your division."}.get(id, "") if b.disabled else ""
 	_refresh_difficulty_info()
 	_fill_arenas()
 	if _summary:
@@ -338,6 +345,20 @@ func _after_mode_change(id: String, quiet: bool) -> void:
 		_start.text = "PLAY DAILY  ▶" if id == "daily" else "START  ▶"
 	if not quiet:
 		Audio.ui("ui_tab")
+	# Meeting a mode for the first time explains it (Daily, Promotion, Endless, Practice).
+	if Hints.HINTS.has("play_" + id):
+		Hints.show_unseen(self, ["play_" + id], _hint_targets, 0.7 if quiet else 0.15)
+
+
+## Hint arrows: the mode list, and each mode's card.
+func _hint_targets() -> Dictionary:
+	var t := {}
+	if _mode_buttons.has("standard"):
+		t["play_modes"] = (_mode_buttons["standard"] as Control).get_parent()
+	for m in ["daily", "ranked", "endless", "practice"]:
+		if _mode_buttons.has(m):
+			t["play_" + m] = _mode_buttons[m]
+	return t
 
 
 ## Today's Daily Challenge: its rules, your record, the bonus and when the next one starts.
@@ -647,7 +668,7 @@ func _fill_summary() -> void:
 		grid.add_child(vb)
 	_summary.add_child(grid)
 	var edit_team := UITheme.button("Edit team", "secondary", 20, "roster")
-	edit_team.pressed.connect(func() -> void: Router.goto("roster"))
+	edit_team.pressed.connect(func() -> void: Router.open("roster"))
 	_summary.add_child(edit_team)
 	_summary.add_child(UITheme.hsep())
 	var daily := mode_id == "daily"
@@ -684,7 +705,7 @@ func _fill_summary() -> void:
 	var edit_deck := UITheme.button("Edit deck", "secondary", 20, "deck")
 	edit_deck.pressed.connect(func() -> void:
 		Session.menu_tab = "deck"
-		Router.goto("deck_builder"))
+		Router.open("deck_builder"))
 	_summary.add_child(edit_deck)
 	var fname: String = DB.formations.get(Profile.data.formation, {}).get("name", "Custom")
 	var fl := UITheme.label("Formation: %s. Change it on the field before the first pitch." % fname, UITheme.FS_MIN, UITheme.MUTED)

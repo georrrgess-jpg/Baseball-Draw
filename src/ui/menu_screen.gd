@@ -8,6 +8,17 @@ var back_button: Button
 var _header: Control
 var _coins_label: Label
 var _stars_label: Label
+var _pill: Control
+## Open popups on this screen (topmost last): Esc closes the top one before leaving the screen.
+var _overlays: Array[Control] = []
+## Screen id for the hint system ("" = no "?" button and no first-visit hints).
+var help_id := ""
+var help_targets := Callable()
+var help_extra := Callable()
+var help_button: Button
+## Optional hook run on Esc before leaving: return true to stay (it handled the key, e.g. Esc
+## skips a pack reveal before it leaves the screen). The BACK button always leaves.
+var before_back := Callable()
 
 
 func setup_screen(title: String, subtitle := "") -> void:
@@ -62,8 +73,8 @@ func setup_screen(title: String, subtitle := "") -> void:
 	var back := UITheme.button("◀  BACK", "secondary", 26, "", UITheme.MUTED)
 	back.custom_minimum_size = Vector2(170, UITheme.BTN_H)
 	back.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	back.tooltip_text = "Back to the main menu (Esc)"
-	back.pressed.connect(go_back)
+	back.tooltip_text = "Back to %s (Esc)" % _screen_name(Router.back_target())
+	back.pressed.connect(_on_back.bind(false))
 	header.add_child(back)
 	back_button = back
 	var tb := VBoxContainer.new()
@@ -98,6 +109,7 @@ func setup_screen(title: String, subtitle := "") -> void:
 	sb.add_child(_stars_label)
 	cur.add_child(sb)
 	header.add_child(pill)
+	_pill = pill
 	_header = header
 	var brush_path := "res://assets/textures/logo/brush_stroke.png"
 	if ResourceLoader.exists(brush_path):
@@ -144,15 +156,65 @@ func refresh_currency() -> void:
 		_stars_label.text = UITheme.format_int(int(Profile.data.stars))
 
 
+## BACK and Esc: to the screen that opened this one through a link, else the main menu.
 func go_back() -> void:
 	Audio.ui("ui_back")
 	Profile.save_now()
-	Router.goto("main_menu")
+	Router.back()
+
+
+static func _screen_name(scene: String) -> String:
+	return {"main_menu": "the main menu", "play_menu": "Play", "packs": "Card Packs", "deck_builder": "Cards & Deck",
+		"card_upgrades": "Upgrade Cards", "roster": "Team", "progression": "Progression", "settings": "Settings"}.get(scene, "the main menu")
+
+
+## Turns on the hint system for this screen: a "?" button in the header (left of the currencies)
+## that replays the screen's tips, and the first-visit tips themselves. `targets` returns
+## {hint_id: Control} for the arrows; `extra` returns feature hint ids to add on this visit.
+func set_help(screen_id: String, targets := Callable(), extra := Callable()) -> void:
+	help_id = screen_id
+	help_targets = targets
+	help_extra = extra
+	if help_button == null and _header:
+		help_button = Hints.help_button(self, screen_id, targets, extra)
+		_header.add_child(help_button)
+		_header.move_child(help_button, _pill.get_index() if _pill else _header.get_child_count() - 1)
+	var ex: Array = extra.call() if extra.is_valid() else []
+	Hints.first_visit(self, screen_id, targets, ex)
+
+
+## Registers a popup so Esc closes it (and BACK still leaves the screen). The popup is dropped
+## from the list when it is freed.
+func push_overlay(c: Control) -> void:
+	_overlays.append(c)
+	c.tree_exiting.connect(func() -> void: _overlays.erase(c))
+
+
+## Closes the topmost open popup; returns false when there is none.
+func close_top_overlay() -> bool:
+	while not _overlays.is_empty():
+		var c: Control = _overlays.pop_back()
+		if is_instance_valid(c) and c.is_inside_tree() and not c.is_queued_for_deletion():
+			Audio.ui("ui_back")
+			if c.has_method("close"):
+				c.call("close")
+			else:
+				c.queue_free()
+			return true
+	return false
+
+
+func _on_back(from_key := true) -> void:
+	if close_top_overlay():
+		return
+	if from_key and before_back.is_valid() and bool(before_back.call()):
+		return
+	go_back()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
-		go_back()
+		_on_back()
 		get_viewport().set_input_as_handled()
 
 

@@ -7,6 +7,7 @@ func _ready() -> void:
 	var panel := SettingsPanel.new()
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(panel)
+	set_help("settings")
 
 
 func go_back() -> void:
