@@ -38,6 +38,20 @@ FRAMES = [
     ("special", [0.40, 0.58, 0.70, 0.90]),
     ("victory", [0.0, 0.5]),
 ]
+# runners / bosses (any non-defender id)
+ENEMY_FRAMES = [
+    ("idle", [0.0, 1.0]),
+    ("run", [0.0, 0.175, 0.35, 0.525]),
+    ("sprint", [0.0, 0.14]),
+    ("walk", [0.0, 0.25]),
+    ("hit", [0.05, 0.12, 0.22]),
+    ("defeat", [0.2, 0.5, 0.8, 1.2]),
+    ("leap", [0.2, 0.5, 0.8]),
+    ("swing", [0.25, 0.4, 0.5, 0.7]),
+    ("slam", [0.5, 0.75, 0.9, 1.1]),
+    ("taunt", [0.4, 0.9]),
+    ("celebrate", [0.0, 0.3]),
+]
 # view -> (azimuth deg from the front, elevation deg, ortho scale in heights)
 VIEWS = {
     "battle": (25.0, 52.0, 1.30),
@@ -130,7 +144,7 @@ def run(cid, out, views, clips, res, glb_dir, focus=None, times=None, tag=""):
         az, el, scl = VIEWS[vname]
         aim(cam, az, el, scl, height, focus)
         tiles = []
-        for clip, tlist in FRAMES:
+        for clip, tlist in (FRAMES if cid in roster.DEFENDERS else ENEMY_FRAMES):
             if clips and clip not in clips:
                 continue
             if times:

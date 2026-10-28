@@ -9,7 +9,8 @@ animation clips) and assets/textures/portraits/<id>.png for every id given
 (default: all 20).  Everything is procedural and deterministic.
 
 Defenders are stylised mesh-modelled heroes (hero.py + hero_head/body/wear,
-geo.py); enemies/bosses use the SDF sculpt path (body/heads/outfit/enemies).
+geo.py); runners and bosses use the same hero pipeline with their own gear
+(enemies.py).
 """
 import os
 import sys
@@ -25,13 +26,9 @@ import numpy as np
 import bpy
 from mathutils import Vector
 
-import sdf
 import meshutil as mu
 import materials as M
 import rig
-import heads
-import body
-import outfit
 import skin
 import anim
 import roster
@@ -128,128 +125,60 @@ def build_defender(cid):
 # ---------------------------------------------------------------------------
 
 def enemy_materials(cfg):
+    """Hero material set for a Wrecker: shared kit + accent + per-type colours."""
     P = M.PALETTE
     acc = cfg["accent"]
-    boss = cfg.get("boss")
-    cols = dict(Jersey=P["gunmetal"], JerseyTrim=acc, Pants="#4C525C", Socks=acc,
-                Shoes="#121317", Belt="#121317", Gear="#3A3F48", Visor=P["visor"],
-                Glow=P["glow"], Glove="#1E2126", Undershirt=P["charcoal"], Cloth=P["charcoal"],
-                Metal="#8A939E", Number=acc, Bat="#3A2A1E")
-    if cid_is(cfg, "trickster"):
-        cols["Cloth"] = "#5B2D8E"
-    if cfg.get("gold"):
-        cols.update(Jersey="#17171B", Pants="#232328", Gear="#17171B", Metal="#E8B23A",
-                    Socks="#E8B23A", Bat="#F2C14E", Cloth="#5A0F14")
-    if cfg.get("full_iron"):
-        cols.update(Metal="#5E646C", Gear="#4A5058", Jersey="#26292E", Pants="#33373D")
+    cols = dict(roster.WRECKERS)
+    cols.update(Skin=cfg["skin"], Hair=cfg["hair"], Eyes=P["eyes"], Iris=cfg["iris"],
+                Pupil=P["pupil"], JerseyTrim=acc, Number=acc, Socks=acc, Cap=acc,
+                Mouth=P["mouth"])
+    cols.update(cfg.get("colors", {}))
+    if cfg.get("brow_col"):
+        cols["Brow"] = cfg["brow_col"]
+    glow = cols["Glow"]
+    mats = M.material_set(cols, emissive={"Glow": (glow, 6.0)})
+    mats["EyeHighlight"] = M.make("EyeHighlight", "#FFFFFF", "#FFFFFF", 1.5, rough=0.2)
+    mats["Visor"] = M.make("Visor", cols["Visor"], rough=0.10, metal=0.6)
+    mats["Gear"] = M.make("Gear", cols["Gear"], rough=0.3, metal=0.2)
+    gold = cfg.get("gold")
+    mats["Metal"] = M.make("Metal", cols["Metal"], rough=0.28 if gold else 0.32,
+                           metal=0.75 if gold else 0.6)
+    if cfg.get("cap_metal"):
+        mats["Cap"] = M.make("Cap", cols["Cap"], rough=0.3, metal=0.6 if not gold else 0.75)
+    else:
+        mats["Cap"] = M.make("Cap", cols["Cap"], rough=0.35, metal=0.05)   # glossy helmet
+    if cfg.get("bat", {}).get("metal"):
+        mats["Bat"] = M.make("Bat", cols["Bat"], rough=0.25, metal=0.7)
+    if cfg.get("glow_iris"):
+        mats["Iris"] = M.make("Iris", cfg["iris"], cfg["iris"], 3.0)
     if cfg.get("ghost"):
-        cols.update(Jersey="#3B2A55", Pants="#4A3A66", Cloth="#6E3FB8", Gear="#2A1F3D",
-                    Socks="#B45CFF", Glove="#2A1F3D", Undershirt="#2A1F3D")
-    if cid_is(cfg, "captain"):
-        cols["Cloth"] = "#7A1C14"
-        cols["Number"] = P["gold"]
-    mats = M.material_set(cols, emissive={"Glow": (P["glow"], 6.0)})
-    glow = cfg.get("glow_col") or (acc if boss else P["glow"])
-    if boss:
-        M.make("Glow", glow, glow, 7.0)
-    M.make("Visor", P["visor"], rough=0.08, metal=0.6)
-    M.make("Gear", cols["Gear"], rough=0.28, metal=0.25)
-    M.make("Metal", cols["Metal"], rough=0.32, metal=0.6 if not cfg.get("gold") else 0.7)
-    if cfg.get("ghost"):
-        M.make("Cloth", cols["Cloth"], cols["Cloth"], 0.6, alpha=0.72)
-        M.make("JerseyTrim", acc, acc, 3.0)
-        M.make("Socks", "#B45CFF", "#B45CFF", 1.2)
-    if cfg.get("golden_bat"):
-        M.make("Bat", cols["Bat"], rough=0.25, metal=0.7)
+        mats["Cloth"] = M.make("Cloth", cols["Cloth"], cols["Cloth"], 0.6, alpha=0.72)
+        mats["JerseyTrim"] = M.make("JerseyTrim", acc, acc, 3.0)
+        mats["Socks"] = M.make("Socks", cols["Socks"], cols["Socks"], 1.2)
     return mats
 
 
-def cid_is(cfg, name):
-    return cfg.get("_id") == name
-
-
 def build_enemy(cid):
+    """Runner / boss in the stylised hero style (enemies.py)."""
+    import hero
+    import enemies
     cfg = dict(roster.ENEMIES[cid])
     cfg["_id"] = cid
-    props = dict(cfg.get("props", {}))
-    target = cfg["height"]
-    hcfg = cfg.get("helmet", {})
-    extra_top = 0.05 * (hcfg.get("size", 1.0)) if not cfg.get("hood") else 0.04
-    ch = crown_height(props)
-    props["scale"] = target / (ch + extra_top * props.get("head", 0.28) / 0.28 * 1.0)
-    sk = rig.Skeleton(props)
+    boss = cfg.get("boss", False)
+    hcfg = dict(cfg)
+    hcfg["top_extra"] = cfg.get("top_extra", 0.0) + {"helmet": 0.03, "aero": 0.0,
+                                                     "beanie": 0.10}.get(cfg["headwear"], 0.0)
+    sk = hero.make_skeleton(hcfg)
     arm = sk.build("Armature")
     mats = enemy_materials(cfg)
-    s = sk.s
-    o, h = sk.head_frame()
-    neck_base = (0, 0.015 * s, sk.levels["neck"] - 0.05 * s)
-    hb = heads.HeadBuilder(o, h, {}, neck_r=sk.p["neck_r"] * s, neck_base=neck_base)
-    parts = []
-    boss = cfg.get("boss", False)
-    parts.append(hb.build_skin(mats["Undershirt"], tris=500 if not boss else 800, face=False,
-                               name="Head"))
-    if cfg.get("hood"):
-        parts += build_hood(hb, mats)
-    else:
-        parts += outfit.build_batting_helmet(
-            hb, mats, mats["JerseyTrim"], size=hcfg.get("size", 1.0), flap=hcfg.get("flap", True),
-            riot=hcfg.get("riot", False), crest=hcfg.get("crest", False),
-            brim=hcfg.get("brim", True), aero=hcfg.get("aero", False),
-            crest_mat=mats["Metal"] if cfg.get("gold") else mats["JerseyTrim"],
-            tris=900 if not boss else 1600)
-    bcfg = dict(sleeve_len=0.15, vneck=False, pants_loose=0.010)
-    bb = body.BodyBuilder(sk, mats, bcfg)
-    k = 1.0 if not boss else 1.6
-    parts.append(bb.build_torso(mats["Jersey"], tris=int(1300 * k)))
-    parts += bb.build_sleeve_trim(mats["JerseyTrim"], tris=80)
-    for sd in "LR":
-        parts.append(bb.build_arm(sd, mats["Undershirt"], tris=int(380 * k)))
-        parts.append(bb.build_hand(sd, mats["Glove"], tris=int(320 * k), mitten=True,
-                                   fist=True, curl=1.0))
-    parts.append(bb.build_pants(mats["Pants"], tris=int(1200 * k)))
-    parts += bb.build_belt(mats["Belt"], mats["Metal"], None, tris=200)
-    parts += bb.build_socks(mats["Socks"], tris=200, stripe_mat=None)
-    parts += bb.build_shoes(mats["Shoes"], tris=int(380 * k), stripe_mat=mats["JerseyTrim"],
-                            chunky=1.1)
-    parts.append(outfit.claw_emblem(bb, mats["JerseyTrim"]))
-    if cfg.get("number") is not None:
-        parts += outfit.build_numbers(bb, cfg["number"], FONT, mats["Number"], None,
-                                      front=False, back_h=0.19)
-    parts += enemy_extras(cid, cfg, sk, bb, hb, mats)
-    style = dict(heavy=cfg.get("heavy", 0.0), bat=cfg.get("bat", False),
-                 small=cfg.get("small", False))
-    return finish(cid, "boss" if boss else "enemy", sk, arm, parts, style=style)
-
-
-def build_hood(hb, mats):
-    h = hb.h
-    P = hb.P
-    parts = []
-    outer = sdf.ellipsoid(P(0, 0.08, 0.02), hb.R(0.43, 0.52, 0.58))
-    hood = sdf.blend(outer, 0.06 * h, sdf.round_cone(P(0, 0.30, 0.30), P(0, 0.62, -0.10),
-                                                     0.18 * h, 0.05 * h))
-    hood = sdf.subtract(hood, sdf.ellipsoid(P(0, -0.62, -0.08), hb.R(0.30, 0.40, 0.42)), k=0.03 * h)
-    hood = sdf.intersect(hood, sdf.halfspace(P(0, 0, -0.55), [0, 0.3, -1]))
-    lo = np.array(hb.o) + np.array([-0.6, -0.7, -0.8]) * h
-    hi = np.array(hb.o) + np.array([0.6, 0.9, 0.7]) * h
-    hood.bbox = (lo, hi)
-    parts.append(mu.sdf_part("Hood", hood, mats["Cloth"], 0.009 * h, 900, bones=["head", "neck"]))
-    # mask: dark face plate + glowing eyes
-    parts += build_visor(hb, mats)
-    return parts
-
-
-def build_visor(hb, mats):
-    return outfit.build_visor(hb, mats, 0.92)
-
-
-def enemy_extras(cid, cfg, sk, bb, hb, mats):
-    """Type-specific silhouette pieces (filled in enemies.py)."""
-    try:
-        import enemies
-    except ImportError:
-        return []
-    return enemies.extras(cid, cfg, sk, bb, hb, mats)
+    eb = enemies.EnemyHero(cid, cfg, sk, mats, FONT)
+    parts = eb.build()
+    tot, rows = hero.report(parts)
+    print("TRIS", cid, tot, rows[:12])
+    style = dict(heavy=cfg.get("heavy", 0.0), bat=bool(cfg.get("bat")),
+                 small=cfg.get("small", False), hero=True, gait=cfg.get("gait", "runner"))
+    return finish(cid, "boss" if boss else "enemy", sk, arm, parts, style=style,
+                  hero_parts=True)
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +196,9 @@ def finish(cid, kind, sk, arm, parts, style, hero_parts=False):
         # weights of the surface under them
         import hero
         hero.apply_weights(parts, sk)
+        if kind != "defender":
+            import enemies
+            enemies.apply_fixed_weights(parts)
         tot = sum(mu.tri_count(p) for p in parts)
         if tot > budget:
             print("WARNING: %s over budget: %d > %d" % (cid, tot, budget))

@@ -38,7 +38,14 @@ def render_portrait(cid, info, path, res=512, samples=96):
     render.clear_cams_lights()
     render.setup_cycles(res=res, samples=samples, transparent=True)
     sc.render.film_transparent = True
-    if enemy:
+    if enemy and c.hero:
+        # hero-style runners / bosses: head-and-shoulders like the defenders,
+        # a little looser for helmets, horns and the trickster's cap
+        frame_h = (1.90 if info["id"] in ("grand_slammer", "trickster") else 1.74) * h
+        target = eye + Vector((0, 0, (-0.04 if info["id"] in ("grand_slammer", "trickster")
+                                      else -0.10) * h))
+        yaw = 24.0
+    elif enemy:
         frame_h = 1.95 * h
         target = eye + Vector((0, 0, -0.22 * h))
         yaw = 24.0

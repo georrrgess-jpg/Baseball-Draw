@@ -115,7 +115,9 @@ class Ctx:
         self.leg = sk.length["thigh.L"] + sk.length["shin.L"]
         # stylised defenders have shorter legs relative to the global scale:
         # hip offsets and strides follow the leg length (enemies: 1.0)
-        self.lk = (self.leg / (0.855 * s)) if kind == "defender" else 1.0
+        # (also the hero-style runners / bosses: style["hero"])
+        self.hero = kind == "defender" or bool(self.style.get("hero"))
+        self.lk = (self.leg / (0.855 * s)) if self.hero else 1.0
         self.ank = {sd: sk.heads["foot." + sd].copy() for sd in "LR"}
         self.ball = {sd: sk.heads["toe." + sd].copy() for sd in "LR"}
         self.hipj = {sd: sk.heads["thigh." + sd].copy() for sd in "LR"}
@@ -162,7 +164,7 @@ class Ctx:
         raised about the heel (heel strike)."""
         s = self.s
         sx = 1 if side == "L" else -1
-        if self.kind == "defender":
+        if self.hero:
             # spline overshoot must never sink the heel below the ground
             heel = max(0.0, heel)
             toe = max(0.0, toe)
@@ -328,25 +330,52 @@ def bat_rest_pose(c, P, t, L, bounce=0.0, two_hands=False):
 
 # --- locomotion -------------------------------------------------------------
 
+#: run-cycle flavours of the runner types (multipliers / offsets on the
+#: generic cycle; stance timing and stride length stay the same, so feet
+#: never slide and the game's stride-to-speed mapping still holds)
+GAITS = {
+    "runner": {},
+    "sprinter": dict(lean=6, lift=1.15, kick=1.2, arm_amp=1.2, arm_bend=-0.05),
+    "heavy": dict(lean=3, width=1.2, bob=1.4, lift=0.8, kick=0.75, arm_amp=0.75, roll=4.0),
+    "bouncy": dict(bob=2.6, lift=1.3, kick=0.9, arm_amp=1.1, head_bob=4.0),
+    "scurry": dict(lean=10, bob=0.7, lift=0.85, arm_amp=1.45, arm_bend=0.12, width=1.15,
+                   yaw=1.6, head_bob=4.0),
+    "sneaky": dict(lean=12, hip_dz=-0.045, lift=0.9, arm_amp=0.35, arms="back", head_up=8),
+    "captain": dict(lean=-5, arm_amp=0.85, chest=-7, head_up=-3),
+    "stealer": dict(lean=14, hip_dz=-0.035, arm_amp=1.3, arm_bend=0.0, head_up=10),
+    "phantom": dict(bob=0.5, lift=0.75, kick=0.6, arm_amp=0.45, lean=-2, arms="spread"),
+}
+
+
 def _loco(c, t, L, stance, d_st, lift, lean, bob, arm_amp, arm_bend, kick,
-          width=1.05, heavy=0.0, sprint=False):
+          width=1.05, heavy=0.0, sprint=False, g=None):
     """Generic in-place locomotion cycle.  Left foot contacts at t=0."""
     s = c.s
     P = c.new()
+    g = g or {}
+    lean += g.get("lean", 0.0)
+    bob *= g.get("bob", 1.0)
+    lift *= g.get("lift", 1.0)
+    kick *= g.get("kick", 1.0)
+    arm_amp *= g.get("arm_amp", 1.0)
+    arm_bend += g.get("arm_bend", 0.0)
+    width *= g.get("width", 1.0)
     ph = (t / L) % 1.0
     # hips vertical: lowest at mid-stance of each foot (2 per cycle)
     ms = stance * 0.5
     zb = -bob * math.cos(4 * math.pi * (ph - ms))
     hip_drop = -(0.03 + 0.06 * (d_st / s / 0.66)) if not sprint else -0.10
-    hip_drop -= 0.03 * heavy
-    yaw = -9 * math.cos(2 * math.pi * ph) * (1 + 0.3 * heavy)
-    roll = 4 * heavy * math.sin(2 * math.pi * (ph - ms))
+    hip_drop -= 0.03 * heavy - g.get("hip_dz", 0.0)
+    yaw = -9 * math.cos(2 * math.pi * ph) * (1 + 0.3 * heavy) * g.get("yaw", 1.0)
+    roll = (4 * heavy + g.get("roll", 0.0)) * math.sin(2 * math.pi * (ph - ms))
+    hb = g.get("head_bob", 2.0) * math.sin(4 * math.pi * ph)
+    hu = g.get("head_up", 0.0)
     c.torso(P, hips=(0.012 * heavy * math.sin(2 * math.pi * (ph - ms)), -0.01, hip_drop + zb / s),
             hips_rot=(lean * 0.4, -roll, yaw),
             spine=(lean * 0.3, roll * 0.5, -yaw * 0.6),
-            chest=(lean * 0.3, roll * 0.4, -yaw * 0.9),
-            neck=(-lean * 0.4, 0, yaw * 0.3),
-            head=(-lean * 0.35 + 2 * math.sin(4 * math.pi * ph), -roll * 0.5, yaw * 0.4))
+            chest=(lean * 0.3 + g.get("chest", 0.0), roll * 0.4, -yaw * 0.9),
+            neck=(-lean * 0.4 - hu * 0.5, 0, yaw * 0.3),
+            head=(-lean * 0.35 + hb - hu * 0.5, -roll * 0.5, yaw * 0.4))
     for side, off in (("L", 0.0), ("R", 0.5)):
         u = (ph + off) % 1.0
         sx = 1 if side == "L" else -1
@@ -395,6 +424,12 @@ def _loco(c, t, L, stance, d_st, lift, lean, bob, arm_amp, arm_bend, kick,
         tgt = S + back.lerp(fwd, k) + Vector((0, 0, -0.33 * s * (1 - arm_bend)))
         tgt.z = min(tgt.z, S.z + 0.02 * s)
         tgt += Vector((sx * 0.03 * heavy * s, 0, 0))
+        if g.get("arms") == "back":
+            # arms trailing low behind the body (sneaking)
+            tgt = S + Vector((sx * 0.06, 0.20 + 0.05 * sw, -0.40)) * s
+        elif g.get("arms") == "spread":
+            # arms floating out to the sides (ghostly glide)
+            tgt = S + Vector((sx * 0.30, 0.02 + 0.06 * sw, -0.30 + 0.03 * sw)) * s
         c.arm(P, side, tgt, pole=(sx * 0.35, 1.0, -0.45))
     return P
 
@@ -403,15 +438,20 @@ def clip_run(c, t):
     h = c.style["heavy"]
     s = c.s
     k = c.lk
+    g = GAITS.get(c.style.get("gait", ""), {}) if c.kind != "defender" else {}
     return _loco(c, t, 0.70, stance=0.36, d_st=0.66 * s * k, lift=0.30 * s * k, lean=12 + 4 * h,
-                 bob=0.022 * s * k, arm_amp=1.0, arm_bend=0.15, kick=0.36 * s * k, heavy=h)
+                 bob=0.022 * s * k, arm_amp=1.0, arm_bend=0.15, kick=0.36 * s * k, heavy=h, g=g)
 
 
 def clip_sprint(c, t):
     s = c.s
-    return _loco(c, t, 0.55, stance=0.32, d_st=0.74 * s, lift=0.36 * s, lean=26,
-                 bob=0.02 * s, arm_amp=1.15, arm_bend=0.05, kick=0.42 * s, sprint=True,
-                 heavy=c.style["heavy"] * 0.5)
+    k = c.lk
+    g = {}
+    if c.style.get("gait") in ("stealer", "sprinter"):
+        g = dict(head_up=8, arm_amp=1.1)
+    return _loco(c, t, 0.55, stance=0.32, d_st=0.74 * s * k, lift=0.36 * s * k, lean=26,
+                 bob=0.02 * s * k, arm_amp=1.15, arm_bend=0.05, kick=0.42 * s * k, sprint=True,
+                 heavy=c.style["heavy"] * 0.5, g=g)
 
 
 def clip_walk(c, t):
@@ -483,6 +523,11 @@ def clip_hit(c, t):
     P = c.new()
     a = K(t, [(0, 0), (0.07, 1.0), (0.16, 0.75), (0.35, 0.0)])
     b = K(t, [(0, 0), (0.05, 0.4), (0.12, 1.0), (0.24, 0.3), (0.35, 0.0)])
+    if c.kind != "defender" and c.hero:
+        # runners: a bigger, snappier flinch (reads from the battle camera)
+        amp = 1.4 - 0.3 * c.style["heavy"]
+        a *= amp
+        b *= amp
     c.torso(P, hips=(0, 0.035 * a, -0.02 - 0.02 * a),
             hips_rot=(-6 * a, 0, 5 * a),
             spine=(-10 * a, 2 * a, 4 * a),
@@ -532,7 +577,7 @@ def clip_defeat(c, t):
     P = c.new()
     L = c.L
     lie_z = (c.sk.p["pelvis_d"] * 0.95 + 0.065) * s
-    if c.kind == "defender":
+    if c.hero:
         lie_z -= 0.036 * s     # stylised bodies: rest the back on the ground
     # hips offset relative to rest pelvis height
     dz_end = lie_z - L["pelvis"]
@@ -548,7 +593,7 @@ def clip_defeat(c, t):
     sp = K(t, [(0, 0), (0.15, -10), (0.4, -6), (0.66, 4), (0.74, 8), (0.9, 0), (1.2, 0)])
     P.rot["spine"] = body_rot(sp, 0, -tw * 0.5)
     P.rot["chest"] = body_rot(sp, 3, -tw * 0.3)
-    if c.kind == "defender":
+    if c.hero:
         # big stylised heads (ponytail, backwards brim): keep the head up off the ground
         nk = K(t, [(0, 0), (0.15, -20), (0.45, 12), (0.66, 32), (0.74, 40), (0.9, 34), (1.2, 34)])
     else:
@@ -572,7 +617,7 @@ def clip_defeat(c, t):
             knee_bend = 0.88 if side == "L" else 0.80
             a_end = Vector((c.fx * (1.6 if side == "L" else 1.2) * sx,
                             y_end - c.leg * knee_bend, c.sk.p["ankle_r"] * s * 1.3 + 0.03 * s +
-                            (0.040 * s if c.kind == "defender" else 0.0)))
+                            (0.040 * s if c.hero else 0.0)))
             a_air = Vector((c.fx * 1.4 * sx, 0.05 * s, 0.45 * s))
             ank = KV(t, [(0.30, a0), (0.55, a_air + Vector((0, -0.05 * s * sx, 0.05 * s))),
                          (0.74, a_end + Vector((0, 0, 0.10 * s))), (0.88, a_end), (1.2, a_end)])
@@ -581,7 +626,7 @@ def clip_defeat(c, t):
             if t < 0.45:
                 pole = Vector((sx * 0.2, -1.0, 0.2)).lerp(pole, sstep(0.3, 0.45, t))
             tb = 0.0
-            if c.kind == "defender" and pitch_f > 0:
+            if c.hero and pitch_f > 0:
                 # keep the toes flat while the heel leaves the ground
                 tb = -pitch_f * (1 - sstep(0.30, 0.50, t))
             c.free_foot(P, side, ank, pitch=pitch_f, yaw=sx * 12, pole=pole, toe_bend=tb)
@@ -1044,9 +1089,11 @@ def clip_leap(c, t):
             a1 = c.ankle_of(side, c.fx * 1.4 * sx, c.fy, yaw=sx * 10, heel=10)
             up = Vector((c.fx * 1.6 * sx, -0.02 * s, c.L["hip"] - 0.30 * s))
             ank = a0.lerp(up, sstep(0.22, 0.42, t)).lerp(a1, sstep(0.55, 0.78, t))
-            c.free_foot(P, side, ank, pitch=30 * tuck + 35 * (1 - sstep(0.22, 0.32, t)) * (t < 0.4),
-                        yaw=sx * 10,
-                        pole=Vector((sx * 0.25, -1, 0.3 * tuck)))
+            pitch = 30 * tuck + 35 * (1 - sstep(0.22, 0.32, t)) * (t < 0.4)
+            # toes stay flat on the ground just after take-off (no dip)
+            c.free_foot(P, side, ank, pitch=pitch, yaw=sx * 10,
+                        pole=Vector((sx * 0.25, -1, 0.3 * tuck)),
+                        toe_bend=-pitch * (1 - sstep(0.22, 0.36, t)))
     arm_up = K(t, [(0, 0), (0.15, -0.6), (0.3, 1.0), (0.5, 0.7), (0.8, -0.2)])
     for side in ("L", "R"):
         sx = 1 if side == "L" else -1
@@ -1058,8 +1105,11 @@ def clip_swing(c, t):
     """Two-handed bat swing, impact at 0.50 s (contact in front, -Y)."""
     s = c.s
     P = c.new()
-    yaw_h = K(t, [(0, 0), (0.15, -10), (0.35, -30), (0.50, 25), (0.65, 45), (0.85, 20), (1.0, 0)])
-    yaw_c = K(t, [(0, 0), (0.15, -15), (0.35, -45), (0.50, 20), (0.65, 60), (0.85, 25), (1.0, 0)])
+    # deep coil held 0.30-0.40 (readable wind-up), then a fast snap to impact
+    yaw_h = K(t, [(0, 0), (0.15, -14), (0.32, -36), (0.40, -38), (0.50, 25), (0.65, 45),
+                  (0.85, 20), (1.0, 0)])
+    yaw_c = K(t, [(0, 0), (0.15, -22), (0.32, -58), (0.40, -60), (0.50, 20), (0.65, 60),
+                  (0.85, 25), (1.0, 0)])
     fwd = K(t, [(0, 8), (0.35, 12), (0.5, 16), (0.65, 10), (1.0, 8)])
     hz = K(t, [(0, -0.05), (0.35, -0.08), (0.5, -0.11), (0.65, -0.09), (1.0, -0.05)])
     hy = K(t, [(0, 0), (0.35, 0.04), (0.5, -0.04), (0.65, -0.05), (1.0, 0)])

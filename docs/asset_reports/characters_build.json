@@ -136,8 +136,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.167m@0.97s",
-     "Rarm:0.233m@0.97s"
+     "Larm:0.120m@0.57s",
+     "Rarm:0.188m@0.75s"
     ]
    },
    "sprint": {
@@ -145,8 +145,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.069m@0.00s",
-     "Rarm:0.068m@0.27s"
+     "Larm:0.086m@0.00s",
+     "Rarm:0.084m@0.28s"
     ]
    },
    "stunned": {
@@ -160,7 +160,7 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.031m@0.35s"
+     "Rarm:0.029m@0.35s"
     ]
    },
    "taunt": {
@@ -168,7 +168,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.095m@1.20s"
+     "Rarm:0.114m@1.20s"
     ]
    },
    "walk": {
@@ -178,11 +178,105 @@
     "warn": []
    }
   },
-  "height": 1.863,
+  "height": 1.903,
   "id": "armored",
   "kind": "enemy",
-  "seconds": 98.8,
-  "tris": 8707
+  "seconds": 13.0,
+  "tris": 22475
+ },
+ "base_stealer": {
+  "anims": {
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "leap": {
+    "frames": 49,
+    "length": 0.8,
+    "loop": false,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": [
+     "Larm:0.080m@0.00s",
+     "Rarm:0.080m@0.35s"
+    ]
+   },
+   "slam": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Larm:0.093m@0.57s",
+     "Rarm:0.169m@0.75s"
+    ]
+   },
+   "sprint": {
+    "frames": 34,
+    "length": 0.55,
+    "loop": true,
+    "warn": [
+     "Larm:0.103m@0.00s",
+     "Rarm:0.101m@0.27s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "swing": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": false,
+    "warn": [
+     "Rarm:0.026m@0.35s"
+    ]
+   },
+   "taunt": {
+    "frames": 91,
+    "length": 1.5,
+    "loop": false,
+    "warn": [
+     "Rarm:0.102m@1.20s"
+    ]
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.764,
+  "id": "base_stealer",
+  "kind": "enemy",
+  "seconds": 6.0,
+  "tris": 16999
  },
  "bruno": {
   "anims": {
@@ -321,8 +415,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.167m@0.97s",
-     "Rarm:0.235m@0.97s"
+     "Larm:0.122m@0.57s",
+     "Rarm:0.191m@0.75s"
     ]
    },
    "sprint": {
@@ -330,8 +424,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.070m@0.00s",
-     "Rarm:0.068m@0.27s"
+     "Larm:0.086m@0.00s",
+     "Rarm:0.084m@0.27s"
     ]
    },
    "stunned": {
@@ -345,7 +439,7 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.031m@0.35s"
+     "Rarm:0.030m@0.35s"
     ]
    },
    "taunt": {
@@ -353,7 +447,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.096m@1.20s"
+     "Rarm:0.115m@1.20s"
     ]
    },
    "walk": {
@@ -363,11 +457,11 @@
     "warn": []
    }
   },
-  "height": 1.923,
+  "height": 1.948,
   "id": "captain",
   "kind": "enemy",
-  "seconds": 115.2,
-  "tris": 8709
+  "seconds": 7.4,
+  "tris": 20274
  },
  "dex": {
   "anims": {
@@ -506,8 +600,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.367m@0.97s",
-     "Rarm:0.537m@0.97s"
+     "Larm:0.302m@0.57s",
+     "Rarm:0.432m@0.75s"
     ]
    },
    "sprint": {
@@ -515,8 +609,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.160m@0.00s",
-     "Rarm:0.157m@0.28s"
+     "Larm:0.193m@0.00s",
+     "Rarm:0.190m@0.27s"
     ]
    },
    "stunned": {
@@ -530,7 +624,8 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.069m@0.35s"
+     "Larm:0.071m@0.00s",
+     "Rarm:0.065m@0.35s"
     ]
    },
    "taunt": {
@@ -546,11 +641,11 @@
     "warn": []
    }
   },
-  "height": 4.207,
+  "height": 4.331,
   "id": "grand_slammer",
   "kind": "boss",
-  "seconds": 139.0,
-  "tris": 21312
+  "seconds": 8.6,
+  "tris": 26570
  },
  "hana": {
   "anims": {
@@ -689,8 +784,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.311m@0.97s",
-     "Rarm:0.457m@0.97s"
+     "Larm:0.249m@0.57s",
+     "Rarm:0.363m@0.75s"
     ]
    },
    "sprint": {
@@ -698,8 +793,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.137m@0.00s",
-     "Rarm:0.135m@0.28s"
+     "Larm:0.165m@0.00s",
+     "Rarm:0.162m@0.27s"
     ]
    },
    "stunned": {
@@ -713,7 +808,8 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.059m@0.35s"
+     "Larm:0.040m@0.00s",
+     "Rarm:0.056m@0.35s"
     ]
    },
    "taunt": {
@@ -729,11 +825,11 @@
     "warn": []
    }
   },
-  "height": 3.537,
+  "height": 3.569,
   "id": "iron_slugger",
   "kind": "boss",
-  "seconds": 168.5,
-  "tris": 21315
+  "seconds": 9.8,
+  "tris": 27220
  },
  "jax": {
   "anims": {
@@ -865,15 +961,18 @@
     "frames": 43,
     "length": 0.7,
     "loop": true,
-    "warn": []
+    "warn": [
+     "Larm:0.033m@0.00s",
+     "Rarm:0.033m@0.35s"
+    ]
    },
    "slam": {
     "frames": 85,
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.192m@0.97s",
-     "Rarm:0.255m@0.97s"
+     "Larm:0.131m@0.97s",
+     "Rarm:0.215m@0.97s"
     ]
    },
    "sprint": {
@@ -881,8 +980,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.064m@0.00s",
-     "Rarm:0.063m@0.27s"
+     "Larm:0.076m@0.00s",
+     "Rarm:0.075m@0.28s"
     ]
    },
    "stunned": {
@@ -896,7 +995,7 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.029m@0.35s"
+     "Rarm:0.027m@0.35s"
     ]
    },
    "taunt": {
@@ -904,7 +1003,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.089m@1.20s"
+     "Rarm:0.103m@1.20s"
     ]
    },
    "walk": {
@@ -914,11 +1013,11 @@
     "warn": []
    }
   },
-  "height": 1.786,
+  "height": 1.849,
   "id": "jumper",
   "kind": "enemy",
-  "seconds": 166.7,
-  "tris": 8712
+  "seconds": 12.7,
+  "tris": 19576
  },
  "kai": {
   "anims": {
@@ -1243,8 +1342,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.229m@0.97s",
-     "Rarm:0.343m@0.75s"
+     "Larm:0.125m@0.57s",
+     "Rarm:0.229m@0.75s"
     ]
    },
    "sprint": {
@@ -1252,8 +1351,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.067m@0.00s",
-     "Rarm:0.065m@0.27s"
+     "Larm:0.056m@0.00s",
+     "Rarm:0.053m@0.27s"
     ]
    },
    "stunned": {
@@ -1267,7 +1366,7 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.052m@0.35s"
+     "Rarm:0.039m@0.35s"
     ]
    },
    "taunt": {
@@ -1275,7 +1374,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.108m@1.20s"
+     "Rarm:0.103m@1.20s"
     ]
    },
    "walk": {
@@ -1285,11 +1384,11 @@
     "warn": []
    }
   },
-  "height": 3.206,
+  "height": 3.197,
   "id": "phantom_captain",
   "kind": "boss",
-  "seconds": 118.0,
-  "tris": 16961
+  "seconds": 7.4,
+  "tris": 21766
  },
  "rico": {
   "anims": {
@@ -1428,8 +1527,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.149m@0.97s",
-     "Rarm:0.213m@0.97s"
+     "Larm:0.103m@0.57s",
+     "Rarm:0.168m@0.75s"
     ]
    },
    "sprint": {
@@ -1437,8 +1536,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.065m@0.00s",
-     "Rarm:0.064m@0.27s"
+     "Larm:0.079m@0.00s",
+     "Rarm:0.078m@0.27s"
     ]
    },
    "stunned": {
@@ -1452,7 +1551,7 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.029m@0.35s"
+     "Rarm:0.027m@0.35s"
     ]
    },
    "taunt": {
@@ -1460,7 +1559,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.090m@1.20s"
+     "Rarm:0.106m@1.20s"
     ]
    },
    "walk": {
@@ -1470,11 +1569,11 @@
     "warn": []
    }
   },
-  "height": 1.765,
+  "height": 1.783,
   "id": "runner",
   "kind": "enemy",
-  "seconds": 95.5,
-  "tris": 8714
+  "seconds": 10.7,
+  "tris": 17986
  },
  "slugger": {
   "anims": {
@@ -1519,8 +1618,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.207m@0.97s",
-     "Rarm:0.305m@0.97s"
+     "Larm:0.160m@0.57s",
+     "Rarm:0.241m@0.75s"
     ]
    },
    "sprint": {
@@ -1528,8 +1627,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.091m@0.00s",
-     "Rarm:0.090m@0.28s"
+     "Larm:0.109m@0.00s",
+     "Rarm:0.108m@0.27s"
     ]
    },
    "stunned": {
@@ -1543,7 +1642,8 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.040m@0.35s"
+     "Larm:0.026m@0.00s",
+     "Rarm:0.037m@0.35s"
     ]
    },
    "taunt": {
@@ -1559,11 +1659,11 @@
     "warn": []
    }
   },
-  "height": 2.358,
+  "height": 2.379,
   "id": "slugger",
   "kind": "enemy",
-  "seconds": 122.9,
-  "tris": 8709
+  "seconds": 8.2,
+  "tris": 24398
  },
  "sprinter": {
   "anims": {
@@ -1601,15 +1701,18 @@
     "frames": 43,
     "length": 0.7,
     "loop": true,
-    "warn": []
+    "warn": [
+     "Larm:0.074m@0.00s",
+     "Rarm:0.074m@0.35s"
+    ]
    },
    "slam": {
     "frames": 85,
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.189m@0.97s",
-     "Rarm:0.251m@0.97s"
+     "Larm:0.102m@0.97s",
+     "Rarm:0.190m@0.97s"
     ]
    },
    "sprint": {
@@ -1617,8 +1720,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.064m@0.00s",
-     "Rarm:0.063m@0.27s"
+     "Larm:0.106m@0.00s",
+     "Rarm:0.105m@0.27s"
     ]
    },
    "stunned": {
@@ -1632,7 +1735,7 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.029m@0.35s"
+     "Rarm:0.027m@0.35s"
     ]
    },
    "taunt": {
@@ -1640,7 +1743,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.089m@1.20s"
+     "Rarm:0.105m@1.20s"
     ]
    },
    "walk": {
@@ -1650,11 +1753,11 @@
     "warn": []
    }
   },
-  "height": 1.785,
+  "height": 1.845,
   "id": "sprinter",
   "kind": "enemy",
-  "seconds": 187.7,
-  "tris": 8713
+  "seconds": 9.1,
+  "tris": 18794
  },
  "swarmer": {
   "anims": {
@@ -1663,7 +1766,7 @@
     "length": 1.0,
     "loop": true,
     "warn": [
-     "Rarm:0.046m@0.45s"
+     "Rarm:0.080m@0.45s"
     ]
    },
    "defeat": {
@@ -1695,8 +1798,8 @@
     "length": 0.7,
     "loop": true,
     "warn": [
-     "Larm:0.047m@0.00s",
-     "Rarm:0.047m@0.35s"
+     "Larm:0.135m@0.00s",
+     "Rarm:0.135m@0.35s"
     ]
    },
    "slam": {
@@ -1704,8 +1807,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.144m@0.55s",
-     "Rarm:0.195m@0.75s"
+     "Larm:0.163m@0.57s",
+     "Rarm:0.199m@0.53s"
     ]
    },
    "sprint": {
@@ -1713,8 +1816,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.088m@0.00s",
-     "Rarm:0.087m@0.27s"
+     "Larm:0.131m@0.00s",
+     "Rarm:0.130m@0.27s"
     ]
    },
    "stunned": {
@@ -1728,7 +1831,8 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.056m@0.55s"
+     "Larm:0.047m@0.00s",
+     "Rarm:0.092m@0.55s"
     ]
    },
    "taunt": {
@@ -1736,7 +1840,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.104m@1.20s"
+     "Rarm:0.150m@1.20s"
     ]
    },
    "walk": {
@@ -1746,11 +1850,11 @@
     "warn": []
    }
   },
-  "height": 1.19,
+  "height": 1.198,
   "id": "swarmer",
   "kind": "enemy",
-  "seconds": 127.4,
-  "tris": 8838
+  "seconds": 11.7,
+  "tris": 17848
  },
  "trickster": {
   "anims": {
@@ -1795,8 +1899,8 @@
     "length": 1.4,
     "loop": false,
     "warn": [
-     "Larm:0.119m@0.97s",
-     "Rarm:0.185m@0.97s"
+     "Larm:0.048m@0.57s",
+     "Rarm:0.114m@0.75s"
     ]
    },
    "sprint": {
@@ -1804,8 +1908,8 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.037m@0.00s",
-     "Rarm:0.036m@0.27s"
+     "Larm:0.030m@0.00s",
+     "Rarm:0.029m@0.27s"
     ]
    },
    "stunned": {
@@ -1819,7 +1923,7 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Rarm:0.030m@0.35s"
+     "Rarm:0.022m@0.35s"
     ]
    },
    "taunt": {
@@ -1827,7 +1931,7 @@
     "length": 1.5,
     "loop": false,
     "warn": [
-     "Rarm:0.062m@1.20s"
+     "Rarm:0.059m@1.20s"
     ]
    },
    "walk": {
@@ -1837,10 +1941,10 @@
     "warn": []
    }
   },
-  "height": 1.82,
+  "height": 2.037,
   "id": "trickster",
   "kind": "enemy",
-  "seconds": 105.6,
-  "tris": 8707
+  "seconds": 10.8,
+  "tris": 17601
  }
 }

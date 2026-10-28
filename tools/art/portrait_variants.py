@@ -15,9 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PORTRAITS = ROOT / "assets" / "textures" / "portraits"
 
 # id: (source portrait, hue shift in degrees for saturated trim, tint for the dark uniform)
-VARIANTS = {
-    "base_stealer": ("runner", -62.0, (0.16, 0.08, 0.19)),
-}
+# (Update 6: the Base Stealer has its own model and rendered portrait, see
+# tools/blender/characters/roster.py; no variants are left.)
+VARIANTS = {}
 
 
 def rgb_to_hsv(rgb):
