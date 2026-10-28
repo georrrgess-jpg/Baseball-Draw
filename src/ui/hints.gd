@@ -314,17 +314,22 @@ class HintLayer extends CanvasLayer:
 			tr = Rect2(xf.origin, _target.size * xf.get_scale())
 			var gap := 34.0
 			var m := 16.0
-			var cands := [
-				Vector2(tr.get_center().x - cs.x * 0.5, tr.end.y + gap),
-				Vector2(tr.get_center().x - cs.x * 0.5, tr.position.y - gap - cs.y),
-				Vector2(tr.end.x + gap, tr.get_center().y - cs.y * 0.5),
-				Vector2(tr.position.x - gap - cs.x, tr.get_center().y - cs.y * 0.5),
-			]
+			# [position, slides horizontally]: below, above, right, left of the target.
+			var below := [Vector2(tr.get_center().x - cs.x * 0.5, tr.end.y + gap), true]
+			var above := [Vector2(tr.get_center().x - cs.x * 0.5, tr.position.y - gap - cs.y), true]
+			var right := [Vector2(tr.end.x + gap, tr.get_center().y - cs.y * 0.5), false]
+			var left := [Vector2(tr.position.x - gap - cs.x, tr.get_center().y - cs.y * 0.5), false]
+			# Prefer the open side: elements on the left get the card on their right, and so on.
+			var cands := [below, above, right, left]
+			if tr.get_center().x < vs.x * 0.4:
+				cands = [right, below, above, left]
+			elif tr.get_center().x > vs.x * 0.6:
+				cands = [left, below, above, right]
 			var placed := false
-			for k in cands.size():
-				var c: Vector2 = cands[k]
+			for cand in cands:
+				var c: Vector2 = cand[0]
 				# Slide along the free axis to stay on screen; reject if it then covers the target.
-				if k < 2:
+				if cand[1]:
 					c.x = clampf(c.x, m, vs.x - cs.x - m)
 				else:
 					c.y = clampf(c.y, m, vs.y - cs.y - m)

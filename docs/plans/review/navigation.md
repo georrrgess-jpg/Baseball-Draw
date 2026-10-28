@@ -33,7 +33,8 @@ every session; **Effort** S = 1, M = 2, L = 3. **Priority = Severity × Reach ÷
 | N13 | Main menu | A brand-new player sees 8 equal tiles; Practice, Progression and Upgrade Cards are not useful before the first game. | 2 | 2 | S | 4.0 | Fixed: toned down (50 %, full on hover, tooltip says when they matter) until the first game is finished |
 | N14 | Play | Difficulty buttons are disabled for Practice and Promotion without a reason. | 1 | 2 | S | 2.0 | Fixed: tooltips |
 | N15 | All menus | No way to see an explanation again. | 2 | 2 | S | 4.0 | Fixed: "?" on every screen; Settings → Gameplay → Show tips / Show all tips again |
-| N16 | Main menu | Esc on the welcome panel does nothing. | 1 | 1 | S | 1.0 | Open (the panel has two clear buttons) |
+| N16 | Main menu | First launch: the welcome panel is anchored by its top edge and runs off the bottom of the screen, so PLAY THE FIRST GAME is half cut off (1080p and 720p). | 3 | 4 | S | 12.0 | Fixed: grows up from the bottom-right corner |
+| N16b | Main menu | Esc on the welcome panel does nothing. | 1 | 1 | S | 1.0 | Fixed: Esc = "Look around first" |
 | N17 | Battle | Energy and formations are explained only by the battle tutorial and the HUD tooltips; nothing replays them outside HOW TO PLAY. | 1 | 2 | M | 1.0 | Open (HUD is the lead's file; HOW TO PLAY covers both) |
 | N18 | Play | Changing EDIT TEAM / EDIT DECK and returning resets the chosen mode to the last played one. | 1 | 2 | S | 2.0 | Open |
 

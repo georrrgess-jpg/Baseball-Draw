@@ -392,9 +392,15 @@ func _add_up_next(parent: Control) -> void:
 	var b := NextSteps.button(sg, COL_W)
 	b.name = "UpNext"
 	b.text = "UP NEXT:  " + str(sg.text)
-	b.custom_minimum_size = Vector2(COL_W, UITheme.BTN_H_SMALL)
-	b.add_theme_font_size_override("font_size", UITheme.FS_BODY)
-	_add_subline(b, str(sg.get("detail", "")), Color(1, 1, 1, 0.6))
+	b.custom_minimum_size = Vector2(COL_W, UITheme.BTN_H)
+	b.add_theme_font_size_override("font_size", UITheme.FS_LEAD)
+	var sub := UITheme.label(str(sg.get("detail", "")), UITheme.FS_MIN, Color(1, 1, 1, 0.6), UITheme.font_body_bold())
+	sub.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sub.offset_right = -18
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(sub)
 	parent.add_child(b)
 	_buttons.append(b)
 
