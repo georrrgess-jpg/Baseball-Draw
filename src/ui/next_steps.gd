@@ -21,7 +21,9 @@ static func suggestions(just_played_daily := false) -> Array:
 	var missions := mission_ready_count()
 	if missions > 0:
 		out.append({"id": "missions", "text": "CLAIM %d MISSION%s" % [missions, "S" if missions > 1 else ""], "icon": "check",
-			"accent": UITheme.GREEN, "detail": "Mission rewards are waiting", "go": func() -> void: Router.goto(mission_screen())})
+			"accent": UITheme.GREEN, "detail": "Mission rewards are waiting", "go": func() -> void:
+			Session.menu_tab = "missions"
+			Router.goto(mission_screen())})
 	# 3. Unopened packs.
 	var packs := Profile.pack_count()
 	if packs > 0:
