@@ -991,7 +991,7 @@ func twin_play(caster: Node3D, dur: float) -> void:
 
 
 func field_vision(dur: float, bonus: float) -> void:
-	var col := Color(1.0, 0.88, 0.35)
+	var col := Color(0.45, 0.9, 1.0)   # cool scouting cyan (Rally Cry is the gold one)
 	for df in battle.defenders:
 		var rng: float = df.s_range * (1.0 + maxf(df.dyn_range, bonus))
 		# A thin ring sweeping out to the new throwing range.
