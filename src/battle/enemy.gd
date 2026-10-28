@@ -830,8 +830,9 @@ func _update_status_fx(delta: float) -> void:
 		if _fx_bubble == null and shield_hits > 0:
 			_fx_bubble = vfx.make_runner_bubble()
 			add_child(_fx_bubble)
-			var br := height * 0.42
-			_fx_bubble.scale = Vector3(br, height * 0.72, br)
+			# Round, not an egg: a uniform sphere centred on the body.
+			_fx_bubble.scale = Vector3.ONE * height * 0.6
+			_fx_bubble.position = Vector3(0, height * 0.52, 0)
 		if _fx_bubble:
 			_fx_bubble.visible = _bubble_k > 0.0
 			_fx_bubble.set_instance_shader_parameter("build", _bubble_k)

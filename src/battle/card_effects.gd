@@ -253,7 +253,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 						battle.deal_damage(e, p(card_id, "damage", level), {"source": df, "kind": "throw", "card": card_id})
 						if e.alive and not e.is_boss:
 							e.apply_confuse(p(card_id, "confuse", level) * control_mult())
-							battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "???", Color(0.8, 0.6, 1.0), 0.7, 0.6)
+							battle.vfx.text_popup(e.center() + Vector3(0, 1.2, 0), "CONFUSED!", Color(0.85, 0.65, 1.0), 0.9, 1.0)
 						elif e.is_boss:
 							fx.fizzle(e.center() + Vector3(0, 0.6, 0), "IMMUNE"))
 			_cast(df, go, e.global_position, "throw", card_id)
@@ -347,6 +347,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			battle.add_shield(int(p(card_id, "shields", level)))
 
 		"bunt_trap":
+			fx.bunt_trap_cast(battle.snap_to_route(target.get("point", point)).point)
 			battle.add_trap(target.get("point", point), int(p(card_id, "charges", level)), p(card_id, "root", level) * control_mult(), p(card_id, "damage", level))
 
 		"diving_catch":
@@ -432,10 +433,11 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 		"seventh_inning_stretch":
 			Audio.play("heal_chime")
 			battle.cards.add_energy(p(card_id, "energy", level))
+			var before: Array = battle.cards.hand.duplicate()
 			battle.cards.draw(int(p(card_id, "draw", level)))
 			battle.crowd_cheer(0.7)
 			battle.notify("SEVENTH-INNING STRETCH!", Color(1.0, 0.9, 0.5))
-			fx.stretch()
+			fx.stretch(_new_cards(before), p(card_id, "energy", level))
 
 		"called_shot":
 			var e: Enemy = target.get("enemy")
@@ -518,9 +520,10 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			Audio.play("card_draw")
 			Audio.play("heal_chime", -8.0)
 			battle.cards.add_energy(p(card_id, "energy", level))
+			var before: Array = battle.cards.hand.duplicate()
 			battle.cards.draw(int(p(card_id, "draw", level)))
 			battle.notify("BULLPEN CALL!", Color(0.55, 1.0, 0.5))
-			fx.bullpen_call()
+			fx.bullpen_call(_new_cards(before), p(card_id, "energy", level))
 
 		"hot_corner":
 			var df: Defender = target.get("defender")
@@ -564,6 +567,17 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 					if e.alive:
 						e.apply_stun(p(card_id, "stun", level) * control_mult()))
 			Audio.play("lightning_zap", -2.0)
+
+
+## Cards that entered the hand since `before` (visual only: the draw effects show them).
+func _new_cards(before: Array) -> Array:
+	var out: Array = []
+	var hand: Array = battle.cards.hand
+	for i in hand.size():
+		var id: String = hand[i]
+		if id != "" and (i >= before.size() or before[i] != id):
+			out.append(id)
+	return out
 
 
 ## Has the caster perform its animation, then runs the effect at the impact frame.
