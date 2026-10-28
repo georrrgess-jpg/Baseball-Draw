@@ -41,6 +41,7 @@ func _run() -> void:
 	await test_daily_mastery_sets()
 	test_missions()
 	test_level_road_and_achievements()
+	test_update6_waves()
 	await test_menus()
 	test_update5_content()
 	await test_battle_systems()
@@ -839,6 +840,42 @@ func test_level_road_and_achievements() -> void:
 	var before := Profile.stat("cards_upgraded")
 	Profile.upgrade_card("power_throw")
 	ok(Profile.stat("cards_upgraded") == before + 1, "card upgrades are counted for missions")
+
+
+## A run config that does not draw from the global random stream (later battle checks
+## depend on it).
+func _cfg(mode: String) -> Dictionary:
+	return {"mode": mode, "difficulty": "standard", "arena": "steel_yard", "deck": Profile.data.deck.duplicate(),
+		"team": Profile.data.team.duplicate(), "captain": Profile.data.captain, "formation": "balanced", "seed": 7, "resume": null}
+
+
+func test_update6_waves() -> void:
+	section("Update 6 waves: Endless pressure, per-mode tuning")
+	var cfg := _cfg("endless")
+	cfg.difficulty = "standard"
+	cfg.seed = 7
+	var r := RunState.create(cfg)
+	r.inning = 1
+	ok(is_equal_approx(WaveGenerator.effective_inning(r), 2.5), "Endless starts further up the curve (%.1f)" % WaveGenerator.effective_inning(r))
+	ok(WaveGenerator.mini_boss_for(r, r.waves_per_inning - 1) == "", "no mini-boss in inning 1")
+	r.inning = 2
+	var w := WaveGenerator.generate(r, r.waves_per_inning - 1, 3)
+	var mini: Array = w.groups.filter(func(g: Dictionary) -> bool: return g.enemy == "captain" and g.affix != "")
+	ok(w.mini_boss == "captain" and not mini.is_empty(), "inning 2 closes with an elite Captain")
+	ok(WaveGenerator.generate(r, 0, 3).mini_boss == "", "only the last wave has the mini-boss")
+	r.inning = 3
+	ok(WaveGenerator.generate(r, r.waves_per_inning - 1, 3).mini_boss == "", "boss innings have no mini-boss")
+	r.inning = 4
+	ok(WaveGenerator.generate(r, r.waves_per_inning - 1, 3).mini_boss == "slugger", "from inning 4 the mini-boss is a Slugger")
+	var q := _cfg("quick")
+	q.difficulty = "standard"
+	var qr := RunState.create(q)
+	ok(WaveGenerator.mode_tuning(qr, "budget") > 1.0, "Quick Defense Standard has its own tuning")
+	var sv := _cfg("standard")
+	sv.difficulty = "veteran"
+	ok(WaveGenerator.mode_tuning(RunState.create(sv), "enemy_hp") < 1.0, "Standard Siege Veteran is eased")
+	sv.difficulty = "standard"
+	ok(WaveGenerator.mode_tuning(RunState.create(sv), "enemy_hp") == 1.0, "Standard Siege Standard is unchanged")
 
 
 func _find_text(n: Node, text: String) -> bool:
