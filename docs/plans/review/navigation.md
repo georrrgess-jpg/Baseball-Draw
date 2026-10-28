@@ -72,3 +72,15 @@ main menu shows the top one as "UP NEXT".
 `Router.goto(scene, loading, tab)` selects a tab by name; `MenuScreen.push_overlay()` makes Esc close
 popups first; `MenuScreen.before_back` lets a screen use Esc first (pack reveal); `MenuScreen.set_help()`
 adds the "?" button and first-visit hints.
+
+## Verification
+
+* `tools/check_scripts.sh`: 78 scripts, 0 failed.
+* Test suite: 1,261 checks, 0 failed.
+* UI flow test, new `--ui-test-section=nav` (also part of the full run): the Card Packs hint shows on the
+  first visit, GOT IT marks it seen and the next hint follows, exactly one hint is on screen, a seen hint does
+  not come back, "?" replays it, Esc closes a hint without leaving the screen, every menu screen has "?" and
+  returns to the main menu on Esc, Upgrade Cards → Card Packs → Esc returns to Upgrade Cards, and the Daily
+  shortcut opens Play on the Daily Challenge.
+* Captures before/after (1920×1080 and 1280×720) of the main menu (new and returning player), Results, Play,
+  Card Packs, Team and Upgrade Cards.
