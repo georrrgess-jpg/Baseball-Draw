@@ -178,7 +178,12 @@ func _build_materials() -> void:
 	shard.radial_segments = 5
 	shard.rings = 1
 	shard.cap_top = false
-	_meshes = {"plane": plane, "quad": quad, "cyl": cyl, "cone": cone, "sphere": sphere, "shard": shard,
+	var ball := SphereMesh.new()
+	ball.radius = 1.0
+	ball.height = 2.0
+	ball.radial_segments = 32
+	ball.rings = 16
+	_meshes = {"plane": plane, "quad": quad, "cyl": cyl, "cone": cone, "sphere": sphere, "ball": ball, "shard": shard,
 		"crystal": _crystal_mesh()}
 
 
@@ -435,6 +440,8 @@ func _kind_setup(kind: String) -> Array:
 			return [_meshes.cone, _mats.cage]
 		"pulse":
 			return [_meshes.sphere, _mats.pulse]
+		"bubble":
+			return [_meshes.ball, _mats.pulse]
 		"ice_shell":
 			return [_meshes.crystal, _mats.ice]
 		"ice_shard":
@@ -1256,11 +1263,12 @@ const STEAL_PINK := Color(1.0, 0.3, 0.72)
 const BUBBLE_AMBER := Color(1.0, 0.62, 0.22)
 
 
-## Shielded elite: an amber hex bubble around the runner (Enemy drives `build`).
+## Shielded elite: a round, clear amber bubble around the runner (Enemy drives `build`).
+## A full sphere: the caller centres it on the runner and scales it uniformly.
 func make_runner_bubble() -> MeshInstance3D:
-	var mi := make_owned("pulse")
-	mi.set_instance_shader_parameter("color", Color(BUBBLE_AMBER * 0.5, 1.0))
-	mi.set_instance_shader_parameter("mode", 0.0)
+	var mi := make_owned("bubble")
+	mi.set_instance_shader_parameter("color", Color(BUBBLE_AMBER * 0.55, 1.0))
+	mi.set_instance_shader_parameter("mode", 2.0)
 	mi.set_instance_shader_parameter("build", 0.0)
 	mi.set_instance_shader_parameter("ripple", Vector4(0, 0, 1, 1))
 	return mi

@@ -1114,59 +1114,139 @@ func drag_info(df: Defender, p: Vector3, err: String) -> void:
 
 func on_card_played(id: String) -> void:
 	_card_tip.visible = false
-	# Flourish: the played card rises from its slot in the hand, then swoops to its target
-	# and bursts into a ring there.
-	var cv := CardView.new(id, battle.run.card_level(id))
-	cv.set_card(id, battle.run.card_level(id))
+	# Flourish (impact at ~0.38 s, never holds up play): the played card lifts out of the hand
+	# glowing in its category colour, flies to its target trailing light and bursts there.
+	# Cards without a target point burst at their casting defender, or at home plate.
+	var lvl: int = battle.run.card_level(id)
+	var cv := CardView.new(id, lvl)
+	cv.set_card(id, lvl)
 	var sz := Vector2(146, 204)
 	cv.custom_minimum_size = sz
 	cv.size = sz
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cv.selected = true
 	var from := _selected_card_rect.position if _selected_card_rect.size.x > 0.0 else Vector2(root.size.x * 0.5 - sz.x * 0.5, root.size.y - 250)
+	_selected_card_rect = Rect2()
+	var col := DB.category_color(DB.card(id).category)
+	var calm := bool(Settings.get_value("accessibility", "reduce_flashes", false))
+	var world: Variant = battle.last_cast_point
+	var caster: Node3D = battle.effects.caster_info(id).get("caster")
+	if str(DB.card(id).get("target", "none")) == "none" and caster and is_instance_valid(caster):
+		world = caster.global_position + Vector3(0, 1.0, 0)
+	elif not (world is Vector3):
+		world = Field.HOME + Vector3(0, 0.5, 0)
+	var to := from + Vector2(0, -260)
+	var cam := battle.get_viewport().get_camera_3d()
+	if cam and not cam.is_position_behind(world):
+		to = cam.unproject_position(world) - sz * 0.5
+	# Light trail behind the flying card (drawn under it).
+	var trail := Line2D.new()
+	trail.width = 34.0
+	trail.default_color = Color(col.lightened(0.3), 0.9)
+	var wc := Curve.new()
+	wc.add_point(Vector2(0.0, 0.05))
+	wc.add_point(Vector2(1.0, 1.0))
+	trail.width_curve = wc
+	var grad := Gradient.new()
+	grad.set_color(0, Color(col, 0.0))
+	grad.set_color(1, Color(col.lightened(0.45), 0.85))
+	trail.gradient = grad
+	trail.joint_mode = Line2D.LINE_JOINT_ROUND
+	trail.end_cap_mode = Line2D.LINE_CAP_ROUND
+	var tmat := CanvasItemMaterial.new()
+	tmat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	trail.material = tmat
+	root.add_child(trail)
 	cv.position = from
 	cv.pivot_offset = sz * 0.5
 	root.add_child(cv)
-	_selected_card_rect = Rect2()
-	var to := from + Vector2(0, -260)
-	var cam := battle.get_viewport().get_camera_3d()
-	if battle.last_cast_point is Vector3 and cam and not cam.is_position_behind(battle.last_cast_point):
-		to = cam.unproject_position(battle.last_cast_point) - sz * 0.5
-	var col := DB.category_color(DB.card(id).category)
+	# Category-coloured halo behind the card while it lifts and flies.
+	var halo := RingBurst.new()
+	halo.kind = "halo"
+	halo.color = col
+	halo.size = sz
+	halo.show_behind_parent = true
+	halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.add_child(halo)
+	var lifted := from + Vector2(0, -64)
+	# The flight bends up and over (a quadratic curve through a raised midpoint).
+	var mid := lifted.lerp(to, 0.5) + Vector2(0, -minf(120.0, lifted.distance_to(to) * 0.25))
 	var tw := cv.create_tween()
-	tw.tween_property(cv, "position", from + Vector2(0, -70), 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(cv, "scale", Vector2(1.12, 1.12), 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(cv, "position", to, 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(cv, "scale", Vector2(0.22, 0.22), 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(cv, "rotation", deg_to_rad(8.0), 0.3)
+	tw.tween_property(cv, "position", lifted, 0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(cv, "scale", Vector2(1.14, 1.14), 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(halo, "t", 1.0, 0.1)
+	tw.tween_callback(func() -> void: Audio.play("card_whoosh", -10.0, 0.08, 80))
+	var fly := func(k: float) -> void:
+		var e := k * k
+		var q := lifted.lerp(mid, e).lerp(mid.lerp(to, e), e)
+		cv.position = q
+		cv.scale = Vector2.ONE * lerpf(1.14, 0.2, e)
+		cv.rotation = deg_to_rad(10.0) * e
+		trail.add_point(q + sz * 0.5)
+		while trail.get_point_count() > 14:
+			trail.remove_point(0)
+	tw.tween_method(fly, 0.0, 1.0, 0.28)
 	tw.tween_callback(func() -> void:
-		_ring_burst(cv.position + sz * 0.5, col)
-		cv.queue_free())
+		_ring_burst(cv.position + sz * 0.5, col, calm)
+		cv.queue_free()
+		var ft := trail.create_tween()
+		ft.tween_property(trail, "modulate:a", 0.0, 0.16)
+		ft.tween_callback(trail.queue_free))
 
 
-func _ring_burst(at: Vector2, col: Color) -> void:
+## Impact at the end of the cast flourish: a flash, two rings, rays and sparks.
+func _ring_burst(at: Vector2, col: Color, calm := false) -> void:
 	var fx := RingBurst.new()
 	fx.color = col
+	fx.calm = calm
 	fx.position = at
 	fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(fx)
 	var tw := fx.create_tween()
-	tw.tween_property(fx, "t", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(fx, "t", 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.tween_callback(fx.queue_free)
 
 
 class RingBurst:
 	extends Control
 	var color := Color.WHITE
+	var kind := "burst"        # "burst" (impact) or "halo" (glow behind the flying card)
+	var calm := false          # reduce_flashes: no white core
+	var _seed := randf() * TAU
 	var t := 0.0:
 		set(v):
 			t = v
 			queue_redraw()
 
 	func _draw() -> void:
-		var r := 20.0 + 70.0 * t
-		draw_arc(Vector2.ZERO, r, 0, TAU, 40, Color(color.lightened(0.4), 1.0 - t), 6.0 * (1.0 - t) + 1.0, true)
-		draw_circle(Vector2.ZERO, 26.0 * (1.0 - t), Color(1, 1, 1, 0.8 * (1.0 - t)))
+		if kind == "halo":
+			# Card-shaped glow; `t` fades it in during the lift, then it rides with the card.
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(0, 0, 0, 0)
+			sb.set_corner_radius_all(14)
+			sb.set_border_width_all(4)
+			sb.border_color = Color(color.lightened(0.55), 0.95 * t)
+			sb.shadow_color = Color(color.lightened(0.15), 0.75 * t)
+			sb.shadow_size = 22
+			draw_style_box(sb, Rect2(Vector2(-4, -4), size + Vector2(8, 8)))
+			return
+		var k := 1.0 - t
+		# Core flash, then a fast ring and a slower ring.
+		if not calm:
+			draw_circle(Vector2.ZERO, 34.0 * k * k, Color(1, 1, 1, 0.85 * k))
+		draw_circle(Vector2.ZERO, 22.0 + 30.0 * t, Color(color, 0.35 * k * k))
+		draw_arc(Vector2.ZERO, 22.0 + 86.0 * t, 0, TAU, 48, Color(color.lightened(0.45), k), 7.0 * k + 1.0, true)
+		var t2 := clampf(t * 1.4 - 0.25, 0.0, 1.0)
+		if t2 > 0.0:
+			draw_arc(Vector2.ZERO, 14.0 + 52.0 * t2, 0, TAU, 40, Color(color, 0.8 * (1.0 - t2)), 3.0 * (1.0 - t2) + 0.5, true)
+		# Rays and sparks thrown outward.
+		for i in 10:
+			var a := _seed + TAU * i / 10.0
+			var d := Vector2(cos(a), sin(a))
+			var r0 := 18.0 + 70.0 * t
+			var r1 := r0 + (26.0 if i % 2 == 0 else 14.0) * k
+			draw_line(d * r0, d * r1, Color(color.lightened(0.6), k), 3.0 * k + 0.5, true)
+			draw_circle(d.rotated(0.3) * (12.0 + 100.0 * sqrt(t)), 3.2 * k, Color(color.lightened(0.7), k))
 
 
 # ---------------------------------------------------------------- state & overlays

@@ -4,6 +4,8 @@ render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabl
 //   mode 0: Base Shield dome - hex cells with a fresnel rim, assembled bottom-up by `build`,
 //           impact ripples (ripple.xyz = local direction, ripple.w = age 0..1).
 //   mode 1: shout / pulse bubble - fresnel shell fading with `build` as age.
+//   mode 2: Shielded elite bubble (full sphere) - a clear, round shell: bright rim, faint hex
+//           cells only toward the edge, a white glint and a slow sheen; `build` fades it in.
 #include "res://assets/shaders/vfx/fx_common.gdshaderinc"
 
 instance uniform vec4 color : source_color = vec4(0.3, 0.85, 1.0, 1.0);
@@ -26,7 +28,25 @@ float hexdist(vec2 p) {
 
 void fragment() {
 	float fres = pow(max(1.0 - abs(dot(NORMAL, VIEW)), 0.0), 2.4);
-	if (mode > 0.5) {
+	if (mode > 1.5) {
+		float facing = abs(dot(NORMAL, VIEW));
+		float rim = pow(1.0 - facing, 3.0);
+		float az = atan(v_dir.z, v_dir.x);
+		float el = asin(clamp(v_dir.y, -1.0, 1.0));
+		vec2 p = vec2(az / 6.2831853 * 14.0 + TIME * 0.15, el / 3.1415927 * 7.0);
+		vec2 h = vec2(1.0, 1.7320508);
+		vec2 a1 = mod(p, h) - h * 0.5;
+		vec2 b1 = mod(p - h * 0.5, h) - h * 0.5;
+		vec2 g = dot(a1, a1) < dot(b1, b1) ? a1 : b1;
+		float edge = smoothstep(0.38, 0.47, hexdist(g)) * smoothstep(0.25, 0.75, 1.0 - facing);
+		// Highlights fixed in view space so the shell reads as a glossy ball from any angle.
+		float glint = pow(max(dot(NORMAL, normalize(vec3(-0.45, 0.55, 0.7))), 0.0), 48.0);
+		float glint2 = pow(max(dot(NORMAL, normalize(vec3(0.5, -0.4, 0.77))), 0.0), 90.0) * 0.5;
+		float sheen = pow(0.5 + 0.5 * sin(v_dir.y * 5.0 - TIME * 2.2), 10.0) * (1.0 - facing) * 0.6;
+		float appear = smoothstep(0.0, 1.0, build);
+		vec3 c = color.rgb * (rim * 2.4 + edge * 0.7 + sheen + 0.04) + vec3(1.0, 0.97, 0.9) * (glint * 0.85 + glint2);
+		ALBEDO = c * appear * strength;
+	} else if (mode > 0.5) {
 		float k = build;
 		float life = pow(max(1.0 - k, 0.0), 1.6);
 		float bands = 0.6 + 0.4 * sin(v_dir.y * 18.0 - TIME * 10.0);

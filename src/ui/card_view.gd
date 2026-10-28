@@ -316,7 +316,10 @@ func _draw() -> void:
 		_rr_fill(cb, 6 * s, UITheme.SCARLET)
 		draw_string(small, cb.position + Vector2(6, 18) * s, count_badge, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s), Color.WHITE)
 	if _shake > 0.0:
+		# Refused: a red wash, a hot red rim and the cost gem ringed in red (the usual reason).
 		_rr_fill(rect, 12 * s, Color(1.0, 0.15, 0.1, 0.4 * _shake))
+		_rr_outline(rect.grow(1.5 * s), 13 * s, Color(1.0, 0.3, 0.22, 0.95 * _shake), 3.0 * s)
+		draw_arc(gem_c, 16.5 * s, 0, TAU, 28, Color(1.0, 0.35, 0.25, _shake), 2.6 * s, true)
 
 
 ## Card back: navy and gold with a diamond lattice and the game logo.

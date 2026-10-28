@@ -11,6 +11,9 @@ extends Node
 ##   stealer     Base Stealers take off while nobody aims at them, a Shielded elite's bubble
 ##               pops, and a slow catches a stealer stealing (--fx-hold, --fx-slow).
 ##   tag         Maya dash-tags a runner next to her post (catch + glove pop).
+##   cast:<card> after --fx-cast=<s> (default 1.0) the card in hand slot 1 is "played" with the
+##               HUD visible: the hand's cast flourish flies to the card's target (runners in
+##               front of the infield; home plate or the caster for cards without a target).
 ## Shots are seconds after the scenario starts; frames are saved as <dir>/<name>_<centiseconds>.png
 ## and the game quits after the last one. Run with --fixed-fps 30 so frames land on game time.
 
@@ -140,6 +143,25 @@ func _start() -> void:
 					break)
 		var p := route.position_at(d0 - 2.0)
 		_view(p.lerp(Field.MOUND, 0.25), 30.0, -32.0, 20.0)
+	elif scenario.begins_with("cast:"):
+		var id := scenario.split(":")[1]
+		var d0 := route.length * 0.55
+		for i in 6:
+			battle.spawn_enemy("runner", route, d0 - i * 0.6, {"lateral": randf_range(-1.0, 1.0), "speed_mult": 0.05, "hp_mult": 60.0})
+		battle.cards.hand[0] = id
+		battle.cards.hand_changed.emit()
+		get_tree().create_timer(_arg_f("--fx-cast", 1.0), false).timeout.connect(func() -> void:
+			var hud = battle.hud
+			var t := str(DB.card(id).get("target", "none"))
+			var point: Vector3 = Field.HOME if t == "none" else route.position_at(d0 - 1.5)
+			var lead := battle.lead_runners(1)
+			var df: Node3D = battle.defenders[0]
+			if "_card_views" in hud and hud._card_views.size() > 0 and is_instance_valid(hud._card_views[0]):
+				hud._selected_card_rect = (hud._card_views[0] as Control).get_global_rect()
+			battle.last_cast_point = point
+			battle.effects.execute(id, 1, {"point": point, "enemy": lead[0] if not lead.is_empty() else null, "defender": df, "valid": true})
+			if hud.has_method("on_card_played"):
+				hud.on_card_played(id))
 	elif scenario == "tag":
 		var maya: Defender = null
 		for df in battle.defenders:
