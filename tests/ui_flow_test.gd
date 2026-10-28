@@ -107,6 +107,10 @@ func _run() -> void:
 		await _test_daily()
 		_finish()
 		return
+	if "--ui-test-section=missions" in OS.get_cmdline_user_args():
+		await _test_missions()
+		_finish()
+		return
 	if "--ui-test-section=packs" in OS.get_cmdline_user_args():
 		await _test_packs()
 		await _test_multi_packs()
@@ -329,6 +333,7 @@ func _run() -> void:
 	await _test_multi_packs()
 	await _test_deck_menus()
 	await _test_daily()
+	await _test_missions()
 	await _test_tutorial()
 	_finish()
 
@@ -620,6 +625,90 @@ func _test_daily() -> void:
 	await _wait_scene("main_menu")
 	if fake_run:
 		Profile.data.current_run = null
+
+
+## 15. Missions (Update 6): the main menu widget opens Progression → Missions, a finished
+## mission is claimed with its reward, the free reroll works once, the Results strip claims
+## on the spot, and the Overview shows the account level road.
+func _test_missions() -> void:
+	Missions.refresh()
+	var s := Missions.state()
+	var inst: Dictionary = s.daily[0]
+	inst.progress = int(inst.goal)
+	inst.claimed = false
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(1.0)
+	var widget: Control = get_tree().current_scene.find_child("MissionsWidget", true, false)
+	_check(widget != null and widget.is_visible_in_tree(), "main menu shows the Missions widget")
+	var open: Button = get_tree().current_scene.find_child("MissionsButton", true, false)
+	_check(open != null, "the Missions widget has an OPEN button")
+	if open == null:
+		return
+	await _click(_button_center(open))
+	_check(await _wait_scene("progression"), "the Missions widget opens Progression")
+	await _wait(1.0)
+	var tabs: TabContainer = null
+	for c in get_tree().current_scene.find_children("*", "TabContainer", true, false):
+		tabs = c
+	_check(tabs != null and tabs.current_tab == 1 and tabs.get_current_tab_control().name == "Missions", "Progression opens on the Missions tab")
+	var row: Control = get_tree().current_scene.find_child("Mission_daily_0", true, false)
+	var claim: Button = row.find_child("ClaimButton", true, false) if row else null
+	_check(claim != null and claim.is_visible_in_tree(), "a finished mission shows CLAIM")
+	if claim:
+		var coins := int(Profile.data.coins)
+		var stars := int(Profile.data.stars)
+		var packs := Profile.pack_count()
+		var rw := Missions.reward(inst)
+		await _click(_button_center(claim))
+		for i in 30:   # the panel rebuilds after the claim moment
+			await _wait(0.1)
+			var r0: Control = get_tree().current_scene.find_child("Mission_daily_0", true, false)
+			if r0 and r0.find_child("ClaimButton", true, false) == null:
+				break
+		await _wait(0.6)
+		_check(bool(Missions.state().daily[0].claimed), "clicking CLAIM claims the mission")
+		_check(int(Profile.data.coins) == coins + int(rw.get("coins", 0)) and int(Profile.data.stars) == stars + int(rw.get("stars", 0))
+			and Profile.pack_count() == packs + (1 if str(rw.get("pack", "")) != "" else 0), "the reward is paid (%s)" % Missions.reward_text(rw))
+		var row2: Control = get_tree().current_scene.find_child("Mission_daily_0", true, false)
+		_check(row2 != null and row2.find_child("ClaimButton", true, false) == null, "a claimed mission cannot be claimed again")
+	var reroll: Button = get_tree().current_scene.find_child("RerollButton", true, false)
+	_check(reroll != null, "unfinished daily missions offer a free REROLL")
+	if reroll:
+		var ids := str(Missions.state().daily.map(func(m: Dictionary) -> String: return m.id))
+		_mouse_move(_button_center(reroll))   # hover first: the button grows on hover
+		await _wait(0.4)
+		await _click(_button_center(reroll))
+		await _wait(0.5)
+		_check(Missions.rerolls_left() == 0 and str(Missions.state().daily.map(func(m: Dictionary) -> String: return m.id)) != ids, "REROLL swaps a mission once")
+		_check(get_tree().current_scene.find_child("RerollButton", true, false) == null, "no more rerolls today")
+	# Results strip: a mission finished in the game can be claimed right there.
+	var inst2: Dictionary = Missions.state().daily[1]
+	if bool(inst2.claimed):
+		inst2 = Missions.state().daily[2]
+	inst2.progress = int(inst2.goal)
+	var strip := MissionsPanel.results_strip({"missions": [{"kind": "daily", "id": inst2.id, "text": Missions.text(inst2), "reward": Missions.reward(inst2)}], "first_win": true, "first_win_coins": 150})
+	var holder := PanelContainer.new()
+	holder.position = Vector2(200, 200)
+	holder.custom_minimum_size = Vector2(900, 0)
+	get_tree().current_scene.add_child(holder)
+	holder.add_child(strip)
+	await _wait(0.4)
+	var rc: Button = strip.find_child("ClaimButton", true, false)
+	_check(strip.find_child("MissionComplete_" + str(inst2.id), true, false) != null and rc != null, "Results show MISSION COMPLETE! with CLAIM")
+	if rc:
+		await _click(_button_center(rc))
+		await _wait(0.5)
+		_check(bool(inst2.claimed), "claiming from the Results strip works")
+	holder.queue_free()
+	# Overview: the account level road.
+	tabs.current_tab = 0
+	await _wait(0.8)
+	var road: Control = get_tree().current_scene.find_child("LevelRoad", true, false)
+	_check(road != null and road.is_visible_in_tree() and road.find_child("Level%d" % Profile.MAX_ACCOUNT_LEVEL, true, false) != null,
+		"Overview shows the account level road up to level %d" % Profile.MAX_ACCOUNT_LEVEL)
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
 
 
 func _ctl_center(c: Control) -> Vector2:
