@@ -45,6 +45,10 @@ def render_portrait(cid, info, path, res=512, samples=96):
         target = eye + Vector((0, 0, (-0.04 if info["id"] in ("grand_slammer", "trickster")
                                       else -0.10) * h))
         yaw = 24.0
+        if info["id"] == "swarmer":
+            # show the tiny body under the huge helmet (tells it from the Runner)
+            frame_h = 2.6 * h
+            target = eye + Vector((0, 0, -0.62 * h))
     elif enemy:
         frame_h = 1.95 * h
         target = eye + Vector((0, 0, -0.22 * h))

@@ -56,3 +56,26 @@ Priority = Severity (1–4) × Reach (1–4) ÷ Effort (S=1, M=2, L=3).
   sprinter, heavy stomp, bouncy, scurry, sneaky low run with trailing arms, upright captain, low stealer,
   floating phantom), stronger hit flinch, a held coil in the bat swing. Stride lengths follow the leg
   length as for the defenders.
+* **Swarmer vs Runner at portrait size:** the first render of the two portraits looked the same in the
+  threat panel (48 px). The Swarmer now wears an amber helmet with a dark crown stripe and its portrait
+  shows its tiny body under the huge helmet.
+* **Base Stealer:** own model `base_stealer.glb`; `data/enemies.json` no longer points it at the Runner model
+  with recolours (`model` / `colors` / `scale` removed); `tools/art/portrait_variants.py` no longer
+  overwrites its portrait.
+
+## Verification
+
+* `verify_characters.py`: foot slide 0 and loop seams 0 for all 12; clip lengths unchanged (hit 0.35,
+  run 0.70, defeat 1.2, swing 1.0, slam 1.4...), event times unchanged (`anim.EVENTS`). Lowest mesh point
+  within 1–3.5 cm of the ground except the capes of the Captain, Phantom Captain and Grand Slammer, which
+  pass under the ground while lying on their back in `defeat` (as before: hidden by the body and the
+  shrink-away).
+* Triangles: runners 17–24 k (was ≈9 k), bosses 22–27 k (was 17–21 k). One draw call per character as before.
+* Godot: import clean, script check 0 failed, system suite 1261 checks / 0 failed, headless autopilot games
+  (inning 8, and the inning-9 boss wave) without script errors; battle captures from the default camera.
+
+## Known issues
+
+* Swarmers are ~18 k triangles each; a 60-swarmer wave costs more vertices than before (the head, pants
+  and torso meshes are shared with the defenders' density). A lighter LOD would be a follow-up.
+* The Phantom Captain still has no bat; its swing / slam clips use empty hands as before.

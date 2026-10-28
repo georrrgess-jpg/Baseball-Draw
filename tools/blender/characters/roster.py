@@ -174,7 +174,7 @@ ENEMIES = {
         number=0, accent="#FF7A1A", height=1.22, gait="scurry", small=True,
         skin="#D8A27A", hair="#3A2A1E", iris="#4A3020",
         headwear="helmet", top_extra=0.02,
-        colors=dict(Cap="#FF8A2A"),
+        stripe_mat="Belt", colors=dict(Cap="#FFB238"),
         body=dict(muscle=1.0, head=0.40, hand_scale=1.5, foot_scale=1.3, thigh=0.30, shin=0.30,
                   upper_arm=0.23, forearm=0.21, chest_len=0.21, spine_len=0.11,
                   chest_w=0.19, chest_d=0.13, waist_w=0.15, waist_d=0.115, pelvis_w=0.16,
