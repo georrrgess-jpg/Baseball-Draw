@@ -77,6 +77,9 @@ adds the "?" button and first-visit hints.
 
 * `tools/check_scripts.sh`: 78 scripts, 0 failed.
 * Test suite: 1,261 checks, 0 failed.
+* Full UI flow test (1600×900): 158 checks; the one failure was in the new test's own layer count (it
+  counted the screen's CanvasLayer as well as the hint's), fixed; the nav section re-run: 31 checks, 0 failed.
+  The daily, deck and packs sections passed inside the full run.
 * UI flow test, new `--ui-test-section=nav` (also part of the full run): the Card Packs hint shows on the
   first visit, GOT IT marks it seen and the next hint follows, exactly one hint is on screen, a seen hint does
   not come back, "?" replays it, Esc closes a hint without leaving the screen, every menu screen has "?" and
