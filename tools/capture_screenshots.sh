@@ -16,7 +16,7 @@ shot() { # name seconds args...
 		echo "FAILED $name"
 	fi
 }
-shot main_menu 9 --scene=main_menu --profile=shots_menu --fresh-profile --no-help
+shot main_menu 9 --scene=main_menu --profile=shots --no-help --skip-welcome
 shot battle 18 --test-battle=quick --auto --profile=shots
 shot action 20 --test-battle=standard --auto --profile=shots --start-inning=4 --cam-view=0,-6,18,-36,26
 shot boss 22 --test-battle=standard --auto --profile=shots --start-inning=9 --start-wave=2 --cam-view=0,-10,15,-38,32
@@ -30,6 +30,7 @@ shot deck_builder 6 --scene=deck_builder --profile=shots_upg --fresh-profile --g
 shot card_upgrades 6 --scene=card_upgrades --profile=shots_upg --grant-demo-cards
 shot roster 7 --scene=roster --profile=shots
 shot progression 5 --scene=progression --profile=shots
+shot missions 5 --scene=progression --profile=shots --tab=1
 shot arena_neon_diamond 16 --test-battle=quick --auto --profile=shots --arena=neon_diamond --cam-view=0,-4,20,-30,62
 shot arena_frostpark 16 --test-battle=quick --auto --profile=shots --arena=frostpark --cam-view=0,-4,20,-30,62
 shot arena_champions_citadel 16 --test-battle=quick --auto --profile=shots --arena=champions_citadel --cam-view=0,-4,20,-30,62
