@@ -448,7 +448,8 @@ func bullpen_call(drawn: Array = [], energy := 0.0) -> void:
 ## that pops out at `from`, hangs for a beat, then flies down toward the hand at the bottom
 ## of the screen and fades. Used for card draws (Bullpen Call, Seventh-Inning Stretch).
 func flying_card(card_id: String, from: Vector3, side: float, delay := 0.0, size := 1.7) -> void:
-	var col := card_color(card_id) if card_id != "" else BULLPEN
+	# No id (hand already full): a gold-framed navy card back.
+	var col := card_color(card_id) if card_id != "" else Color(0.96, 0.75, 0.3)
 	var root := Node3D.new()
 	vfx.add_child(root)
 	root.global_position = from
@@ -456,7 +457,7 @@ func flying_card(card_id: String, from: Vector3, side: float, delay := 0.0, size
 	# Frame, text panel, art (back to front).
 	var specs := [[Vector2(1.5, 2.1), Vector2.ZERO, col.lightened(0.25), null, 5],
 		[Vector2(1.3, 0.78), Vector2(0, -0.55), Color(0.06, 0.09, 0.16), null, 6],
-		[Vector2(1.3, 0.98), Vector2(0, 0.38), Color.WHITE, DB.card_texture(card_id) if card_id != "" else null, 6]]
+		[Vector2(1.3, 0.98), Vector2(0, 0.38), Color.WHITE if card_id != "" else Color(0.14, 0.22, 0.42), DB.card_texture(card_id) if card_id != "" else null, 6]]
 	for sp in specs:
 		var sz: Vector2 = sp[0]
 		var tex: Texture2D = sp[3]
