@@ -45,6 +45,8 @@ func _ready() -> void:
 	battle.boss_spawned.connect(_on_boss_spawned)
 	play_cards = not ("--no-cards" in OS.get_cmdline_user_args())
 	quit_on_finish = bool(Session.run_config.get("auto_quit", true))   # the smoke test keeps going
+	if "--auto-stay" in OS.get_cmdline_user_args():   # screenshots of the Results screen
+		quit_on_finish = false
 	perf = "--perf" in OS.get_cmdline_user_args()
 	battle.profile_sections = perf   # per-section timing of the battle loop (battle.prof)
 	for a in OS.get_cmdline_user_args():

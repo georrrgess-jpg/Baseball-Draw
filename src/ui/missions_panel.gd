@@ -127,10 +127,15 @@ func _row(inst: Dictionary, kind: String, index: int, show_reroll := true) -> Pa
 	if bool(inst.get("max", false)) and not Missions.is_done(inst):
 		prog = "best %d / %d" % [int(inst.progress), int(inst.goal)]
 	br.add_child(UITheme.label(prog, UITheme.FS_SMALL, UITheme.GOLD if Missions.is_done(inst) else UITheme.MUTED, UITheme.font_body_bold()))
-	var rw := reward_chips(Missions.reward(inst), 22)
+	var rbox := VBoxContainer.new()
+	rbox.add_theme_constant_override("separation", 0)
+	rbox.custom_minimum_size = Vector2(200, 0)
+	rbox.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rbox.add_child(UITheme.label("REWARD", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
+	var rw := reward_chips(Missions.reward(inst), 26)
 	rw.name = "Reward"
-	rw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hb.add_child(rw)
+	rbox.add_child(rw)
+	hb.add_child(rbox)
 	var act: Control
 	if claimed:
 		act = UITheme.badge("CLAIMED", Color(0.13, 0.45, 0.28), UITheme.FS_SMALL)

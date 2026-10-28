@@ -98,8 +98,8 @@ func _node(l: int) -> Control:
 	box.add_theme_stylebox_override("panel", UITheme.panel_style(bg, gold, 2 if (mile or nxt) else 1, 10, 6))
 	box.custom_minimum_size = Vector2(68 if mile else 56, 60 if mile else 52)
 	box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	if l > 1:
-		var ic := UITheme.icon_rect(LevelRoad.icon_for(l), 36 if mile else 28,
+	if true:
+		var ic := UITheme.icon_rect(LevelRoad.icon_for(l) if l > 1 else "play", 36 if mile else 28,
 			Color(1, 1, 1, 0.35) if reached else (UITheme.GOLD if mile else UITheme.OFFWHITE))
 		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
