@@ -555,7 +555,7 @@ func _build_next_steps() -> Control:
 	row.name = "WhatsNext"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
-	var cap := UITheme.label("WHAT'S NEXT", UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_body_bold())
+	var cap := UITheme.label("WHAT'S NEXT", UITheme.FS_LEAD, UITheme.GOLD, UITheme.font_header())
 	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(cap)
 	for sg in list:

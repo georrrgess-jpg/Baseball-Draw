@@ -90,7 +90,7 @@ static func _global_class(name: String) -> Script:
 
 ## A compact one-click suggestion button (icon, title, small detail line).
 static func button(s: Dictionary, width := 300.0) -> Button:
-	var b := UITheme.button(str(s.text), "secondary", UITheme.FS_BODY, str(s.icon), s.accent)
+	var b := UITheme.button(str(s.text), "secondary", UITheme.FS_LEAD, str(s.icon), s.accent)
 	b.name = "Next_" + str(s.id)
 	b.custom_minimum_size = Vector2(width, UITheme.BTN_H)
 	b.tooltip_text = str(s.get("detail", ""))
