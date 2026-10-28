@@ -18,6 +18,7 @@ var _caption: VBoxContainer
 var _right: VBoxContainer
 var _daily_countdown: Label
 var _countdown_t := 0.0
+var _welcome_later: Button   # "Look around first" on the welcome panel (Esc presses it)
 ## Idle showcase: every few seconds one defender shows off and the camera leans toward them.
 var _show_t := 5.0
 var _focus := Vector3.ZERO
@@ -672,11 +673,26 @@ func _next_unlock_text() -> String:
 	return ""
 
 
+## Esc closes the welcome panel (the main menu has nothing to go back to).
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("pause") and _welcome_later and is_instance_valid(_welcome_later):
+		get_viewport().set_input_as_handled()
+		Audio.ui("ui_back")
+		_welcome_later.pressed.emit()
+		_welcome_later = null
+
+
 func _show_welcome() -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.08, 0.14, 0.96), Color(UITheme.SCARLET, 0.7), 2, 12, 22))
+	# Grows up and left from the bottom-right corner, so its buttons are never cut off.
 	p.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	p.position = Vector2(-600, -330)
+	p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	p.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	p.offset_left = -600
+	p.offset_top = -40
+	p.offset_right = -40
+	p.offset_bottom = -40
 	p.custom_minimum_size = Vector2(560, 0)
 	ui.add_child(p)
 	var vb := VBoxContainer.new()
@@ -698,10 +714,12 @@ func _show_welcome() -> void:
 		Session.start(cfg))
 	hb.add_child(go)
 	var later := UITheme.button("Look around first", "ghost", 22)
+	later.tooltip_text = "Close this (Esc). PLAY starts a game whenever you are ready."
 	later.pressed.connect(func() -> void:
 		Profile.data.flags.tutorial_done = true
 		Profile.save_soon()
 		p.queue_free())
+	_welcome_later = later
 	hb.add_child(later)
 	vb.add_child(hb)
 	UITheme.animate_in(p, 0.6)
