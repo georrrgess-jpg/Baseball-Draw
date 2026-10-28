@@ -144,7 +144,9 @@ static func show_unseen(host: Node, ids: Array, targets := Callable(), delay := 
 		return
 	if delay > 0.0:
 		await host.get_tree().create_timer(delay, true).timeout
-		if not is_instance_valid(host) or not host.is_inside_tree() or host.is_queued_for_deletion() or Router.busy:
+		while is_instance_valid(host) and host.is_inside_tree() and Router.busy:
+			await host.get_tree().process_frame   # a screen change is running: wait for it to end
+		if not is_instance_valid(host) or not host.is_inside_tree() or host.is_queued_for_deletion():
 			return   # the player already left the screen
 		queue = queue.filter(func(i: String) -> bool: return not seen(i))
 		if queue.is_empty():
