@@ -144,8 +144,8 @@ static func show_unseen(host: Node, ids: Array, targets := Callable(), delay := 
 		return
 	if delay > 0.0:
 		await host.get_tree().create_timer(delay, true).timeout
-		if not is_instance_valid(host) or not host.is_inside_tree():
-			return
+		if not is_instance_valid(host) or not host.is_inside_tree() or host.is_queued_for_deletion() or Router.busy:
+			return   # the player already left the screen
 		queue = queue.filter(func(i: String) -> bool: return not seen(i))
 		if queue.is_empty():
 			return
@@ -182,6 +182,9 @@ static func help_button(host: Node, screen_id: String, targets := Callable(), ex
 
 
 static func _open(host: Node, queue: Array, targets: Callable, replaying: bool) -> void:
+	var old := current()
+	if old:   # never two hints at once
+		old.queue_free()
 	var layer := HintLayer.new()
 	layer.queue = queue.duplicate()
 	layer.targets = targets

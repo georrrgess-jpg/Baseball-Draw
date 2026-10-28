@@ -752,6 +752,7 @@ func _test_navigation() -> void:
 	_check(shown == "packs_intro", "first visit to Card Packs shows its hint (%s)" % shown)
 	var card: Node = Hints.current().find_child("HintCard", true, false) if Hints.current() else null
 	_check(card != null and (card as Control).get_global_rect().size.x > 300, "hint card is laid out")
+	await _wait(0.8)   # let the card settle (it places itself next to its target, then pops in)
 	var got := _find_button(Hints.current(), "GOT IT") if Hints.current() else null
 	_check(got != null, "hint has a GOT IT button")
 	if got:
@@ -759,11 +760,12 @@ func _test_navigation() -> void:
 		await _wait(0.4)
 	_check(Hints.seen("packs_intro"), "GOT IT marks the hint seen")
 	_check(Hints.current_id() == "packs_rarity", "the next hint of the screen follows, one at a time (%s)" % Hints.current_id())
-	var stacked := 0
+	var stacked: Array = []
 	for c in get_tree().current_scene.find_children("*", "CanvasLayer", true, false):
-		if c.find_child("HintCard", true, false) != null:
-			stacked += 1
-	_check(stacked == 1, "exactly one hint on screen (%d)" % stacked)
+		if c.find_child("HintCard", true, false) != null and not c.is_queued_for_deletion():
+			stacked.append(str(c.get_path()))
+	_check(stacked.size() == 1, "exactly one hint on screen %s" % [stacked])
+	await _wait(0.8)
 	got = _find_button(Hints.current(), "GOT IT") if Hints.current() else null
 	if got:
 		await _click(_button_center(got))
