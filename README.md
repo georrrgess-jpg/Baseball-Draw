@@ -50,6 +50,10 @@ What Update 5 changed: [before/after](docs/screenshots/update5_before_after.jpg)
   plus discounted specials.
 - **Defender level road**: defenders earn XP from every game (more for outs and for the MVP), and every level
   up to 10 pays out coins, a new trait or a card pack. The results screen shows each XP bar filling.
+- **Missions and level road**: three daily missions and a weekly one, a "Learn the ropes" chain for new
+  players, and a visible account level road with a reward at every level.
+- **Always know what's next**: first-visit tips on every screen (replay them with "?"), an UP NEXT action on
+  the main menu and a WHAT'S NEXT row after every game.
 - **Daily Challenge**: one seeded game per day with a fixed deck, stadium and modifier, a best score and a
   day streak.
 - **Card mastery and collection sets**: cards earn mastery stars from play (cosmetic, with a gold MASTERED
@@ -60,7 +64,7 @@ What Update 5 changed: [before/after](docs/screenshots/update5_before_after.jpg)
   (survival with modifiers and milestones), Practice Field (sandbox) and Promotion Challenges for the
   offline rank ladder (Rookie → Bronze → Silver → Gold → Platinum → Diamond → Champion → Legend).
 - **Long-term progression**: account level, defender XP/levels, card collection and upgrades, card packs,
-  gear shop, uniforms, 28 achievements, stadium unlocks, records and match history.
+  gear shop, uniforms, 41 achievements, stadium unlocks, records and match history.
 - **Four difficulties** (Rookie, Standard, Veteran, Legend) that change runner toughness, speed, wave size,
   enemy ability timing, elite affixes, starting shields and rewards.
 - **Settings**: resolution, window mode, V-Sync, FPS cap, UI scale, quality presets (shadows, AA, SSAO,

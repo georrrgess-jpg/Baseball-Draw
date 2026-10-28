@@ -488,3 +488,83 @@ Plan: `docs/plans/UPDATE_5_PLAN.md`. Scored review findings for each area are in
 * The graphics benchmark could not be checked for real numbers here.
 * Audio was checked by measurement, not by listening.
 * The Windows smoke test runs in CI on the first `[build]` after this update; it has not run before.
+
+## 12. Update 6: "Clubhouse"
+
+Plan: `docs/plans/UPDATE_6_PLAN.md`. Scored reviews: `docs/plans/review/runners.md`, `card_fx.md`, `navigation.md`.
+
+**Runner and boss models** (`tools/blender/characters/enemies.py`, `roster.py`, `anim.py`)
+* **Rebuilt in the defenders' style:** all 9 runner types and the 3 bosses, previously sculpted with the
+  original SDF pipeline.
+* **Look:** faces with expressions, and one opponent kit (the "Wreckers"). The type colour is on the helmet,
+  piping, socks and number, and each type has its own silhouette:
+  * Armored: plates and a face cage;
+  * Sprinter: lean, with shades and spikes;
+  * Jumper: springs on the shins;
+  * Swarmer: tiny, with a big head;
+  * Trickster: mask and stocking cap;
+  * Captain: cape and epaulettes;
+  * Siege Slugger: spiked bat;
+  * Base Stealer: its own model.
+* **Bosses:** Iron Slugger with glowing seams, a translucent Phantom Captain, and a 4.2 m golden
+  Grand Slammer.
+* **Animation:** a run style per type, a stronger hit flinch and a clearer swing wind-up. Same rig, clips and
+  event times; foot slide and loop seams stay 0.
+* **Portraits:** re-rendered.
+* **Triangle budget:** Swarmer 6.7k, other runners 11–15k, bosses 22–27k.
+
+**Card effects** (`src/vfx/`, `battle_hud.gd` flourish)
+* All 32 cards were captured and scored for readability, satisfaction and uniqueness.
+* **Reworked:**
+  * Hot Corner: eruption, burning ring, a torch in the throwing hand, fire flares on its throws;
+  * Bullpen Call and Seventh-Inning Stretch: the drawn cards fly from the mound to the hand;
+  * Knuckleball, Pickoff, Power Catch and Bunt Trap;
+  * Changeup: slow lavender pulses with after-images, no longer Time Out's clock;
+  * Field Vision: a cyan radar look, no longer the same gold ring as Rally Cry;
+  * the Shielded elite: a round, glossy bubble.
+* **Cast flourish:** the card lifts with a category-colour halo, flies on a curve with a trail and bursts at
+  the target in about 0.4 s.
+* **Refused card:** a red rim.
+
+**Progression** (`src/core/missions.gd`, `level_road.gd`, `data/missions.json`, `data/account_levels.json`)
+* **Missions:** 3 daily missions and 1 weekly from a pool, with one free reroll per day. They are claimed in the
+  new Progression → Missions tab, and there is a main-menu widget and a Results strip.
+* **Learn the ropes:** a starter chain for new players.
+* **Account level road:** visible on Progression; Results shows "LEVEL UP — reward".
+* **Achievements:** 13 new ones, 41 in total.
+* **First hour:** a first-win Pro Pack and early levels that pay packs. Six games now give about 30 packs
+  (was about 21).
+* **Economy model:** now includes the Daily Challenge and missions. The whole collection is about 24 h
+  (Update 5 measured about 37 h with the corrected model).
+* **Endless:** starts at effective inning 2.5, and an elite mini-boss closes every inning without a boss.
+* **Difficulty:** per-mode tuning. Autopilot, 8 games per row:
+  * Quick Defense Standard: 75 %;
+  * Standard Siege Standard: 6 of 8;
+  * Standard Siege Veteran: about 30 % (target 40 %).
+
+**Navigation and clarity** (`src/ui/hints.gd`, `next_steps.gd`, `router.gd`, `menu_screen.gd`)
+* **First-visit hint cards:**
+  * one at a time, with an arrow and a highlight on the element they explain;
+  * a "?" button on every screen replays them;
+  * Settings has "Show tips" and "Show all tips again";
+  * never during the tutorial or the first game.
+* **Esc and BACK work everywhere:**
+  * Results and Dugout now respond to Esc, with Save & Quit from the dugout;
+  * Esc in a pack reveal first reveals the cards;
+  * popups close before the screen;
+  * BACK returns to the screen you came from.
+* **Welcome panel:** its PLAY THE FIRST GAME button is no longer cut off at the bottom of the screen.
+* **Main menu:**
+  * an UP NEXT strip with the best next action;
+  * a promotion button and a new-trait badge;
+  * advanced tiles dimmed until the first game is done.
+* **Results:** a WHAT'S NEXT row:
+  * promotion
+  * claim missions
+  * open packs
+  * upgrade a card
+  * choose a trait
+  * claim a set reward
+  * the Daily
+  * try new cards
+* **Disabled buttons:** they say why, and Team links straight to the Pro Shop.
