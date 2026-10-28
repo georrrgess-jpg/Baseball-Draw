@@ -1,17 +1,21 @@
 extends MenuScreen
 ## Long-term progression: rank emblem with a progress ring and the next reward, account
-## level, a stats dashboard and the rank ladder; achievements with progress; stadium
-## unlocks; the Pro Shop (permanent gear) and match history.
+## level with its level road, a stats dashboard and the rank ladder; daily/weekly missions;
+## achievements with progress; stadium unlocks; the Pro Shop (permanent gear) and match history.
+
+const TAB_MISSIONS := 1
+const TAB_SHOP := 4
 
 var _tabs: TabContainer
 
 
 func _ready() -> void:
-	setup_screen("PROGRESSION", "Rank, achievements, stadiums, gear and match history")
+	setup_screen("PROGRESSION", "Rank, missions, achievements, stadiums, gear and match history")
 	_tabs = TabContainer.new()
 	_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(_tabs)
 	_tabs.add_child(_overview_tab())
+	_tabs.add_child(_missions_tab())
 	_tabs.add_child(_achievements_tab())
 	_tabs.add_child(_stadiums_tab())
 	_tabs.add_child(_shop_tab())
@@ -21,10 +25,16 @@ func _ready() -> void:
 		var page := _tabs.get_child(i)
 		if page is Control:
 			UITheme.animate_in(page, 0.0, 0.99))
-	var icons := ["progression", "trophy", "map", "upgrade", "inning"]
+	var icons := ["progression", "target", "trophy", "map", "upgrade", "inning"]
 	for i in icons.size():
 		_tabs.set_tab_icon(i, DB.icon(icons[i]))
 		_tabs.set_tab_icon_max_width(i, 26)
+	var claim := Missions.claimable_count()
+	if claim > 0:
+		_tabs.set_tab_title(TAB_MISSIONS, "Missions (%d)" % claim)
+	if Session.menu_tab == "missions":   # main menu Missions widget
+		Session.menu_tab = ""
+		_tabs.current_tab = TAB_MISSIONS
 	for a in OS.get_cmdline_user_args():   # screenshot helper
 		if a.begins_with("--tab="):
 			_tabs.current_tab = clampi(int(a.split("=")[1]), 0, _tabs.get_tab_count() - 1)
@@ -125,10 +135,7 @@ func _overview_tab() -> Control:
 	var xl := UITheme.label("%s / %s XP to level %d" % [UITheme.format_int(int(d.xp)), UITheme.format_int(Profile.xp_to_next(int(d.level))), int(d.level) + 1], UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
 	xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lv.add_child(xl)
-	var lr := "Next level: +100 coins and a %s pack" % ("Pro" if (int(d.level) + 1) % 5 == 0 else "Rookie")
-	var du := _next_defender_unlock()
-	if du != "":
-		lr += "\n" + du
+	var lr := "Next level: " + LevelRoad.reward_text(int(d.level) + 1) if int(d.level) < Profile.MAX_ACCOUNT_LEVEL else "Max level reached"
 	var lrl := UITheme.label(lr, UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
 	lrl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lrl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -164,6 +171,12 @@ func _overview_tab() -> Control:
 		var t := UITheme.stat_tile(row[0], UITheme.format_int(row[1]), row[2], row[3], 0)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(t)
+
+	# Account level road (Update 6): every level's reward, where you are, what's next.
+	var road_p := UITheme.card_panel(Color(UITheme.GREEN, 0.35), 16)
+	road_p.name = "LevelRoadPanel"
+	road_p.add_child(LevelRoadView.new())
+	vb.add_child(road_p)
 
 	# Rank ladder strip.
 	var lp := UITheme.card_panel(UITheme.BORDER, 16)
@@ -248,6 +261,19 @@ func _next_defender_unlock() -> String:
 			if u.get("type", "") == "level":
 				return "Level %d unlocks %s" % [int(u.value), DB.defender(id).name]
 	return ""
+
+
+# ---------------------------------------------------------------- missions
+
+func _missions_tab() -> Control:
+	var r := _scroll("Missions")
+	var vb: VBoxContainer = r[1]
+	var mp := MissionsPanel.new()
+	mp.mission_claimed.connect(func(_rw: Dictionary) -> void:
+		var n := Missions.claimable_count()
+		_tabs.set_tab_title(TAB_MISSIONS, "Missions (%d)" % n if n > 0 else "Missions"))
+	vb.add_child(mp)
+	return r[0]
 
 
 # ---------------------------------------------------------------- achievements
@@ -449,7 +475,7 @@ func _shop_tab() -> Control:
 			if Profile.buy_gear(gid):
 				Audio.play("purchase")
 				Router.toast("%s purchased! Equip it in the Team screen." % g.name, "info")
-				_rebuild_tab(3))
+				_rebuild_tab(TAB_SHOP))
 		hb.add_child(b)
 		grid.add_child(p)
 	return r[0]
@@ -528,7 +554,7 @@ func _rebuild_tab(index: int) -> void:
 	var old := _tabs.get_child(index)
 	var fresh: Control
 	match index:
-		3: fresh = _shop_tab()
+		TAB_SHOP: fresh = _shop_tab()
 		_: return
 	_tabs.remove_child(old)
 	old.queue_free()

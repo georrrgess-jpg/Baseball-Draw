@@ -1,0 +1,48 @@
+{
+  "_comment": "Missions (Update 6). Three daily missions (one per tier) and one weekly mission are drawn from these pools, deterministically per day/week and profile (src/core/missions.gd). 'event' is the progress key: a Profile stat (bumped live during games: total_outs, cards_played, double_plays, boss_*, packs_opened, cards_upgraded ...) or an end-of-game event sent by Rewards.apply (win, win_diff:<difficulty>, cards_<category>, outs_by:<defender>, max_combo, daily_played, caught_stealing, clean_innings, games_played, endless_inning). 'max' events count the best single game instead of adding up. '{n}' is the goal, '{who}' the defender, '{diff}' the difficulty. Rewards are sized against the Update 5 economy (about 3,200 coins and 10 packs per hour of play, tools/balance/economy.py): a full day of missions is worth about 350 coins and a Rookie Pack (about 17 % of an hour's income), the weekly mission a Pro Pack and 20 stars.",
+  "daily": [
+    {"id": "play_offense", "tier": 1, "event": "cards_offense", "goal": [5, 8], "text": "Play {n} Offense cards"},
+    {"id": "play_control", "tier": 1, "event": "cards_control", "goal": [4, 6], "text": "Play {n} Control cards"},
+    {"id": "play_defense", "tier": 1, "event": "cards_defense", "goal": [4, 6], "text": "Play {n} Defense cards"},
+    {"id": "play_utility", "tier": 1, "event": "cards_utility", "goal": [4, 6], "text": "Play {n} Utility cards"},
+    {"id": "outs", "tier": 1, "event": "total_outs", "goal": [120, 180], "step": 10, "text": "Record {n} outs"},
+    {"id": "games", "tier": 1, "event": "games_played", "goal": [2, 3], "text": "Finish {n} games"},
+    {"id": "open_packs", "tier": 1, "event": "packs_opened", "goal": [3, 5], "text": "Open {n} card packs"},
+
+    {"id": "outs_by", "tier": 2, "event": "outs_by:{who}", "goal": [25, 40], "step": 5, "text": "Make {n} outs with {who}"},
+    {"id": "cards_any", "tier": 2, "event": "cards_played", "goal": [20, 30], "step": 5, "text": "Play {n} ability cards"},
+    {"id": "double_plays", "tier": 2, "event": "double_plays", "goal": [6, 10], "text": "Turn {n} Double Plays"},
+    {"id": "combo", "tier": 2, "event": "max_combo", "max": true, "goal": [3, 4], "text": "Chain a combo of {n} outs"},
+    {"id": "clean", "tier": 2, "event": "clean_innings", "goal": [2, 4], "text": "Finish {n} innings without allowing a run"},
+    {"id": "upgrade", "tier": 2, "event": "cards_upgraded", "goal": [1, 1], "min_level": 2, "text": "Upgrade a card"},
+    {"id": "daily", "tier": 2, "event": "daily_played", "goal": [1, 1], "text": "Finish today's Daily Challenge"},
+
+    {"id": "win", "tier": 3, "event": "win", "goal": [2, 2], "text": "Win {n} games"},
+    {"id": "win_diff", "tier": 3, "event": "win_diff:{diff}", "goal": [1, 1], "text": "Win a game on {diff} or harder"},
+    {"id": "boss", "tier": 3, "event": "boss_*", "goal": [1, 2], "text": "Defeat {n} bosses"},
+    {"id": "steal", "tier": 3, "event": "caught_stealing", "goal": [2, 3], "min_level": 3, "text": "Catch {n} Base Stealers mid-steal (slow, stun or freeze them)"},
+    {"id": "standard_innings", "tier": 3, "event": "innings_standard", "goal": [6, 6], "text": "Clear {n} innings of Standard Siege"}
+  ],
+  "weekly": [
+    {"id": "w_wins", "event": "win", "goal": [10, 12], "text": "Win {n} games this week"},
+    {"id": "w_outs", "event": "total_outs", "goal": [1500, 2000], "step": 100, "text": "Record {n} outs this week"},
+    {"id": "w_cards", "event": "cards_played", "goal": [150, 200], "step": 10, "text": "Play {n} ability cards this week"},
+    {"id": "w_daily", "event": "daily_played", "goal": [4, 5], "text": "Finish {n} Daily Challenges this week"},
+    {"id": "w_bosses", "event": "boss_*", "goal": [6, 8], "text": "Defeat {n} bosses this week"}
+  ],
+  "rewards": {
+    "1": {"coins": 100},
+    "2": {"coins": 150},
+    "3": {"coins": 100, "pack": "rookie"},
+    "weekly": {"pack": "pro", "stars": 20}
+  },
+  "rerolls_per_day": 1,
+  "difficulty_by_level": [[1, "rookie"], [4, "standard"], [15, "veteran"], [30, "legend"]],
+  "starter": [
+    {"id": "s_cards", "event": "cards_played", "goal": 3, "text": "Play 3 ability cards in a game", "hint": "Click a card in your hand, then click a target on the field.", "reward": {"coins": 150}},
+    {"id": "s_win", "event": "win", "goal": 1, "text": "Win a game", "hint": "Quick Defense on Rookie is the gentlest start.", "reward": {"pack": "rookie", "coins": 100}},
+    {"id": "s_pack", "event": "packs_opened", "goal": 1, "text": "Open a card pack", "hint": "Main menu → Card Packs.", "reward": {"pack": "rookie"}},
+    {"id": "s_upgrade", "event": "cards_upgraded", "goal": 1, "text": "Upgrade a card", "hint": "Cards & Deck → Upgrade Cards. Duplicates from packs pay for upgrades.", "reward": {"pack": "rookie", "coins": 150}},
+    {"id": "s_daily", "event": "daily_played", "goal": 1, "text": "Try the Daily Challenge", "hint": "Main menu → PLAY DAILY. A new challenge every day.", "reward": {"pack": "pro"}}
+  ]
+}

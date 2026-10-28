@@ -39,6 +39,8 @@ func _run() -> void:
 	test_economy()
 	test_tools()
 	await test_daily_mastery_sets()
+	test_missions()
+	test_level_road_and_achievements()
 	await test_menus()
 	test_update5_content()
 	await test_battle_systems()
@@ -361,8 +363,9 @@ func test_packs() -> void:
 	test_pack_bundles()
 	# Level-ups and new defenders give packs.
 	var n := Profile.pack_count()
+	var next_lv := int(Profile.data.level) + 1
 	Profile.add_xp(Profile.xp_to_next(int(Profile.data.level)))
-	ok(Profile.pack_count() == n + 1, "levelling up awards a pack")
+	ok(Profile.pack_count() >= n + 1 and Profile.pack_count() == n + LevelRoad.reward(next_lv).packs.size(), "levelling up awards the level road packs")
 	var sig_def := ""
 	for id in DB.defender_order:
 		if not Profile.is_defender_unlocked(id) and str(DB.defender(id).get("signature", "")) != "":
@@ -652,6 +655,190 @@ func test_daily_mastery_sets() -> void:
 	DailyChallenge.date_override = ""
 	Profile.reset_profile()
 	await get_tree().process_frame
+
+
+# ---------------------------------------------------------------- missions (Update 6)
+
+func _mission(id: String, event: String, goal: int, tier := 1, is_max := false) -> Dictionary:
+	return {"id": id, "kind": "daily", "event": event, "goal": goal, "progress": 0, "claimed": false, "max": is_max, "tier": tier}
+
+
+func test_missions() -> void:
+	section("missions")
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-10-28"   # a Wednesday
+	Missions.refresh()
+	var s := Missions.state()
+	ok(s.daily.size() == 3, "three daily missions (%d)" % s.daily.size())
+	ok(s.daily.map(func(m: Dictionary) -> int: return int(m.tier)) == [1, 2, 3], "one daily mission per tier")
+	ok(s.weekly.size() == 1, "one weekly mission")
+	ok(Missions.starter_active() and int(s.starter.get("step", -1)) == 0, "a new profile starts the Learn the ropes chain")
+	for m in Missions.active():
+		ok(Missions.text(m) != "" and not "{" in Missions.text(m), "mission text resolves: %s" % Missions.text(m))
+		ok(not Missions.reward(m).is_empty() and Missions.reward_text(Missions.reward(m)) != "", "mission %s has a reward" % m.id)
+	# Deterministic per day.
+	var g1 := Missions.generate_daily("2026-10-28")
+	ok(str(g1) == str(Missions.generate_daily("2026-10-28")), "the same day rolls the same missions")
+	ok(str(g1.map(func(m: Dictionary) -> String: return m.id)) == str(s.daily.map(func(m: Dictionary) -> String: return m.id)), "today's missions are the day's roll")
+	var differ := 0
+	for i in range(1, 11):
+		if str(Missions.generate_daily(DailyChallenge.shift_date("2026-10-28", i))) != str(g1):
+			differ += 1
+	ok(differ >= 8, "other days roll other missions (%d of 10)" % differ)
+	ok(Missions.week_of("2026-10-28") == "2026-10-26" and Missions.week_of("2026-11-01") == "2026-10-26" and Missions.week_of("2026-11-02") == "2026-11-02",
+		"weeks start on Monday")
+	# Every pool entry resolves (defender, difficulty placeholders).
+	for def in Missions.data().daily:
+		var inst := Missions._instance(def, RandomNumberGenerator.new(), "daily")
+		ok(not "{" in str(inst.event) and int(inst.goal) >= 1, "mission %s resolves (%s, goal %d)" % [def.id, inst.event, int(inst.goal)])
+	# Progress from live stats; claim once.
+	s.daily[0] = _mission("outs", "total_outs", 5)
+	Profile.bump_stat("total_outs", 3)
+	ok(int(s.daily[0].progress) == 3 and not Missions.can_claim(s.daily[0]), "outs count towards the mission (3 / 5)")
+	Profile.bump_stat("total_outs", 4)
+	ok(int(s.daily[0].progress) == 5 and Missions.can_claim(s.daily[0]), "mission completes and caps at its goal")
+	ok((s.fresh as Array).any(func(f: Dictionary) -> bool: return f.id == "outs"), "a finished mission is queued for the Results screen")
+	var coins := int(Profile.data.coins)
+	var rw := Missions.claim("daily", 0)
+	ok(int(rw.get("coins", 0)) == 100 and int(Profile.data.coins) == coins + 100, "claiming a tier 1 mission pays 100 coins")
+	ok(Missions.claim("daily", 0).is_empty() and int(Profile.data.coins) == coins + 100, "a mission is claimed only once")
+	ok(Profile.stat("missions_completed") == 1.0 and int(s.completed) == 1, "claims count as completed missions")
+	Profile.bump_stat("total_outs", 10)
+	ok(int(s.daily[0].progress) == 5, "a claimed mission stops counting")
+	# Max-type missions take the best game.
+	s.daily[1] = _mission("combo", "max_combo", 3, 2, true)
+	Missions.on_event("max_combo", 2)
+	Missions.on_event("max_combo", 2)
+	ok(int(s.daily[1].progress) == 2, "combo missions keep the best combo, not the sum")
+	Missions.on_event("max_combo", 4)
+	ok(Missions.is_done(s.daily[1]), "a combo of 4 completes a combo-of-3 mission")
+	# Reroll: once per day, same tier, never a finished mission.
+	ok(Missions.rerolls_left() == 1, "one free reroll per day")
+	ok(not Missions.can_reroll(1), "a finished mission cannot be rerolled")
+	var old_id := str(s.daily[2].id)
+	ok(Missions.reroll(2), "reroll succeeds")
+	ok(str(s.daily[2].id) != old_id and int(s.daily[2].tier) == 3, "reroll swaps in another tier 3 mission (%s -> %s)" % [old_id, s.daily[2].id])
+	ok(Missions.rerolls_left() == 0 and not Missions.reroll(2), "the second reroll of the day is refused")
+	# End-of-game events (Rewards.apply): card categories, wins by difficulty.
+	s.daily[2] = _mission("win_diff", "win_diff:rookie", 1, 3)
+	s.weekly[0] = {"id": "w_cards", "kind": "weekly", "event": "cards_offense", "goal": 4, "progress": 0, "claimed": false, "max": false, "tier": 0}
+	var cfg := Session.new_run_config("quick")
+	cfg.difficulty = "standard"
+	var run := RunState.create(cfg)
+	run.inning = 3
+	run.wave = 3
+	run.stats.card_casts = {"power_throw": 3, "curveball": 2, "line_drive": 1}
+	run.stats.outs_by = {run.team[0]: 12}
+	var res := Rewards.apply(run, true)
+	ok(Missions.is_done(s.daily[2]), "a Standard win counts for a 'win on Rookie or harder' mission")
+	ok(Missions.is_done(s.weekly[0]), "Offense cards played in the game count (3 + 1 of 4)")
+	ok((res.missions as Array).any(func(f: Dictionary) -> bool: return f.id == "win_diff"), "Results get the missions this game finished")
+	ok(bool(res.get("first_win", false)) and (res.packs as Array).any(func(pk: Dictionary) -> bool: return pk.source == "First win bonus"), "the first win pays the first-win bonus")
+	var res2 := Rewards.apply(run, true)
+	ok(not bool(res2.get("first_win", false)), "the first-win bonus is paid once")
+	# Weekly claim: a Pro Pack and stars.
+	var stars := int(Profile.data.stars)
+	var pros := Profile.pack_count("pro")
+	var wr := Missions.claim("weekly", 0)
+	ok(str(wr.get("pack", "")) == "pro" and Profile.pack_count("pro") == pros + 1 and int(Profile.data.stars) >= stars + int(wr.get("stars", 0)), "the weekly mission pays a Pro Pack and stars")
+	# Starter chain advances step by step.
+	var st0 := str(s.starter.id)
+	Profile.bump_stat("cards_played", 3)
+	ok(Missions.can_claim(s.starter), "starter step 1 (%s) completes after 3 cards" % st0)
+	Missions.claim("starter")
+	ok(int(s.starter_step) == 1 and str(s.starter.id) == str(Missions.starter_steps()[1].id) and int(s.starter.progress) == 0, "claiming moves the chain to step 2")
+	# Day rollover: unclaimed finished missions are paid out, new missions, reroll back.
+	coins = int(Profile.data.coins)
+	DailyChallenge.date_override = "2026-10-29"
+	Missions.refresh()
+	ok(int(Profile.data.coins) >= coins + 150 and str(s.day) == "2026-10-29", "finished but unclaimed missions are paid out at the day change")
+	ok(s.daily.size() == 3 and s.daily.all(func(m: Dictionary) -> bool: return int(m.progress) == 0 and not bool(m.claimed)), "the new day brings fresh missions")
+	ok(Missions.rerolls_left() == 1, "the free reroll comes back each day")
+	var week := str(s.week)
+	DailyChallenge.date_override = "2026-11-01"
+	Missions.refresh()
+	ok(str(s.week) == week, "the weekly mission stays until Sunday ends")
+	DailyChallenge.date_override = "2026-11-02"
+	Missions.refresh()
+	ok(str(s.week) == "2026-11-02" and int(s.weekly[0].progress) == 0, "the weekly mission resets on Monday")
+	# Saves: round trip, an old save without missions, a broken missions block.
+	s.daily[0].progress = 1
+	Profile.save_now()
+	Profile.load_profile()
+	ok(int(Missions.state().daily[0].progress) == 1 and Missions.state().day == "2026-11-02", "missions survive save and load")
+	var old: Dictionary = Profile.data.duplicate(true)
+	old.erase("missions")
+	old.level = 12
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Profile.load_status == "ok" and typeof(Profile.data.missions) == TYPE_DICTIONARY, "a pre-Update 6 save loads")
+	ok(not Missions.starter_active() and Missions.active().size() == 4, "veterans skip the starter chain but get daily and weekly missions")
+	old.level = 1
+	old.stats = {}
+	f = FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Missions.starter_active(), "a new manager's old save keeps the starter chain")
+	Profile.data.missions = {"day": 5, "daily": [{"id": "nope"}, "junk"], "weekly": "x", "starter": {"id": "nope"}}
+	Profile._sanitize()
+	Missions.refresh()
+	ok(Missions.state().daily.size() == 3 and Missions.state().weekly.size() == 1, "a broken missions block is repaired")
+	DailyChallenge.date_override = ""
+
+
+func test_level_road_and_achievements() -> void:
+	section("account level road, new achievements")
+	Profile.reset_profile()
+	ok(LevelRoad.reward(1).packs.is_empty() and int(LevelRoad.reward(1).coins) == 0, "level 1 is the start (no reward)")
+	for l in range(2, Profile.MAX_ACCOUNT_LEVEL + 1):
+		var r := LevelRoad.reward(l)
+		ok(int(r.coins) > 0 and not (r.packs as Array).is_empty() and LevelRoad.reward_text(l) != "", "level %d pays coins and a pack (%s)" % [l, LevelRoad.reward_text(l)])
+	ok(LevelRoad.reward(4).unlocks.any(func(u: Dictionary) -> bool: return u.id == "nova"), "level 4 shows Nova on the road")
+	ok(LevelRoad.reward(3).unlocks.any(func(u: Dictionary) -> bool: return u.id == "neon_diamond"), "level 3 shows the Neon Diamond stadium")
+	ok("pro" in LevelRoad.reward(10).packs and "pro" in LevelRoad.reward(15).packs, "every fifth level pays a Pro Pack")
+	ok(LevelRoad.next_milestone(1) == 3 and LevelRoad.is_milestone(4) and not LevelRoad.is_milestone(8), "milestones: unlocks and Pro Packs")
+	var early := 0
+	for l in range(2, 7):
+		early += LevelRoad.reward(l).packs.size()
+	ok(early >= 9, "levels 2-6 pay at least 9 packs for a generous first hour (%d)" % early)
+	var coins := int(Profile.data.coins)
+	var n := Profile.pack_count()
+	Profile.add_xp(Profile.xp_to_next(1))
+	ok(int(Profile.data.coins) == coins + int(LevelRoad.reward(2).coins) and Profile.pack_count() == n + 2, "reaching level 2 pays the road reward")
+	ok(Profile.stat("account_level") == 2.0, "account level is tracked as a stat")
+	# New achievements: data and triggers.
+	ok(DB.achievement_order.size() >= 38, "achievements cover the new content (%d)" % DB.achievement_order.size())
+	for id in ["new_arrivals", "daily_first", "daily_streak_3", "daily_streak_7", "daily_wins", "mastery_stars", "mastery_card", "set_first",
+			"set_all", "missions_10", "missions_50", "caught_stealing", "boss_rush"]:
+		ok(DB.achievements.has(id) and int(DB.achievements[id].stars) > 0, "achievement %s defined with stars" % id)
+	var names := {}
+	for id in DB.achievement_order:
+		names[str(DB.achievements[id].name)] = true
+	ok(names.size() == DB.achievement_order.size(), "achievement names are unique")
+	ok(not names.has("Perfect Game") and not names.has("Mastered"), "no achievement shares a name with a card or the mastery frame")
+	for i in 25:
+		Profile.bump_stat("boss_iron_slugger")
+	ok(Profile.data.achievements.has("boss_rush") and Profile.stat("bosses_defeated") == 25.0, "25 boss kills unlock Boss Rush")
+	for cid in Profile.NEW_CARDS_U5:
+		Profile.grant_card(cid)
+	ok(Profile.data.achievements.has("new_arrivals"), "collecting the six Update 5 cards unlocks New Arrivals")
+	Profile.add_card_plays("power_throw", 40)
+	ok(Profile.stat("mastery_stars") == 2.0, "mastery stars are counted (%d)" % int(Profile.stat("mastery_stars")))
+	Profile.add_card_plays("curveball", 120)
+	ok(Profile.data.achievements.has("mastery_card"), "mastering a card unlocks Card Master")
+	var cfg := Session.new_run_config("quick")
+	var run := RunState.create(cfg)
+	run.stats.caught_stealing = 10
+	Rewards.apply(run, false)
+	ok(Profile.data.achievements.has("caught_stealing"), "catching 10 Base Stealers unlocks Caught Stealing")
+	Profile.data.coins = 5000
+	Profile.data.cards.power_throw.copies = 10
+	var before := Profile.stat("cards_upgraded")
+	Profile.upgrade_card("power_throw")
+	ok(Profile.stat("cards_upgraded") == before + 1, "card upgrades are counted for missions")
 
 
 func _find_text(n: Node, text: String) -> bool:

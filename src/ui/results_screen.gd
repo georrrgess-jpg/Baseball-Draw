@@ -166,6 +166,7 @@ func _build_rewards() -> Control:
 	xpbar.value = start
 	var banner := UITheme.label("", 26, UITheme.GREEN, UITheme.font_display())
 	banner.visible = false
+	banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var xt := create_tween()
 	xt.tween_interval(T_XP)
 	for i in levels:
@@ -174,7 +175,7 @@ func _build_rewards() -> Control:
 		xt.tween_callback(func() -> void:
 			Audio.play("level_up", -4.0)
 			lvl_l.text = "LEVEL %d" % lv
-			banner.text = "ACCOUNT LEVEL UP!  Now level %d" % lv
+			banner.text = "LEVEL UP — %d!  %s" % [lv, LevelRoad.reward_text(lv, true)]
 			banner.visible = true
 			xpbar.value = 0.0)
 	xt.tween_property(xpbar, "value", clampf(float(xp_now) / maxi(1, Profile.xp_to_next(level)), 0.0, 1.0), 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -184,6 +185,7 @@ func _build_rewards() -> Control:
 	elif Profile.promotion_available():
 		rv.add_child(_late(UITheme.label("★ Promotion Challenge available: %s!" % Profile.next_division().name, UITheme.FS_BODY, UITheme.GOLD, UITheme.font_body_bold()), T_RP + 0.4))
 
+	rv.add_child(_late(MissionsPanel.results_strip(result), T_RP + 0.3))   # Update 6 missions + first-win bonus
 	# Packs fly in.
 	var packs: Array = result.get("packs", [])
 	rv.add_child(UITheme.section_header("PACKS EARNED" if not packs.is_empty() else "NO PACKS THIS TIME", "gift", UITheme.GOLD, UITheme.FS_H3))

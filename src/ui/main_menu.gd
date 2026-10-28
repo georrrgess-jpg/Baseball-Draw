@@ -362,6 +362,7 @@ func _build_profile_panel() -> void:
 	_right.add_child(p)
 	UITheme.animate_in(p, 0.25)
 	_build_daily_panel()
+	_right.add_child(MissionsPanel.compact_widget())   # Update 6 missions (src/ui/missions_panel.gd)
 	_profile_box = VBoxContainer.new()
 	_profile_box.add_theme_constant_override("separation", 8)
 	p.add_child(_profile_box)

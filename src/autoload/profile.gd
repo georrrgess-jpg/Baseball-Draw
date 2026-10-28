@@ -19,6 +19,8 @@ const STARTER_CARDS := ["power_throw", "curveball", "wall_of_dirt", "field_visio
 	"frost_field", "twin_play", "rally_cry", "sky_hook"]
 const STARTER_DECK := ["power_throw", "curveball", "heat_wave", "lockdown", "frost_field", "wall_of_dirt", "twin_play", "rally_cry"]
 const STARTER_TEAM := ["ace", "rico", "maya", "jax", "kai", "bruno"]
+## The cards added in Update 5 (the "New Arrivals" achievement).
+const NEW_CARDS_U5 := ["called_shot", "line_drive", "tag_at_the_plate", "bullpen_call", "hot_corner", "perfect_game"]
 const DECK_SIZE := 8
 const TEAM_SIZE := 6
 const BUNDLE_SIZE := 10          # packs in a shop bundle
@@ -72,6 +74,8 @@ func default_profile() -> Dictionary:
 		# Daily Challenge records: best score per day (last 30 days) and the streak of days played.
 		"daily": {"streak": 0, "best_streak": 0, "last_date": "", "played": 0, "wins": 0, "days": {}},
 		"sets_claimed": {},   # collection set id -> date its one-time reward was claimed
+		# Missions (Update 6): daily/weekly missions and the starter chain (src/core/missions.gd).
+		"missions": Missions.default_state(),
 	}
 	for id in DB.defender_order:
 		var unlocked: bool = DB.defender(id).get("unlock", {}).get("type", "") == "default"
@@ -97,6 +101,7 @@ func load_profile() -> void:
 	data = default_profile()
 	if not loaded.is_empty():
 		_merge(data, loaded)
+		_migrate(loaded)
 		_sanitize()
 	if load_status in ["new", "reset_corrupt"]:
 		save_now()
@@ -122,6 +127,15 @@ func _merge(base: Dictionary, saved: Dictionary) -> void:
 		elif not base.has(key) or base[key] == null or saved[key] == null or typeof(base[key]) == typeof(saved[key]) \
 				or (typeof(base[key]) in [TYPE_INT, TYPE_FLOAT] and typeof(saved[key]) in [TYPE_INT, TYPE_FLOAT]):
 			base[key] = saved[key]
+
+
+## Saves from before Update 6: managers who already know the game skip the starter mission chain.
+func _migrate(loaded: Dictionary) -> void:
+	if not loaded.has("missions"):
+		var played := float(loaded.get("stats", {}).get("runs_played", 0)) if typeof(loaded.get("stats")) == TYPE_DICTIONARY else 0.0
+		if int(loaded.get("level", 1)) >= 4 or played >= 5:
+			data.missions.starter_step = Missions.starter_steps().size()
+		data.stats["account_level"] = int(data.level)
 
 
 ## Repairs anything that could break the game (unknown ids, bad sizes, float ints from JSON).
@@ -198,6 +212,7 @@ func _sanitize() -> void:
 	for sid in data.sets_claimed.keys():
 		if not sid in CollectionSets.ids():
 			data.sets_claimed.erase(sid)
+	Missions.sanitize()
 
 
 func save_now() -> void:
@@ -248,10 +263,10 @@ func add_xp(amount: int) -> int:
 		data.xp -= xp_to_next(data.level)
 		data.level += 1
 		levels += 1
-		data.coins += 100
-		add_pack("pro" if data.level % 5 == 0 else "rookie", "Level %d reward" % data.level)
+		LevelRoad.grant(int(data.level))   # coins and packs from the account level road
 		level_up.emit(data.level)
 		_check_unlocks()
+		set_stat_max("account_level", data.level)
 	changed.emit()
 	return levels
 
@@ -455,7 +470,10 @@ func add_card_plays(id: String, n: int) -> void:
 		return
 	var before := CardMastery.stars_for(card_plays(id))
 	data.cards[id]["plays"] = card_plays(id) + n
-	if CardMastery.stars_for(card_plays(id)) > before and CardMastery.stars_for(card_plays(id)) >= CardMastery.MAX_STARS:
+	var after := CardMastery.stars_for(card_plays(id))
+	if after > before:
+		bump_stat("mastery_stars", after - before)
+	if after > before and after >= CardMastery.MAX_STARS:
 		set_stat_max("cards_mastered", CardMastery.mastered_count())
 
 
@@ -659,6 +677,7 @@ func upgrade_card(id: String) -> bool:
 	data.coins -= cost.coins
 	data.cards[id].level += 1
 	set_stat_max("max_card_level", data.cards[id].level)
+	bump_stat("cards_upgraded")
 	changed.emit()
 	save_soon()
 	return true
@@ -689,9 +708,13 @@ func stat(name: String) -> float:
 	return float(data.stats.get(name, 0))
 
 
+## Also feeds missions (live during games: outs, cards, double plays, bosses ...).
 func bump_stat(name: String, amount: float = 1.0) -> void:
 	data.stats[name] = stat(name) + amount
 	_check_achievements(name)
+	if name.begins_with("boss_"):
+		bump_stat("bosses_defeated", amount)
+	Missions.on_event(name, amount)
 
 
 func set_stat_max(name: String, value: float) -> void:
@@ -729,7 +752,12 @@ func _update_collection_stats() -> void:
 	data.stats["defenders_owned"] = defs
 	data.stats["arenas_owned"] = data.arenas_unlocked.size()
 	data.stats["division"] = data.division
-	for s in ["cards_owned", "defenders_owned", "arenas_owned", "division"]:
+	var fresh := 0
+	for id in NEW_CARDS_U5:
+		if is_card_owned(id):
+			fresh += 1
+	data.stats["new_cards_owned"] = fresh
+	for s in ["cards_owned", "defenders_owned", "arenas_owned", "division", "new_cards_owned"]:
 		_check_achievements(s)
 
 
