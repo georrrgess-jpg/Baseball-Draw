@@ -510,6 +510,9 @@ func _highlight_card(art: Control, kind: String, title: String, caption: String,
 func _build_buttons() -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
+	var next := _build_next_steps()
+	if next:
+		col.add_child(next)
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 16)
@@ -538,6 +541,39 @@ func _build_buttons() -> Control:
 	col.add_child(note)
 	UITheme.animate_in(col, T_BODY + 0.4)
 	return col
+
+
+# ---------------------------------------------------------------- what's next
+
+## "WHAT'S NEXT": up to three one-click suggestions (open packs, upgrade a ready card, a
+## finished mission, the promotion challenge, today's Daily...), best first. Null when there is
+## nothing to suggest.
+func _build_next_steps() -> Control:
+	var just_daily: bool = not (result.get("daily", {}) as Dictionary).is_empty()
+	var list: Array = NextSteps.suggestions(just_daily).slice(0, 3)
+	if list.is_empty():
+		return null
+	var row := HBoxContainer.new()
+	row.name = "WhatsNext"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	var cap := UITheme.label("WHAT'S NEXT", UITheme.FS_LEAD, UITheme.GOLD, UITheme.font_header())
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(cap)
+	for sg in list:
+		row.add_child(NextSteps.button(sg, 300.0))
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_bottom", 6)
+	m.add_child(row)
+	return m
+
+
+## Esc leaves the results for the main menu (like the MAIN MENU button).
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("pause") and is_visible_in_tree():
+		get_viewport().set_input_as_handled()
+		Audio.ui("ui_back")
+		Router.goto("main_menu")
 
 
 ## Starts the same game again: same mode, difficulty, stadium, deck, team, captain and

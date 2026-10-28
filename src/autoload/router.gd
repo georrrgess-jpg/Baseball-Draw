@@ -18,6 +18,9 @@ const SCENES := {
 
 var current := ""
 var busy := false
+## Screens that opened the current one through a cross-link (e.g. Upgrade Cards -> Card Packs):
+## BACK returns along this path. Going to the main menu or a battle clears it.
+var _back_stack: Array[String] = []
 var _layer: CanvasLayer
 var _fade: ColorRect
 var _loading_label: Label
@@ -112,9 +115,13 @@ func _set_loading_visible(v: bool) -> void:
 	_loading_bg.visible = v
 
 
-func goto(scene_name: String, show_loading := false) -> void:
+## Changes screen with a fade. `tab` selects a tab of the new screen by name (the name of a
+## TabContainer page, e.g. "Pro Shop" on Progression).
+func goto(scene_name: String, show_loading := false, tab := "") -> void:
 	if busy or not SCENES.has(scene_name):
 		return
+	if scene_name in ["main_menu", "battle", "boot"]:
+		_back_stack.clear()
 	busy = true
 	get_tree().paused = false
 	Engine.time_scale = 1.0
@@ -147,6 +154,8 @@ func goto(scene_name: String, show_loading := false) -> void:
 	get_tree().change_scene_to_packed(packed)
 	current = scene_name
 	await get_tree().process_frame
+	if tab != "":
+		_select_tab(get_tree().current_scene, tab)
 	await get_tree().process_frame
 	_set_loading_visible(false)
 	var tw2 := create_tween()
@@ -155,6 +164,48 @@ func goto(scene_name: String, show_loading := false) -> void:
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	busy = false
 	scene_changed.emit(scene_name)
+
+
+## Opens a screen from another menu screen, so that its BACK (and Esc) returns to this one.
+func open(scene_name: String, tab := "") -> void:
+	if busy or not SCENES.has(scene_name):
+		return
+	if current != "" and current != scene_name and not current in ["main_menu", "battle", "boot"]:
+		_back_stack.erase(scene_name)
+		_back_stack.append(current)
+	goto(scene_name, false, tab)
+
+
+## Where BACK leads from the current screen: the screen that opened it, else the main menu.
+func back_target() -> String:
+	return _back_stack.back() if not _back_stack.is_empty() else "main_menu"
+
+
+## Goes back one screen (to the screen that opened this one, or the main menu).
+func back() -> void:
+	if busy:
+		return
+	var target := "main_menu"
+	while not _back_stack.is_empty():
+		var t: String = _back_stack.pop_back()
+		if t != current and SCENES.has(t):
+			target = t
+			break
+	goto(target)
+
+
+func _select_tab(n: Node, tab: String) -> bool:
+	if n == null:
+		return false
+	if n is TabContainer:
+		for i in n.get_tab_count():
+			if n.get_tab_control(i).name == tab:
+				(n as TabContainer).current_tab = i
+				return true
+	for c in n.get_children():
+		if _select_tab(c, tab):
+			return true
+	return false
 
 
 func _loading_tip() -> String:

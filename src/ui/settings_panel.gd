@@ -388,6 +388,16 @@ func _build_gameplay() -> void:
 		func(v: float) -> void: Settings.set_value("gameplay", "camera_speed", v), "%d%%", 100.0, "scroll")
 	_check("Edge panning", "Moves the camera when the mouse touches the screen edge.", bool(Settings.get_value("gameplay", "edge_pan", false)),
 		func(v: bool) -> void: Settings.set_value("gameplay", "edge_pan", v), "mouse camera scroll")
+	_check("Show tips", "Short tip cards the first time you open a screen or meet a new feature. The ? button on each screen shows them again.",
+		bool(Settings.get_value("gameplay", "tips", true)),
+		func(v: bool) -> void: Settings.set_value("gameplay", "tips", v), "help hints tutorial")
+	var tips := UITheme.button("Show all tips again", "secondary", 20, "info")
+	tips.custom_minimum_size = Vector2(320, 46)
+	tips.pressed.connect(func() -> void:
+		Hints.reset_seen()
+		Settings.set_value("gameplay", "tips", true)
+		Router.toast("Tips will show again on each screen.", "info"))
+	_row("Reset tips", "Shows every tip card again, as on your first visit.", tips, "help hints tutorial")
 	var reset := UITheme.button("Reset profile...", "danger", 20, "exit")
 	reset.custom_minimum_size = Vector2(320, 46)
 	reset.pressed.connect(func() -> void:
