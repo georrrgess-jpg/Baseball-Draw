@@ -42,6 +42,7 @@ func _run() -> void:
 	test_missions()
 	test_level_road_and_achievements()
 	test_update6_waves()
+	test_upgrade_all()
 	await test_menus()
 	test_update5_content()
 	await test_battle_systems()
@@ -1356,3 +1357,35 @@ func _test_card(cid: String) -> void:
 			ok(battle.buff_active("perfect_tag"), "perfect game opens a tag window at the plate")
 		_:
 			ok(damaged, "%s deals damage (%.0f -> %.0f)" % [cid, hp_before, hp_after])
+
+
+func test_upgrade_all() -> void:
+	section("upgrade all")
+	Profile.reset_profile()
+	var owned: Array = []
+	for cid in DB.card_order:
+		if Profile.is_card_owned(cid):
+			owned.append(cid)
+	# Give the first three owned cards plenty of copies and enough coins for a few level-ups.
+	for cid in owned.slice(0, 3):
+		Profile.data.cards[cid].copies = 200
+	Profile.data.coins = 5000
+	var levels_before := {}
+	for cid in owned:
+		levels_before[cid] = Profile.card_level(cid)
+	var plan := Profile.upgrade_all_plan()
+	ok(Profile.data.coins == 5000 and Profile.card_level(owned[0]) == levels_before[owned[0]], "the preview changes nothing")
+	ok(plan.levels > 0 and not plan.cards.is_empty(), "the plan finds upgrades (%d level-ups, %d coins)" % [plan.levels, plan.coins])
+	ok(plan.coins <= 5000, "the plan never spends more coins than the player has")
+	var done := Profile.upgrade_all()
+	ok(done.size() == plan.cards.size(), "Upgrade All applies the previewed cards (%d)" % done.size())
+	ok(Profile.data.coins == 5000 - int(plan.coins), "Upgrade All spends exactly the previewed coins (%d left)" % Profile.data.coins)
+	var all_match := true
+	for e in plan.cards:
+		if Profile.card_level(e.id) != int(e.to):
+			all_match = false
+	ok(all_match, "every card reaches its previewed level")
+	ok(Profile.upgrade_all_plan().levels == 0, "after Upgrade All nothing affordable is left over")
+	Profile.data.coins = 0
+	ok(Profile.upgrade_all_plan().levels == 0 and Profile.upgrade_all().is_empty(), "with no coins nothing is upgraded")
+	Profile.reset_profile()

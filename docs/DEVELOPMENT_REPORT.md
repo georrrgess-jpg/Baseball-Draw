@@ -583,3 +583,11 @@ Plan: `docs/plans/UPDATE_6_PLAN.md`. Scored reviews: `docs/plans/review/runners.
   * Hot Corner between throws: still mostly its ring.
 * Veteran Standard Siege sits under its 40 % autopilot target.
 * Frame rates are still unmeasured on a real GPU.
+
+**Upgrade All** (after Update 6)
+* An UPGRADE ALL (N) button on the Card Upgrades screen spends copies and coins on every level-up the player can
+  afford. Cheapest coin cost goes first, then rarer cards, and a card can gain several levels.
+* A confirmation lists each card with its level change and shows the total coin cost before anything is spent.
+* `Profile.upgrade_all_plan()` previews without changing anything; `Profile.upgrade_all()` applies exactly that
+  plan.
+* Covered by system tests and the `deck` UI section.

@@ -27,6 +27,7 @@ var _detail: VBoxContainer
 var _ready_label: Label
 var _ready_icon: TextureRect
 var _busy := false
+var _all_btn: Button
 
 # Detail widgets the upgrade animation drives.
 var _d_card: CardView
@@ -83,6 +84,8 @@ func _ready() -> void:
 			selected = a.split("=")[1]
 	_rebuild()
 	set_help("card_upgrades", func() -> Dictionary: return {"upgrades_intro": _detail})
+	if "--open-upgrade-all" in OS.get_cmdline_user_args():   # screenshot helper
+		_confirm_upgrade_all.call_deferred()
 
 
 ## Debug/screenshot helper: `--grant-demo-cards` fills the profile with a varied collection.
@@ -128,6 +131,10 @@ func _build_top_bar() -> Control:
 	vb.add_child(_ready_label)
 	vb.add_child(UITheme.label("Duplicate cards from packs become copies. Spend copies + coins to level a card up (max level %d)." % DB.card_max_level,
 		20, UITheme.MUTED, UITheme.font_body_bold()))
+	_all_btn = UITheme.menu_button("UPGRADE ALL", UITheme.GOLD, 26)
+	_all_btn.custom_minimum_size = Vector2(260, 56)
+	_all_btn.pressed.connect(_confirm_upgrade_all)
+	hb.add_child(_all_btn)
 	var packs := UITheme.menu_button("GET CARD PACKS  ▶", UITheme.BLUE, 26)
 	packs.custom_minimum_size = Vector2(290, 56)
 	packs.pressed.connect(func() -> void: Router.open("packs"))
@@ -177,6 +184,7 @@ func _rebuild() -> void:
 		_ready_label.text = "NO CARDS READY YET"
 		_ready_label.add_theme_color_override("font_color", UITheme.OFFWHITE)
 		_ready_icon.modulate = UITheme.MUTED
+	_update_all_button()
 	for c in _list.get_children():
 		c.queue_free()
 	var ids := _sorted_ids()
@@ -572,6 +580,116 @@ func _do_upgrade(id: String) -> void:
 	if not is_inside_tree():
 		return
 	Router.toast("%s is now level %d!" % [name_text, lvl + 1], "level")
+	_busy = false
+	_rebuild()
+
+
+# ---------------------------------------------------------------- upgrade all
+
+func _update_all_button() -> void:
+	if _all_btn == null:
+		return
+	var plan := Profile.upgrade_all_plan()
+	var n: int = plan.levels
+	_all_btn.disabled = n == 0 or _busy
+	_all_btn.text = "UPGRADE ALL (%d)" % n if n > 0 else "UPGRADE ALL"
+	_all_btn.tooltip_text = ("Spend copies and coins on every upgrade you can afford: %d level-up%s for %s coins."
+		% [n, "" if n == 1 else "s", UITheme.format_int(plan.coins)]) if n > 0 \
+		else "Nothing to upgrade yet: cards need enough copies (from packs) and coins."
+
+
+## Confirmation popup: exactly what will level up and what it costs.
+func _confirm_upgrade_all() -> void:
+	if _busy:
+		return
+	var plan := Profile.upgrade_all_plan()
+	if plan.cards.is_empty():
+		Audio.ui("ui_error")
+		return
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.6)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(shade)
+	push_overlay(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.add_child(center)
+	var p := UITheme.card_panel(UITheme.GOLD, 24)
+	p.custom_minimum_size = Vector2(620, 0)
+	center.add_child(p)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	p.add_child(vb)
+	vb.add_child(UITheme.section_header("UPGRADE ALL", "upgrade", UITheme.GOLD))
+	vb.add_child(UITheme.label("%d card%s · %d level-up%s · %s coins (you have %s)" % [plan.cards.size(), "" if plan.cards.size() == 1 else "s",
+		plan.levels, "" if plan.levels == 1 else "s", UITheme.format_int(plan.coins), UITheme.format_int(int(Profile.data.coins))],
+		22, UITheme.OFFWHITE, UITheme.font_body_bold()))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, mini(plan.cards.size(), 8) * 44)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vb.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 4)
+	scroll.add_child(rows)
+	for e in plan.cards:
+		var c := DB.card(e.id)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var dot := ColorRect.new()
+		dot.color = DB.rarity_color(c.rarity)
+		dot.custom_minimum_size = Vector2(8, 36)
+		row.add_child(dot)
+		var nm := UITheme.label(str(c.name), 22, Color.WHITE, UITheme.font_body_bold())
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(nm)
+		row.add_child(UITheme.label("LV %d  ▶  %d" % [e.from, e.to], 22, UITheme.GOLD, UITheme.font_header()))
+		rows.add_child(row)
+	vb.add_child(UITheme.label("Cheapest upgrades go first; a card can gain several levels.", 18, UITheme.MUTED))
+	var btns := HBoxContainer.new()
+	btns.alignment = BoxContainer.ALIGNMENT_END
+	btns.add_theme_constant_override("separation", 12)
+	vb.add_child(btns)
+	var cancel := UITheme.button("CANCEL", "secondary")
+	cancel.pressed.connect(func() -> void:
+		Audio.ui("ui_back")
+		shade.queue_free())
+	btns.add_child(cancel)
+	var go := UITheme.button("UPGRADE ALL", "primary", UITheme.FS_LEAD, "upgrade")
+	go.pressed.connect(func() -> void:
+		shade.queue_free()
+		_do_upgrade_all())
+	btns.add_child(go)
+	shade.modulate.a = 0.0
+	create_tween().tween_property(shade, "modulate:a", 1.0, 0.15)
+
+
+func _do_upgrade_all() -> void:
+	if _busy:
+		return
+	var done := Profile.upgrade_all()
+	if done.is_empty():
+		return
+	_busy = true
+	var levels := 0
+	for e in done:
+		levels += int(e.to) - int(e.from)
+	Audio.play("purchase")
+	Audio.play("level_up")
+	# Show the last upgraded card in the detail panel with the usual level-up pop.
+	selected = str(done[done.size() - 1].id)
+	_rebuild()
+	if is_instance_valid(_d_card):
+		_d_card.pivot_offset = _d_card.size * 0.5
+		var tw := create_tween()
+		tw.tween_property(_d_card, "scale", Vector2(1.14, 1.14), 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(_d_card, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_float_text("+%d LEVEL%s!" % [levels, "" if levels == 1 else "S"])
+	Router.toast("Upgraded %d card%s (%d level-up%s)." % [done.size(), "" if done.size() == 1 else "s", levels, "" if levels == 1 else "s"], "level")
+	await get_tree().create_timer(0.9).timeout
+	if not is_inside_tree():
+		return
 	_busy = false
 	_rebuild()
 

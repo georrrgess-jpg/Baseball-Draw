@@ -540,6 +540,37 @@ func _test_deck_menus() -> void:
 			if not us._busy:
 				break
 		_check(not us._busy and us.selected == cid_up, "upgrade animation finishes (busy %s, selected %s)" % [us._busy, us.selected])
+	# Upgrade All: enough copies and coins for several level-ups, then button -> confirm -> applied.
+	var owned_ids: Array = []
+	for cid in DB.card_order:
+		if Profile.is_card_owned(cid):
+			owned_ids.append(cid)
+	for cid in owned_ids.slice(0, 3):
+		Profile.data.cards[cid].copies = 100
+	Profile.data.coins = 4000
+	us._rebuild()
+	await _wait(0.3)
+	var plan: Dictionary = Profile.upgrade_all_plan()
+	var all_btn: Button = us._all_btn
+	_check(all_btn != null and not all_btn.disabled and "(%d)" % plan.levels in all_btn.text, "UPGRADE ALL shows the level-ups available (%s)" % (all_btn.text if all_btn else "missing"))
+	if all_btn and not all_btn.disabled:
+		await _click(_button_center(all_btn))
+		await _wait(0.4)
+		var confirm := _find_button(us, "UPGRADE ALL")
+		_check(confirm != null, "UPGRADE ALL asks for confirmation")
+		if confirm:
+			await _click(_button_center(confirm))
+			await _wait(0.4)
+			var all_up := true
+			for e in plan.cards:
+				if Profile.card_level(e.id) != int(e.to):
+					all_up = false
+			_check(all_up and int(Profile.data.coins) == 4000 - int(plan.coins), "UPGRADE ALL levels every planned card and spends %d coins" % int(plan.coins))
+			for i in 40:
+				await _wait(0.1)
+				if not us._busy:
+					break
+			_check(not us._busy and us._all_btn.disabled, "nothing left to upgrade afterwards (button disabled)")
 	var back := _find_button(us, "◀  BACK")
 	_check(back != null, "card upgrades has a BACK button")
 	if back:

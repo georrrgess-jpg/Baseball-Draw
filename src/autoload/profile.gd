@@ -683,6 +683,59 @@ func upgrade_card(id: String) -> bool:
 	return true
 
 
+## Upgrade All: the level-ups the player can afford right now, applied in a fixed order (cheapest
+## coin cost first, then rarer cards), repeating while copies and coins last. A card may gain several
+## levels. Returns [{"id", "from", "to"}] and the total coins spent; `apply` = false only previews.
+func upgrade_all_plan(apply := false) -> Dictionary:
+	var coins := int(data.coins)
+	var levels := {}
+	var copies := {}
+	for id in DB.card_order:
+		if is_card_owned(id):
+			levels[id] = card_level(id)
+			copies[id] = card_copies(id)
+	var spent := 0
+	var steps := 0
+	while true:
+		var best := ""
+		var best_cost := 0
+		for id in levels.keys():
+			var lvl: int = levels[id]
+			if lvl >= DB.card_max_level:
+				continue
+			var need := int(DB.COPIES_TO_UPGRADE[DB.card(id).rarity][lvl])
+			var cost := int(DB.COINS_TO_UPGRADE[lvl])
+			if copies[id] < need or coins < cost:
+				continue
+			if best == "" or cost < best_cost or (cost == best_cost and DB.rarity_index(DB.card(id).rarity) > DB.rarity_index(DB.card(best).rarity)):
+				best = id
+				best_cost = cost
+		if best == "":
+			break
+		copies[best] -= int(DB.COPIES_TO_UPGRADE[DB.card(best).rarity][levels[best]])
+		levels[best] += 1
+		coins -= best_cost
+		spent += best_cost
+		steps += 1
+		if apply:
+			upgrade_card(best)
+	var cards: Array = []
+	if not apply:   # after applying, card_level() already equals the new level
+		for id in DB.card_order:
+			if levels.has(id) and int(levels[id]) > card_level(id):
+				cards.append({"id": id, "from": card_level(id), "to": int(levels[id])})
+	return {"cards": cards, "coins": spent, "levels": steps}
+
+
+## Applies the Upgrade All plan; returns what changed ([{"id", "from", "to"}]).
+func upgrade_all() -> Array:
+	var plan := upgrade_all_plan(false)
+	if plan.cards.is_empty():
+		return []
+	upgrade_all_plan(true)
+	return plan.cards
+
+
 func set_deck(deck: Array) -> bool:
 	if deck.size() != DECK_SIZE:
 		return false
