@@ -639,4 +639,6 @@ High contrast). Portraits re-rendered.
 
 **Fixes and tuning**
 * Dugout: the specials header always starts its own row, and the level pips are round again.
-* Veteran Standard Siege starts with one base shield (per-mode tuning; shown on the Play screen).
+* Veteran Standard Siege starts with one base shield and has slightly smaller waves (per-mode tuning; the shield
+  shows on the Play screen). Autopilot: 1–2 wins in 6 per sample, with most losses at the final boss in inning 9.
+  Still under the 40 % target.
