@@ -591,3 +591,52 @@ Plan: `docs/plans/UPDATE_6_PLAN.md`. Scored reviews: `docs/plans/review/runners.
 * `Profile.upgrade_all_plan()` previews without changing anything; `Profile.upgrade_all()` applies exactly that
   plan.
 * Covered by system tests and the `deck` UI section.
+
+## 13. Update 7: "Expansion Pack"
+
+Plan: `docs/plans/UPDATE_7_PLAN.md`.
+
+**Twelve new cards** (44 in total), each a new mechanic. Every card also has a `role` tag for the deck
+builder.
+
+| Card | Rarity | Cost | What it does |
+|---|---|---|---|
+| Bean Ball | Common | 2 | 140, stun and knock back; fast runners take double. |
+| Intentional Walk | Common | 2 | A runner is 55 % slower for 5 s and can't score. |
+| Infield Fly | Uncommon | 3 | A pop-up over an area: the first runner in it is called out. |
+| The Shift | Uncommon | 3 | Every defender shifts toward the spot for 6 s and throws faster. |
+| Momentum | Uncommon | 2 | For 8 s, every out gives 0.5 energy. |
+| Around the Horn | Rare | 4 | 130 to the lead runner on each path. |
+| Rundown | Rare | 4 | Traps a runner going back and forth for 4 s, tagged at each turn. |
+| Golden Glove | Rare | 4 | A defender catches the next 3 runners that come near. |
+| Rain Delay | Epic | 5 | No new runners for 5 s; every runner 35 % slower. |
+| Relief Pitcher | Epic | 5 | A reliever jogs in and throws for 10 s. |
+| Grand Salami | Legendary | 8 | A giant fireball rolls down a base path, then fire. |
+| Instant Replay | Legendary | 4 | Replays your last card, free and one level stronger. |
+
+All twelve have effects, art, autopilot use, combos and system tests, and come from packs. Existing saves
+gain them as not owned. Line Drive now leaves a scorch and dust, and Splitter's balls are bigger.
+
+**Auto Build** (`src/core/deck_ai.gd`)
+* **Scoring:** each owned card gets a power score from its parameters at its current level, per energy and per
+  cooldown. Role coverage, energy curve, team signatures, combos, card level and mastery are added on top.
+* **Search:** a greedy pick, then swaps until nothing improves the deck. The result is deterministic.
+* **Modes:** Balanced, Aggressive, Control and Boss Killer.
+* **Explained:** a summary banner and reason chips per card, plus Undo.
+* **Curve limits:** with the bigger pool the energy curve is enforced more firmly. Balanced and Control allow
+  one card costing 6+, Aggressive and Boss Killer two.
+* **Autopilot check** (Quick Defense, 20 games each): the new Balanced deck won 90 % against 70 % for the old one
+  on Standard.
+
+**Card comparison** (`src/ui/card_compare.gd`)
+* Open it with COMPARE in the inspector, or shift-click a card.
+* It shows two cards side by side with cost, cooldown, target, level, mastery and every stat (now and at the
+  next level), with the better value highlighted.
+
+**Defenders:** material classes in the merged character shader (cloth sheen, warm skin, glossy leather,
+metal) and a faint outline in each defender's accent colour for readability at battle distance (stronger with
+High contrast). Portraits re-rendered.
+
+**Fixes and tuning**
+* Dugout: the specials header always starts its own row, and the level pips are round again.
+* Veteran Standard Siege starts with one base shield (per-mode tuning; shown on the Play screen).
