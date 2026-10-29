@@ -65,6 +65,11 @@ static func create(cfg: Dictionary) -> RunState:
 	var diff := DB.difficulty(r.difficulty_id)
 	r.run_limit = int(diff.get("run_limit", 3))
 	r.shields = int(diff.get("shields", 1))
+	# Per-mode override (e.g. Veteran Standard Siege starts with one shield: over nine innings a single
+	# boss reaching home otherwise ends most runs).
+	var mt: Dictionary = DB.mode(r.mode_id).get("tuning", {}).get(r.difficulty_id, {})
+	if mt.has("shields"):
+		r.shields = int(mt.shields)
 	r.team = cfg.get("team", []).duplicate()
 	r.captain = cfg.get("captain", r.team[0] if r.team.size() > 0 else "")
 	r.deck = cfg.get("deck", []).duplicate()

@@ -479,6 +479,8 @@ func _refresh_difficulty_info() -> void:
 			continue
 		var v := float(d[key])
 		var b := float(base.get(key, v))
+		if key == "shields":   # a mode can override the starting shields
+			v = float(DB.mode(mode_id).get("tuning", {}).get(id, {}).get("shields", v))
 		var txt := ""
 		var col := Color(0.85, 0.89, 0.96)
 		match r[3]:
