@@ -277,13 +277,20 @@ func _fx_text(u: Dictionary, level: int, offer: Dictionary) -> String:
 
 func _fill_shop() -> void:
 	for c in _shop.get_children():
+		_shop.remove_child(c)   # so the row padding below counts only the new cells
 		c.queue_free()
 	var run: RunState = battle.run
 	var sections := [["TEAM UPGRADES", false], ["TODAY'S SPECIALS  ·  20% OFF", true]]
 	for sec in sections:
+		# Each section header starts its own row: pad the 2-column grid when the previous section
+		# ended on an odd count, otherwise the header lands in the right-hand column.
+		var cols := maxi(1, int(_shop.get("columns")) if _shop.get("columns") != null else 1)
+		while _shop.get_child_count() % cols != 0:
+			_shop.add_child(Control.new())
 		var header := UITheme.section_header(sec[0], "special" if sec[1] else "upgrade", UITheme.GOLD if sec[1] else UITheme.OFFWHITE, 24)
 		_shop.add_child(header)
-		_shop.add_child(Control.new())
+		for i in cols - 1:
+			_shop.add_child(Control.new())
 		for offer in _offers:
 			if bool(offer.get("special", false)) == sec[1]:
 				_shop.add_child(_offer_card(offer, run))
@@ -321,6 +328,7 @@ func _offer_card(offer: Dictionary, run: RunState) -> Control:
 	title_row.add_child(nl)
 	var pips := HBoxContainer.new()
 	pips.add_theme_constant_override("separation", 3)
+	pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER   # round pips, not row-tall bars
 	for i in int(u.max):
 		var dot := Panel.new()
 		dot.custom_minimum_size = Vector2(14, 14)
