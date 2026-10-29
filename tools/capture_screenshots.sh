@@ -26,7 +26,8 @@ shot dugout 9 --test-battle=standard --profile=shots --start-inning=3 --open-dug
 shot results 12 --test-battle=quick --profile=shots --start-inning=3 --show-results --no-help
 shot play_menu 5 --scene=play_menu --profile=shots
 shot play_daily 6 --scene=play_menu --profile=shots --play-mode=daily
-shot deck_builder 6 --scene=deck_builder --profile=shots_upg --fresh-profile --grant-demo-cards --demo-remove=2
+shot deck_builder 6 --scene=deck_builder --profile=shots_upg --fresh-profile --grant-demo-cards --demo-remove=2 --auto-build --no-hints
+shot card_compare 7 --scene=deck_builder --profile=shots_upg --grant-demo-cards --no-hints --compare=heat_wave,splitter
 shot card_upgrades 6 --scene=card_upgrades --profile=shots_upg --grant-demo-cards
 shot roster 7 --scene=roster --profile=shots
 shot progression 5 --scene=progression --profile=shots
