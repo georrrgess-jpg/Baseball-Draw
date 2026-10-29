@@ -66,9 +66,49 @@ def render_portrait(cid, info, path, res=512, samples=96):
     cam_pos = target + Vector((-math.sin(a) * math.cos(el), -math.cos(a) * math.cos(el),
                                math.sin(el))) * dist
     render.camera(cam_pos, target, lens=lens)
+    if not enemy:
+        _portrait_materials()
     _portrait_lights(target, h, a, enemy)
     render.render_to(path)
     return path
+
+
+# Portrait-only material look, matching the in-game material classes of the
+# defenders (character_merged.gdshader): soft sheen on cloth, a little subsurface
+# on skin, darker and glossier leather, brighter metal.  Applied after the GLB
+# export, so the exported materials stay plain Principled colour/roughness/metal.
+FABRIC = ("Jersey", "JerseyTrim", "Pants", "Socks", "Undershirt", "Cap", "Cloth")
+LEATHER = ("Glove", "Belt", "Shoes")
+
+
+def _portrait_materials():
+    for m in bpy.data.materials:
+        if not m.use_nodes:
+            continue
+        b = next((n for n in m.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if b is None:
+            continue
+        name = m.name.split(".")[0]
+        inp = b.inputs
+        if name in FABRIC:
+            # coloured sheen (tinted by the cloth colour, not white)
+            col = inp['Base Color'].default_value
+            inp['Sheen Weight'].default_value = 0.35
+            inp['Sheen Roughness'].default_value = 0.4
+            inp['Sheen Tint'].default_value = tuple(min(1.0, c * 1.8 + 0.02) for c in col[:3]) + (1.0,)
+            inp['Roughness'].default_value = min(1.0, inp['Roughness'].default_value + 0.06)
+        elif name == "Skin":
+            inp['Subsurface Weight'].default_value = 0.12
+            inp['Subsurface Radius'].default_value = (1.0, 0.35, 0.2)
+            inp['Subsurface Scale'].default_value = 0.012
+            inp['Roughness'].default_value = 0.5
+        elif name in LEATHER:
+            col = inp['Base Color'].default_value
+            inp['Base Color'].default_value = (col[0] * 0.72, col[1] * 0.72, col[2] * 0.72, col[3])
+            inp['Roughness'].default_value = 0.36
+        elif name == "Metal":
+            inp['Metallic'].default_value = 0.78
+            inp['Roughness'].default_value = 0.26
 
 
 def _light(name, loc, target, energy, size, color):

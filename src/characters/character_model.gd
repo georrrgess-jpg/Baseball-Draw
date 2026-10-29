@@ -9,6 +9,19 @@ signal action_finished(name: String)
 
 const MODEL_DIR := "res://assets/models/characters/"
 const LOOPING := ["idle", "run", "sprint", "stunned", "celebrate", "ready", "victory", "walk"]
+## Material classes for the merged shader (character_merged.gdshader), by Blender material name.
+## Only the defenders use them; runners and bosses keep class 0 (the plain look).
+const MATERIAL_CLASS := {
+	"Jersey": 1, "JerseyTrim": 1, "Pants": 1, "Socks": 1, "Undershirt": 1, "Cap": 1, "Cloth": 1,
+	"Skin": 2,
+	"Glove": 3, "Belt": 3, "Shoes": 3,
+	"Metal": 4,
+	"Eyes": 5, "Iris": 5, "Pupil": 5, "Gear": 5, "Visor": 5,
+	"Hair": 6, "Brow": 6,
+	"Number": 7, "NumberOutline": 7,
+}
+## Strength of the accent-coloured silhouette rim on the defenders (x2 with High-contrast).
+const TEAM_RIM := 0.8
 
 static var _scene_cache := {}
 static var _material_cache := {}
@@ -80,8 +93,11 @@ func setup(id: String, opts: Dictionary = {}) -> void:
 			height = aabb.size.y
 	else:
 		_build_fallback(opts)
+	var hero := not DB.defender(id).is_empty()
 	if _fallback == null and bool(opts.get("merge", true)):
-		_merge_surfaces(opts.get("colors", {}), "%s|%s" % [id, str(opts.get("colors", {}))])
+		_merge_surfaces(opts.get("colors", {}), "%s|%s" % [id, str(opts.get("colors", {}))], hero)
+		if hero:
+			_apply_team_rim(Color(opts.get("accent", DB.defender_accent(id))))
 	elif opts.has("colors"):
 		recolor(opts.colors, opts.get("cache_key", id))
 	if opts.has("shadows"):
@@ -138,22 +154,37 @@ static func merged_material() -> ShaderMaterial:
 ## (one draw call per character instead of ~15). Uniform colours are baked in, and
 ## the result is cached per model + colour set so instances share the mesh.
 ## Transparent surfaces (the Phantom Captain's cape) stay separate with their own material.
-func _merge_surfaces(colors: Dictionary, key: String) -> void:
+func _merge_surfaces(colors: Dictionary, key: String, classes := false) -> void:
 	for mi in _meshes:
 		if mi.mesh == null or mi.mesh.get_surface_count() <= 1:
 			continue
 		var ck := key + "|" + String(mi.name)
 		var merged: ArrayMesh = _merged_cache.get(ck)
 		if merged == null:
-			merged = _build_merged(mi.mesh, colors)
+			merged = _build_merged(mi.mesh, colors, classes)
 			if merged == null:
 				continue
 			_merged_cache[ck] = merged
 		mi.mesh = merged
 
 
-static func _build_merged(src: Mesh, colors: Dictionary) -> ArrayMesh:
+## A smooth, deterministic noise of the rest-pose position (about 10 cm features) that the
+## shader uses for slight roughness variation; it is baked so it never swims with animation.
+static func _rest_noise(p: Vector3) -> float:
+	return 0.5 + 0.25 * sin(p.x * 31.0 + p.y * 7.0) * sin(p.y * 27.0 - p.z * 11.0) + 0.25 * sin(p.z * 37.0 + p.x * 13.0) * sin(p.y * 41.0)
+
+
+## Sets the accent-coloured silhouette rim (see character_merged.gdshader); respects High-contrast.
+func _apply_team_rim(accent: Color) -> void:
+	var a := TEAM_RIM * (2.0 if bool(Settings.get_value("accessibility", "high_contrast", false)) else 1.0)
+	var c := Color(accent.lightened(0.25), a)
+	for m in _meshes:
+		m.set_instance_shader_parameter("team_rim", c)
+
+
+static func _build_merged(src: Mesh, colors: Dictionary, classes := false) -> ArrayMesh:
 	var verts := PackedVector3Array()
+	var uv := PackedVector2Array()
 	var normals := PackedVector3Array()
 	var cols := PackedColorArray()
 	var uv2 := PackedVector2Array()
@@ -196,9 +227,12 @@ static func _build_merged(src: Mesh, colors: Dictionary) -> ArrayMesh:
 			var z := PackedVector3Array()
 			z.resize(sv.size())
 			normals.append_array(z)
+		var cls := float(MATERIAL_CLASS.get(mat.resource_name, 0)) if (classes and mat) else 0.0
 		for i in sv.size():
 			cols.append(lin)
 			uv2.append(Vector2(rough, metal))
+			if classes:
+				uv.append(Vector2(cls, _rest_noise(sv[i])))
 		if arr[Mesh.ARRAY_BONES] != null:
 			skinned = true
 			var b: PackedInt32Array = arr[Mesh.ARRAY_BONES]
@@ -222,6 +256,8 @@ static func _build_merged(src: Mesh, colors: Dictionary) -> ArrayMesh:
 	out[Mesh.ARRAY_NORMAL] = normals
 	out[Mesh.ARRAY_COLOR] = cols
 	out[Mesh.ARRAY_TEX_UV2] = uv2
+	if classes:
+		out[Mesh.ARRAY_TEX_UV] = uv
 	out[Mesh.ARRAY_INDEX] = indices
 	if skinned:
 		out[Mesh.ARRAY_BONES] = bones
