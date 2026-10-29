@@ -820,7 +820,7 @@ func time_out(freeze_time: float) -> void:
 
 
 ## Drains the world's colour while time is stopped (restored afterwards).
-func _desaturate(time: float) -> void:
+func _desaturate(time: float, to := 0.3) -> void:
 	var env: Environment = null
 	if battle and "stadium" in battle and battle.stadium and battle.stadium.world_env:
 		env = battle.stadium.world_env.environment
@@ -832,7 +832,7 @@ func _desaturate(time: float) -> void:
 	vfx.every_frame(time, func(k: float) -> void:
 		var tt := k * time
 		var amt := smoothstep(0.0, 0.25, tt) * (1.0 - smoothstep(time - 0.5, time, tt))
-		env.adjustment_saturation = lerpf(base, 0.3, amt)
+		env.adjustment_saturation = lerpf(base, to, amt)
 		if k >= 1.0:
 			env.adjustment_saturation = base)
 
@@ -1290,9 +1290,13 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 	if card_id == "instant_replay" and battle.effects.last_play.is_empty():
 		battle.effects.last_play = {"id": "thunderbolt", "level": level, "target": {"point": target, "enemy": lead[0] if not lead.is_empty() else null, "valid": true}}
 	if card_id == "golden_glove":
-		# A runner comes into the gilded glove's reach.
-		var pr: Dictionary = route.project(df_target.global_position)
-		battle.spawn_enemy("runner", route, float(pr.d) - 2.5, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 0.5})
+		# The gilded defender stands by the path just ahead of the pack; runners walk into its reach.
+		var gd := d0 + 4.0
+		var side := route.direction_at(gd).cross(Vector3.UP).normalized()
+		if side.dot(Field.MOUND - route.position_at(gd)) < 0.0:
+			side = -side
+		df_target.place(route.position_at(gd) + side * 2.2)
+		battle.spawn_enemy("runner", route, gd - 3.5, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 0.5})
 	battle.effects.execute(card_id, level, {"point": target, "enemy": lead[0] if not lead.is_empty() else null, "defender": df_target, "valid": true})
 	print("[VFX] cast %s" % card_id)
 	if card_id in ["tag_at_the_plate", "perfect_game"]:
@@ -1427,7 +1431,7 @@ func _giant_ball(at: Vector3, radius := 1.25) -> Node3D:
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	glow.albedo_color = Color(1.0, 0.42, 0.1, 0.55)
+	glow.albedo_color = Color(1.0, 0.38, 0.08, 0.22)
 	mi.material_overlay = glow
 	mi.position = Vector3(0, radius, 0)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
@@ -1503,8 +1507,9 @@ func salami_roll(node: Node3D, pos: Vector3, dir: Vector3, delta: float) -> void
 ## A stretch of the fire trail the ball leaves behind.
 func salami_fire(pos: Vector3, life: float) -> void:
 	var g := _flat(pos)
-	vfx.flame_sheet(g, 1.9, 1.9, maxf(life, 0.5))
-	vfx.decal("scorch", g, 1.5, Color(0.08, 0.05, 0.03, 0.8), Color(1.0, 0.45, 0.1), life + 2.0)
+	vfx.flame_sheet(g, 2.6, 2.6, maxf(life, 0.5))
+	vfx.decal("scorch", g, 1.8, Color(0.08, 0.05, 0.03, 0.85), Color(1.0, 0.45, 0.1), life + 2.0)
+	vfx.emit("fire", g + Vector3(0, 0.4, 0), 3, FIRE, 1.5, 1.4, 0.6, 1.6, 0.8)
 	vfx.emit("ember", g + Vector3(0, 0.4, 0), 3, Color(1.0, 0.55, 0.15), 2.0, 1.0)
 
 
@@ -1531,8 +1536,8 @@ func rundown_start(e: Node3D, a: Vector3, b: Vector3, dur: float) -> void:
 		return o != null and o.alive and o.rundown_t > 0.0
 	for q in [a, b]:
 		var g := _flat(q)
-		vfx.ground_fx("hexdisc", g, 1.1, Color(RUNDOWN_V, 0.9), Color.WHITE, dur)
-		vfx.beam(g, 0.7, 4.0, RUNDOWN_V, 0.6)
+		vfx.ground_fx("hexdisc", g, 1.5, Color(RUNDOWN_V, 0.95), Color.WHITE, dur)
+		vfx.beam(g, 0.8, 5.0, RUNDOWN_V, 0.9)
 		vfx.shockwave(g, 2.0, RUNDOWN_V, 0.35, 0.08)
 		_live_ring(g, null, 0.75, Color(1.0, 1.0, 1.0, 0.95), dur, alive)
 	var pts := PackedVector3Array()
@@ -1560,13 +1565,14 @@ func rain_delay(dur: float) -> void:
 	vfx.emit("smoke", Field.MOUND + Vector3(0, 18, -6), 18, Color(0.2, 0.24, 0.3, 0.8), 6.0, 0.1, 3.0, 5.0, minf(dur, 2.5))
 	vfx.flash_light(Field.MOUND + Vector3(0, 10, 0), Color(0.6, 0.75, 1.0), 3.0, 40.0, 0.25)
 	vfx.shockwave(Field.MOUND, 30.0, Color(RAIN, 0.8), 0.9, 0.03)
+	_desaturate(dur, 0.6)
 	vfx.every_frame(dur, func(k: float) -> void:
 		var fade := 1.0 - smoothstep(0.85, 1.0, k)
-		for i in 2:
-			if _rate(200.0 * fade):
+		for i in 6:
+			if _rate(260.0 * fade):
 				var off := Vector2.from_angle(randf() * TAU) * sqrt(randf()) * 30.0
-				var p := Field.MOUND + Vector3(off.x, randf_range(12.0, 18.0), off.y - 6.0)
-				vfx.emit_one("streak", p, Vector3(1.5, -30.0, 0.5), Color(RAIN, 0.75), 1.5, 0.6)
+				var p := Field.MOUND + Vector3(off.x, randf_range(10.0, 18.0), off.y - 6.0)
+				vfx.emit_one("streak", p, Vector3(1.5, -30.0, 0.5), Color(0.8, 0.9, 1.0, 0.9), 2.4, 0.6)
 		if _rate(40.0 * fade):
 			var off2 := Vector2.from_angle(randf() * TAU) * sqrt(randf()) * 26.0
 			var gp := Field.MOUND + Vector3(off2.x, 0.06, off2.y - 4.0)
@@ -1589,7 +1595,7 @@ func intentional_walk(e: Node3D, dur: float) -> void:
 	for i in 4:
 		var a := lerpf(-0.9, 0.9, i / 3.0)
 		var p := c + Vector3(a * 1.1, 1.4 + 0.35 * cos(a), 0)
-		vfx.glyph(p, 13, 0.9, Color(0.95, 1.0, 0.95), 1.1, i * 0.12, 0.35)
+		vfx.glyph(p, 13, 1.4, Color(0.95, 1.0, 0.95), 1.2, i * 0.12, 0.35)
 		vfx.after(i * 0.12, func() -> void:
 			vfx.emit_one("flash", p, Vector3.ZERO, Color(WALK, 0.8), 0.6, 0.6)
 			Audio.play("glove_catch", -14.0, 0.1))

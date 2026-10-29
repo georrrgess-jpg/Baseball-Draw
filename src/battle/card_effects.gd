@@ -1147,11 +1147,15 @@ func _tick_reliever(it: Dictionary, delta: float) -> bool:
 					var crit := randf() < 0.1 + tgt.crit_bonus()
 					if crit:
 						dmg *= 1.75
+					var mw := weakref(model)
+					var tw := weakref(tgt)
 					battle.get_tree().create_timer(0.3 / 1.6, false).timeout.connect(func() -> void:
-						if not is_instance_valid(node) or not is_instance_valid(tgt) or not tgt.targetable():
+						var m := mw.get_ref() as CharacterModel
+						var en := tw.get_ref() as Enemy
+						if m == null or en == null or not en.targetable():
 							return
-						battle.vfx.arm_swoosh(model, RELIEF)
-						battle.projectiles.launch(model.hand_position(), tgt, 30.0, {"card": "relief_pitcher", "damage": dmg, "crit": crit,
+						battle.vfx.arm_swoosh(m, RELIEF)
+						battle.projectiles.launch(m.hand_position(), en, 30.0, {"card": "relief_pitcher", "damage": dmg, "crit": crit,
 							"accuracy": 90.0, "color": RELIEF, "trail": "comet", "fx": "relief"}))
 		"out":
 			it.t = 99.0
