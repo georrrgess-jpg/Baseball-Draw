@@ -23,6 +23,8 @@ const HINTS := {
 	# Cards & Deck.
 	"deck_intro": ["YOUR DECK", "You take these 8 cards into every game. Click a card in your collection to add it, click a deck card to take it out (or drag them)."],
 	"deck_mastery": ["CARD MASTERY", "Stars on a card show mastery: play it in real games 10, 40 and 120 times for 1, 2 and 3 stars. Three stars earns a gold MASTERED frame. Cosmetic only."],
+	"deck_auto": ["AUTO BUILD", "Auto Build picks the best 8 of your cards for your team and says why. Choose a style next to it (Balanced, Aggressive, Control, Boss Killer). Changed your mind? UNDO puts your old deck back."],
+	"deck_compare": ["COMPARE CARDS", "Press COMPARE in the card panel (or shift-click a card), then click a second card: both open side by side with every stat, the better one in green."],
 	"deck_sets": ["COLLECTION SETS", "Own every card of a set (Offense, Control, Defense, Utility, Signature) to claim a free Pro Pack here. The full collection earns a Champion Pack."],
 	# Upgrade Cards.
 	"upgrades_intro": ["UPGRADE CARDS", "Each level makes a card stronger in every game. A level costs copies of that card (duplicates from packs) plus coins. READY means you can upgrade it now."],
@@ -46,8 +48,8 @@ const HINTS := {
 const SCREENS := {
 	"main_menu": ["menu_home", "menu_daily", "menu_promotion"],
 	"packs": ["packs_intro", "packs_rarity"],
-	"deck_builder": ["deck_intro", "deck_mastery", "deck_sets"],
-	"collection": ["deck_mastery", "deck_sets", "packs_rarity"],
+	"deck_builder": ["deck_intro", "deck_auto", "deck_compare", "deck_mastery", "deck_sets"],
+	"collection": ["deck_mastery", "deck_compare", "deck_sets", "packs_rarity"],
 	"card_upgrades": ["upgrades_intro"],
 	"roster": ["team_intro", "team_road", "team_traits"],
 	"play_menu": ["play_modes", "play_daily", "play_ranked", "play_endless", "play_practice"],
@@ -57,7 +59,7 @@ const SCREENS := {
 
 ## Feature hints: part of a screen's "?" replay, but shown automatically only when the screen
 ## passes them in `extra` (the player has actually met the feature).
-const FEATURE_ONLY := ["menu_promotion", "deck_mastery", "deck_sets", "team_traits",
+const FEATURE_ONLY := ["menu_promotion", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
 	"play_daily", "play_ranked", "play_endless", "play_practice"]
 
 const ACCENT := UITheme.GOLD

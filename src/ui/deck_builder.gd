@@ -5,6 +5,9 @@ extends MenuScreen
 ## Bottom left: the collection with category tabs, rarity chips, search and sort. Owned
 ## cards first; cards not collected yet sit in their own section with a link to card packs.
 ## Bottom right: the inspector for the hovered card. Upgrading lives in CardUpgradesScreen.
+## Auto Build (DeckAI, four styles) fills the deck with the best pick for the team and explains it in a
+## banner and a chip on each slot; Undo puts the previous deck back. COMPARE in the inspector (or
+## shift-click a card) then a click on a second card opens the side-by-side CardCompare overlay.
 
 const SLOT_SIZE := Vector2(136, 190)
 const SLOT_GAP := 10
@@ -52,6 +55,22 @@ var _sets_row: HBoxContainer
 var _press_id := ""
 var _press_pos := Vector2.ZERO
 var _press_from := -1
+var _auto_mode := "balanced"
+var _auto_result: Dictionary = {}    # last DeckAI.build() result (reasons per card)
+var _undo_deck: Array = []           # the deck before the last Auto Build / Clear
+var _auto_btn: Button
+var _mode_btn: OptionButton
+var _undo_btn: Button
+var _banner: PanelContainer
+var _banner_title: Label
+var _banner_text: Label
+var _chips: Array[Label] = []
+var _compare: CardCompare
+var _cmp_ids: Array = ["", ""]
+var _pick_side := -1                 # waiting for a card for this compare side (-1 = not picking)
+var _pick_bar: Control
+var _pick_label: Label
+var _compare_btn: Button
 
 
 func _ready() -> void:
@@ -62,6 +81,9 @@ func _ready() -> void:
 		"Every ability card. New cards and upgrade copies come from card packs." if collection_mode
 		else "Choose the 8 cards you take into every game.")
 	deck = Profile.data.deck.duplicate()
+	_auto_mode = str(Profile.data.get("flags", {}).get("auto_build_mode", "balanced"))
+	if not _auto_mode in DeckAI.MODES:
+		_auto_mode = "balanced"
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--demo-remove="):   # screenshot helper: show a partly filled deck
 			deck = deck.slice(0, maxi(0, deck.size() - int(a.split("=")[1])))
@@ -84,13 +106,25 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--claim-set="):   # screenshot helper: the set-complete moment
 			get_tree().create_timer(1.5).timeout.connect(_claim_set.bind(a.split("=")[1]))
-		if a.begins_with("--inspect="):   # screenshot helper: show a card in the inspector
-			_inspect.call_deferred(a.split("=")[1])
+		if a.begins_with("--inspect="):   # screenshot helper: show a card in the inspector (after --auto-build)
+			if Array(OS.get_cmdline_user_args()).any(func(x: String) -> bool: return x.begins_with("--auto-build")):
+				get_tree().create_timer(1.4).timeout.connect(_inspect.bind(a.split("=")[1]))
+			else:
+				_inspect.call_deferred(a.split("=")[1])
+		if a.begins_with("--auto-build") and not collection_mode:   # screenshot helper: --auto-build[=mode]
+			if "=" in a:
+				_set_mode(a.split("=")[1])
+			get_tree().create_timer(0.8).timeout.connect(_auto_build)
+		if a.begins_with("--compare="):   # screenshot helper: --compare=a,b
+			var pair := a.split("=")[1].split(",")
+			if pair.size() == 2:
+				get_tree().create_timer(0.6).timeout.connect(_open_compare.bind(pair[0], pair[1]))
 
 
 ## Hint arrows: the deck slots, the card inspector (mastery) and the collection sets row.
 func _hint_targets() -> Dictionary:
-	return {"deck_intro": _deck_panel, "deck_mastery": _detail, "deck_sets": _sets_row}
+	return {"deck_intro": _deck_panel, "deck_mastery": _detail, "deck_sets": _sets_row,
+		"deck_auto": _auto_btn, "deck_compare": _compare_btn if is_instance_valid(_compare_btn) else _detail}
 
 
 ## Feature hints shown automatically once the player has met them: mastery after a card has been
@@ -103,6 +137,10 @@ func _hint_features() -> Array:
 			break
 	if CollectionSets.claimable_count() > 0 or Profile.pack_count() > 0 or int(Profile.data.get("packs_opened", 0)) > 0:
 		extra.append("deck_sets")
+	if DeckAI.profile_context().owned.size() > Profile.DECK_SIZE:   # there is a choice to make
+		if not collection_mode:
+			extra.append("deck_auto")
+		extra.append("deck_compare")
 	return extra
 
 
@@ -110,9 +148,12 @@ func _hint_features() -> Array:
 
 func _build_deck_panel() -> Control:
 	_deck_panel = panel(Color(0.03, 0.05, 0.1, 0.94), Color(UITheme.GOLD, 0.35), 14)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 14)
+	_deck_panel.add_child(outer)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 22)
-	_deck_panel.add_child(hb)
+	outer.add_child(hb)
 
 	var info := VBoxContainer.new()
 	info.custom_minimum_size = Vector2(250, 0)
@@ -153,28 +194,51 @@ func _build_deck_panel() -> Control:
 		_slot_cards.append(null)
 
 	var act := VBoxContainer.new()
-	act.custom_minimum_size = Vector2(270, 0)
+	act.custom_minimum_size = Vector2(290, 0)
 	act.alignment = BoxContainer.ALIGNMENT_CENTER
 	act.add_theme_constant_override("separation", 8)
 	hb.add_child(act)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	act.add_child(row)
-	var auto := UITheme.small_button("Auto Build", UITheme.GOLD, 22)
-	auto.tooltip_text = "Fill the deck with a balanced pick of your best cards"
-	auto.icon = DB.icon("special")
-	auto.add_theme_constant_override("icon_max_width", 20)
-	auto.pressed.connect(_auto_build)
-	row.add_child(auto)
-	var clear := UITheme.small_button("Clear", UITheme.SCARLET, 22)
+	_auto_btn = UITheme.small_button("Auto Build", UITheme.GOLD, 22)
+	_auto_btn.icon = DB.icon("special")
+	_auto_btn.add_theme_constant_override("icon_max_width", 20)
+	_auto_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_auto_btn.custom_minimum_size = Vector2(0, 42)
+	_auto_btn.pressed.connect(_auto_build)
+	row.add_child(_auto_btn)
+	_mode_btn = OptionButton.new()
+	_mode_btn.name = "AutoMode"
+	for m in DeckAI.MODES:
+		_mode_btn.add_item(str(DeckAI.MODE_NAMES[m]))
+	_mode_btn.add_theme_font_size_override("font_size", UITheme.FS_SMALL)
+	_mode_btn.custom_minimum_size = Vector2(124, 42)
+	_mode_btn.fit_to_longest_item = false
+	_mode_btn.item_selected.connect(func(i: int) -> void:
+		_set_mode(DeckAI.MODES[i])
+		Audio.ui("ui_tab"))
+	row.add_child(_mode_btn)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
+	act.add_child(row2)
+	_undo_btn = UITheme.small_button("Undo", UITheme.BLUE, 21)
+	_undo_btn.icon = DB.icon("back")
+	_undo_btn.add_theme_constant_override("icon_max_width", 18)
+	_undo_btn.tooltip_text = "Put back the deck you had before Auto Build or Clear (Ctrl+Z)"
+	_undo_btn.pressed.connect(_undo)
+	row2.add_child(_undo_btn)
+	var clear := UITheme.small_button("Clear", UITheme.SCARLET, 21)
 	clear.tooltip_text = "Empty all 8 slots"
 	clear.pressed.connect(_clear_deck)
-	row.add_child(clear)
-	for b in row.get_children():
+	row2.add_child(clear)
+	for b in row2.get_children():
 		(b as Button).size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		(b as Button).custom_minimum_size = Vector2(0, 44)
-	var test := UITheme.small_button("Test Deck on the Practice Field", UITheme.BLUE, 21)
-	test.custom_minimum_size = Vector2(0, 44)
+		(b as Button).custom_minimum_size = Vector2(0, 40)
+	_set_mode(_auto_mode, false)
+	_update_undo()
+	var test := UITheme.small_button("Test Deck on the Practice Field", UITheme.BLUE, 20)
+	test.custom_minimum_size = Vector2(0, 40)
 	test.pressed.connect(_test_deck)
 	act.add_child(test)
 	var up := UITheme.menu_button("UPGRADE CARDS  ▶", UITheme.GOLD, 28, -0.12)
@@ -195,7 +259,42 @@ func _build_deck_panel() -> Control:
 	_upgrade_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	up.add_child(_upgrade_badge)
 	_update_upgrade_badge()
+	outer.add_child(_build_banner())
 	return _deck_panel
+
+
+## The Auto Build explanation under the slots: style, why (coverage, curve, combos, signatures), Undo.
+func _build_banner() -> Control:
+	_banner = UITheme.tile_panel(Color(UITheme.GOLD, 0.55), 10, true)
+	_banner.name = "AutoBanner"
+	_banner.visible = false
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 14)
+	_banner.add_child(hb)
+	var ic := UITheme.icon_rect("special", 34, UITheme.GOLD)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(ic)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", -2)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(vb)
+	_banner_title = UITheme.label("", UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_header())
+	vb.add_child(_banner_title)
+	_banner_text = UITheme.label("", UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+	_banner_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(_banner_text)
+	var undo := UITheme.button("UNDO", "secondary", UITheme.FS_SMALL, "back")
+	undo.name = "BannerUndo"
+	undo.tooltip_text = "Put your previous deck back (Ctrl+Z)"
+	undo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	undo.pressed.connect(_undo)
+	hb.add_child(undo)
+	var ok := UITheme.button("OK", "ghost", UITheme.FS_SMALL)
+	ok.tooltip_text = "Hide this summary (the deck stays)"
+	ok.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ok.pressed.connect(func() -> void: _hide_banner())
+	hb.add_child(ok)
+	return _banner
 
 
 func _make_slot(i: int) -> Control:
@@ -222,6 +321,16 @@ func _make_slot(i: int) -> Control:
 	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	empty.add_child(num)
 	slot.add_child(empty)
+	var chip := UITheme.label("", UITheme.FS_MIN, Color.WHITE, UITheme.font_body_bold())
+	chip.name = "Chip"
+	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chip.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.z_index = 2
+	chip.visible = false
+	slot.add_child(chip)
+	_chips.append(chip)
 	slot.set_drag_forwarding(func(_p: Vector2) -> Variant: return null, _can_drop_slot.bind(i), _drop_slot.bind(i))
 	return slot
 
@@ -282,6 +391,7 @@ func _rebuild_deck(hidden := -1, slide_from := -1) -> void:
 		if slide_from >= 0 and i >= slide_from:
 			cv.position.x = SLOT_SIZE.x + SLOT_GAP
 			cv.create_tween().tween_property(cv, "position:x", 0.0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_update_chips()
 
 
 func _update_deck_info() -> void:
@@ -452,6 +562,8 @@ func _deck_full() -> void:
 func _clear_deck() -> void:
 	if deck.is_empty():
 		return
+	_undo_deck = deck.duplicate()
+	_hide_banner()
 	for i in range(deck.size() - 1, -1, -1):
 		var cv: Variant = _slot_cards[i]
 		if cv != null and is_instance_valid(cv):
@@ -463,52 +575,206 @@ func _clear_deck() -> void:
 	deck.clear()
 	Audio.ui("ui_back")
 	_after_change()
+	_update_undo()
 	await get_tree().create_timer(0.4).timeout
 	if is_inside_tree() and deck.is_empty():
 		_rebuild_deck()
 
 
-## Builds a balanced deck: team signatures first, then the best owned cards per category.
+## Auto Build: DeckAI picks the best 8 owned cards for the team in the chosen style; the banner says why
+## and each slot gets a reason chip. The previous deck is kept for Undo.
 func _auto_build() -> void:
-	var picks: Array = []
-	for id in Profile.data.team:
-		var sig: String = DB.defender(id).signature
-		if Profile.is_card_owned(sig) and not sig in picks and picks.size() < 3:
-			picks.append(sig)
-	var score := func(cid: String) -> float:
-		var c := DB.card(cid)
-		return DB.RARITY_ORDER.find(c.rarity) * 1.5 + Profile.card_level(cid) * 1.2 - absf(float(c.cost) - 3.5) * 0.4
-	for cat in DB.CATEGORY_ORDER:
-		var have := 0
-		for p in picks:
-			if DB.card(p).category == cat:
-				have += 1
-		var opts: Array = []
-		for cid in DB.card_order:
-			if Profile.is_card_owned(cid) and DB.card(cid).category == cat and not cid in picks:
-				opts.append(cid)
-		opts.sort_custom(func(a, b) -> bool: return score.call(a) > score.call(b))
-		for cid in opts:
-			if have >= 2 or picks.size() >= Profile.DECK_SIZE:
-				break
-			picks.append(cid)
-			have += 1
-	var rest: Array = []
-	for cid in DB.card_order:
-		if Profile.is_card_owned(cid) and not cid in picks:
-			rest.append(cid)
-	rest.sort_custom(func(a, b) -> bool: return score.call(a) > score.call(b))
-	for cid in rest:
-		if picks.size() >= Profile.DECK_SIZE:
-			break
-		picks.append(cid)
-	deck = picks
+	if collection_mode or not is_inside_tree():
+		return
+	var r := DeckAI.build(_auto_mode)
+	var new_deck: Array = r.deck
+	if new_deck.is_empty():
+		Router.toast("You don't own any cards yet. Open card packs to get some.", "warn")
+		return
+	if new_deck != deck:
+		_undo_deck = deck.duplicate()
+	_auto_result = r
+	deck = new_deck.duplicate()
 	Audio.play("card_whoosh", -4.0)
 	_rebuild_deck()
 	for i in deck.size():
 		if _slot_cards[i] != null:
 			_pop(_slot_cards[i] as CardView, 0.05 * i)
 	_after_change()
+	_show_banner(r)
+	_update_undo()
+	if deck.size() < Profile.DECK_SIZE:
+		Router.toast("You own only %d cards: the deck needs 8 to be saved. Open card packs for more." % deck.size(), "warn")
+
+
+func _set_mode(m: String, save := true) -> void:
+	if not m in DeckAI.MODES:
+		return
+	_auto_mode = m
+	if _mode_btn:
+		_mode_btn.select(DeckAI.MODES.find(m))
+		_mode_btn.tooltip_text = "Auto Build style: %s. %s" % [DeckAI.MODE_NAMES[m], DeckAI.MODE_TEXT[m]]
+	if _auto_btn:
+		_auto_btn.tooltip_text = "Build the best deck from your cards for your team (%s). %s" % [DeckAI.MODE_NAMES[m], DeckAI.MODE_TEXT[m]]
+	if save:
+		Profile.data.flags["auto_build_mode"] = m
+		Profile.save_soon()
+
+
+func _show_banner(r: Dictionary) -> void:
+	if _banner == null:
+		return
+	_banner_title.text = "AUTO BUILD  ·  %s" % str(DeckAI.MODE_NAMES.get(r.mode, "")).to_upper()
+	_banner_text.text = str(r.summary)
+	_banner.tooltip_text = "Hover a deck card to see why it was picked."
+	var was := _banner.visible
+	_banner.visible = true
+	if not was:
+		UITheme.animate_in(_banner, 0.15, 0.98)
+
+
+func _hide_banner() -> void:
+	_auto_result = {}
+	if _banner:
+		_banner.visible = false
+	_update_chips()
+	if is_instance_valid(_detail):
+		_refresh_detail()
+
+
+func _undo() -> void:
+	if _undo_deck.is_empty() or collection_mode:
+		Audio.ui("ui_error")
+		return
+	deck = _undo_deck.duplicate()
+	_undo_deck = []
+	_auto_result = {}
+	if _banner:
+		_banner.visible = false
+	Audio.play("card_whoosh", -6.0)
+	_rebuild_deck()
+	for i in deck.size():
+		if _slot_cards[i] != null:
+			_pop(_slot_cards[i] as CardView, 0.03 * i)
+	_after_change()
+	_update_undo()
+	Router.toast("Previous deck restored.", "info", 2.0)
+
+
+func _update_undo() -> void:
+	if _undo_btn:
+		_undo_btn.disabled = _undo_deck.is_empty()
+
+
+const CHIP_COLORS := {"SIGNATURE": Color("#B8860B"), "BOSS": Color("#A3141C"), "AOE": Color("#C2411F"),
+	"RUN-STOP": Color("#1B7F76"), "CONTROL": Color("#4B3FB8"), "COMBO": Color("#1E8A4C"), "ECONOMY": Color("#1F7FA3"),
+	"BUFF": Color("#9C7A12"), "CHEAP": Color("#2E4A70")}
+
+
+## One reason chip under each auto-built card (its most important reason).
+func _update_chips() -> void:
+	var reasons: Dictionary = _auto_result.get("reasons", {})
+	for i in _chips.size():
+		var chip := _chips[i]
+		var cid: String = deck[i] if i < deck.size() else ""
+		if cid == "" or not reasons.has(cid) or (reasons[cid] as Array).is_empty():
+			chip.visible = false
+			continue
+		var first: Array = reasons[cid][0]
+		var key := str(first[0])
+		var col: Color = CHIP_COLORS.get(key, CHIP_COLORS.get(key.split(" ")[0], Color("#2F4F7F")))
+		if key.begins_with("NO "):
+			col = Color("#4A4F5A")
+		chip.text = key
+		chip.tooltip_text = str(first[1])
+		chip.add_theme_stylebox_override("normal", UITheme.panel_style(col, Color(1, 1, 1, 0.55), 1, 10, 0))
+		var w := clampf(chip.get_theme_font("font").get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, UITheme.FS_MIN).x + 18.0, 60.0, SLOT_SIZE.x - 6.0)
+		chip.custom_minimum_size = Vector2(w, 24)
+		chip.size = chip.custom_minimum_size
+		chip.position = Vector2((SLOT_SIZE.x - w) * 0.5, SLOT_SIZE.y - 13.0)
+		chip.visible = true
+
+
+# ================================================================ compare
+
+## Starts a comparison with `a` on the left: the next card clicked becomes the right side.
+func _start_compare(a: String) -> void:
+	_cmp_ids = [a, ""]
+	_begin_pick(1)
+
+
+func _begin_pick(side: int) -> void:
+	_pick_side = side
+	if _compare and is_instance_valid(_compare):
+		_compare.visible = false
+	var other: String = _cmp_ids[1 - side]
+	var txt := "Click a card to compare with %s" % DB.card(other).get("name", other) if _cmp_ids[side] == "" \
+		else "Click a card to replace %s" % DB.card(_cmp_ids[side]).get("name", "")
+	if _pick_bar == null or not is_instance_valid(_pick_bar):
+		_pick_bar = UITheme.tile_panel(Color(UITheme.GOLD, 0.8), 10, true)
+		_pick_bar.name = "ComparePick"
+		_pick_bar.z_index = 30
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 12)
+		_pick_bar.add_child(hb)
+		hb.add_child(UITheme.icon_rect("swap", 28, UITheme.GOLD))
+		_pick_label = UITheme.label("", UITheme.FS_LEAD, UITheme.OFFWHITE, UITheme.font_header())
+		_pick_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hb.add_child(_pick_label)
+		var cancel := UITheme.button("CANCEL", "ghost", UITheme.FS_SMALL)
+		cancel.tooltip_text = "Stop comparing (Esc)"
+		cancel.pressed.connect(func() -> void:
+			if is_instance_valid(_pick_bar):
+				_pick_bar.queue_free())
+		hb.add_child(cancel)
+		add_child(_pick_bar)
+		_pick_bar.tree_exiting.connect(_end_pick)
+		push_overlay(_pick_bar)
+		_pick_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_pick_bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_pick_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		_pick_bar.position.y -= 30
+		UITheme.animate_in(_pick_bar, 0.0, 0.9)
+	_pick_label.text = txt + "  ·  Esc cancels"
+	Audio.ui("ui_tab")
+
+
+## The pick bar was closed (a card was picked, CANCEL, or Esc): bring a hidden comparison back.
+func _end_pick() -> void:
+	_pick_side = -1
+	_pick_bar = null
+	if _compare and is_instance_valid(_compare) and not _compare.is_queued_for_deletion():
+		_compare.visible = true
+
+
+func _compare_pick(id: String) -> void:
+	var side := _pick_side
+	if side < 0:
+		return
+	if id == _cmp_ids[1 - side]:
+		Audio.ui("ui_error")
+		return
+	_cmp_ids[side] = id
+	if is_instance_valid(_pick_bar):
+		_pick_bar.queue_free()   # _end_pick shows a hidden comparison again
+	if _compare and is_instance_valid(_compare) and not _compare.is_queued_for_deletion():
+		_compare.set_side(side, id)
+	else:
+		_open_compare(_cmp_ids[0], _cmp_ids[1])
+
+
+func _open_compare(a: String, b: String) -> void:
+	if not DB.cards.has(a) or not DB.cards.has(b):
+		return
+	if _compare and is_instance_valid(_compare):
+		_compare.queue_free()
+	_cmp_ids = [a, b]
+	_compare = CardCompare.new(a, b, deck)
+	_compare.change_requested.connect(func(side: int) -> void: _begin_pick(side))
+	_compare.closed.connect(func() -> void: _compare = null)
+	add_child(_compare)
+	push_overlay(_compare)
+	Audio.play("card_draw", -5.0)
 
 
 func _test_deck() -> void:
@@ -546,7 +812,11 @@ func _card_input(e: InputEvent, id: String, cv: CardView, deck_index: int) -> vo
 		_inspect(id)
 	elif _press_id == id and _press_from == deck_index and mb.position.distance_to(_press_pos) < CLICK_SLOP:
 		_press_id = ""
-		if deck_index >= 0:
+		if _pick_side >= 0:            # comparing: this click picks the card
+			_compare_pick(id)
+		elif mb.shift_pressed:         # shift-click: compare this card with the next one clicked
+			_start_compare(id)
+		elif deck_index >= 0:
 			_remove_at(deck_index)
 		else:
 			_add_card(id, cv)
@@ -1120,6 +1390,12 @@ func _refresh_detail() -> void:
 	stats.add_child(_stat(str(c.category), str(c.category).to_upper(), str(c.rarity).capitalize(), DB.rarity_color(c.rarity)))
 	if owned:
 		stats.add_child(_stat("upgrade", "LEVEL", "%d / %d" % [lvl, DB.card_max_level], UITheme.GOLD))
+	var cid_cmp := selected
+	_compare_btn = UITheme.button("COMPARE", "secondary", UITheme.FS_SMALL, "swap")
+	_compare_btn.name = "CompareButton"
+	_compare_btn.tooltip_text = "Compare this card side by side with another one (or shift-click a card)"
+	_compare_btn.pressed.connect(func() -> void: _start_compare(cid_cmp))
+	stats.add_child(_compare_btn)
 
 	var nm := UITheme.title(str(c.name).to_upper(), 40)
 	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1127,6 +1403,9 @@ func _refresh_detail() -> void:
 	var desc := UITheme.label(DB.card_text(selected, lvl), 22, UITheme.OFFWHITE)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail.add_child(desc)
+	var why: Array = _auto_result.get("reasons", {}).get(selected, []) if selected in deck else []
+	if not why.is_empty():
+		_detail.add_child(_why_block(why))
 	if owned or Profile.card_plays(selected) > 0:
 		_detail.add_child(MasteryUI.block(selected))
 
@@ -1199,6 +1478,36 @@ func _refresh_detail() -> void:
 		_detail.add_child(up)
 
 
+## "Why Auto Build picked it": one line per reason, each with its chip.
+func _why_block(why: Array) -> Control:
+	var p := UITheme.tile_panel(Color(UITheme.GOLD, 0.45), 12, true)
+	p.name = "WhyBlock"
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	p.add_child(vb)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	h.add_child(UITheme.icon_rect("special", 22, UITheme.GOLD))
+	h.add_child(UITheme.label("WHY AUTO BUILD PICKED IT", UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_header()))
+	vb.add_child(h)
+	for r in why:
+		var key := str(r[0])
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var col: Color = CHIP_COLORS.get(key, CHIP_COLORS.get(key.split(" ")[0], Color("#2F4F7F")))
+		if key.begins_with("NO "):
+			col = Color("#4A4F5A")
+		var b := UITheme.badge(key, col)
+		b.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		row.add_child(b)
+		var t := UITheme.label(str(r[1]), UITheme.FS_MIN, UITheme.OFFWHITE, UITheme.font_body_bold())
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(t)
+		vb.add_child(row)
+	return p
+
+
 func _stat(icon: String, title: String, value: String, col: Color) -> Control:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
@@ -1219,6 +1528,12 @@ func _stat(icon: String, title: String, value: String, col: Color) -> Control:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("info") and _search and not _search.has_focus():
 		_search.grab_focus()
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo \
+			and (event as InputEventKey).keycode == KEY_Z and (event as InputEventKey).is_command_or_control_pressed() \
+			and not (_search and _search.has_focus()) and not _undo_deck.is_empty():
+		_undo()
 		get_viewport().set_input_as_handled()
 		return
 	super._unhandled_input(event)

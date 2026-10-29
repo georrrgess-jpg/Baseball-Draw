@@ -99,6 +99,10 @@ func _run() -> void:
 		await _test_deck_menus()
 		_finish()
 		return
+	if "--ui-test-section=autobuild" in OS.get_cmdline_user_args():
+		await _test_auto_build()
+		_finish()
+		return
 	if "--ui-test-section=cards" in OS.get_cmdline_user_args():
 		await _test_card_clicks()
 		_finish()
@@ -336,6 +340,7 @@ func _run() -> void:
 	await _test_packs()
 	await _test_multi_packs()
 	await _test_deck_menus()
+	await _test_auto_build()
 	await _test_daily()
 	await _test_missions()
 	await _test_navigation()
@@ -579,6 +584,138 @@ func _test_deck_menus() -> void:
 	await _wait(0.5)
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+func _shift_click(p: Vector2) -> void:
+	_mouse_move(p)
+	await _wait(0.05)
+	for pressed in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.position = p
+		e.global_position = p
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = pressed
+		e.shift_pressed = true
+		Input.parse_input_event(e)
+		await _wait(0.05)
+	await _wait(0.1)
+
+
+## A visible owned collection card that is not `except`.
+func _visible_card(db: Node, except: Array) -> String:
+	var scroll: Control = db._owned_grid.get_parent().get_parent()
+	for cid in DB.card_order:
+		if db._col_views.has(cid) and not cid in except and Profile.is_card_owned(cid):
+			var v: CardView = db._col_views[cid]
+			if scroll.get_global_rect().encloses(v.get_global_rect()):
+				return cid
+	return ""
+
+
+## 15b. Auto Build and card comparison: Auto Build changes the deck, saves it and explains it (banner
+## and slot chips); UNDO restores the old deck; COMPARE + a click opens two cards side by side, CHANGE
+## swaps one side, shift-click starts a comparison too, and Esc closes it without leaving the screen.
+func _test_auto_build() -> void:
+	var saved_cards: Dictionary = Profile.data.cards.duplicate(true)
+	var saved_deck: Array = Profile.data.deck.duplicate()
+	for cid in DB.card_order:
+		Profile.grant_card(cid)
+	Profile.data.deck = Profile.STARTER_DECK.duplicate()
+	Session.menu_tab = "deck"
+	Router.goto("deck_builder")
+	_check(await _wait_scene("deck_builder"), "Cards & Deck opens (auto build)")
+	await _wait(1.0)
+	var db: Node = get_tree().current_scene
+	var old: Array = Profile.data.deck.duplicate()
+	_check(db._auto_btn != null and db._undo_btn.disabled, "Auto Build button shown, Undo disabled at first")
+	await _click(_button_center(db._auto_btn))
+	await _wait(1.0)
+	var seen := {}
+	for cid in db.deck:
+		seen[cid] = true
+	_check(db.deck.size() == Profile.DECK_SIZE and seen.size() == Profile.DECK_SIZE and db.deck != old, "Auto Build fills 8 different cards and changes the deck (%s)" % [db.deck])
+	_check(Profile.data.deck == db.deck, "the auto-built deck is saved")
+	_check(db._banner.visible and "avg cost" in str(db._banner_text.text), "the summary banner explains the deck ('%s')" % db._banner_text.text)
+	var chips := 0
+	for ch in db._chips:
+		if ch.visible and ch.text != "":
+			chips += 1
+	_check(chips == Profile.DECK_SIZE, "every deck slot shows a reason chip (%d)" % chips)
+	db._inspect(db.deck[0])
+	await _wait(0.3)
+	_check(db._detail.find_child("WhyBlock", true, false) != null, "the inspector says why a deck card was picked")
+	_check(not db._undo_btn.disabled, "Undo is available after Auto Build")
+	var undo := _find_button(db._banner, "UNDO")
+	_check(undo != null, "the banner has an UNDO button")
+	if undo:
+		await _click(_button_center(undo))
+		await _wait(0.6)
+		_check(db.deck == old and Profile.data.deck == old, "UNDO restores (and saves) the previous deck")
+		_check(not db._banner.visible and db._undo_btn.disabled, "the banner hides after UNDO")
+	# Another style gives a deck that fits it.
+	db._mode_btn.select(DeckAI.MODES.find("boss"))
+	db._mode_btn.item_selected.emit(DeckAI.MODES.find("boss"))
+	await _click(_button_center(db._auto_btn))
+	await _wait(0.8)
+	var bosses := 0
+	for cid in db.deck:
+		if "boss" in DeckAI.analyze(cid, Profile.card_level(cid)).tags:
+			bosses += 1
+	_check(bosses >= 2 and "BOSS KILLER" in str(db._banner_title.text), "Boss Killer style picks 2+ boss answers (%d)" % bosses)
+	_check(str(Profile.data.flags.get("auto_build_mode", "")) == "boss", "the chosen style is remembered")
+	# Compare: COMPARE in the inspector, then click a second card.
+	var a: String = db.deck[0]
+	db._inspect(a)
+	await _wait(0.3)
+	_check(db._compare_btn != null and db._compare_btn.is_visible_in_tree(), "the inspector has a COMPARE button")
+	await _click(_button_center(db._compare_btn))
+	await _wait(0.3)
+	_check(db._pick_side == 1 and db._pick_bar != null and db._pick_bar.visible, "COMPARE asks for a second card")
+	var b := _visible_card(db, [a])
+	_check(b != "", "a second card is visible")
+	if b != "":
+		await _click(_ctl_center(db._col_views[b]))
+		await _wait(0.5)
+		var cmp: Node = db._compare
+		_check(cmp != null and is_instance_valid(cmp) and cmp.visible and cmp.ids == [a, b], "clicking a card opens the comparison of %s and %s" % [a, b])
+		_check(db.deck.size() == Profile.DECK_SIZE and Profile.data.deck == db.deck, "picking a card to compare does not edit the deck")
+		if cmp:
+			_check(cmp.find_child("Side0", true, false) != null and cmp.find_child("Side1", true, false) != null, "both cards are shown side by side")
+			var better := 0
+			for row in cmp.find_child("Table", true, false).get_children():
+				if row.has_meta("better"):
+					better += 1
+			_check(better >= 1, "better values are highlighted (%d rows)" % better)
+			var chg: Button = cmp.find_child("Change0", true, false)
+			await _click(_button_center(chg))
+			await _wait(0.3)
+			_check(not cmp.visible and db._pick_side == 0, "CHANGE hides the comparison and asks for a card")
+			var c := _visible_card(db, [a, b])
+			if c != "":
+				await _click(_ctl_center(db._col_views[c]))
+				await _wait(0.5)
+				_check(cmp.visible and cmp.ids == [c, b], "the picked card replaces the left side (%s)" % [cmp.ids])
+			await _key("pause")
+			await _wait(0.4)
+			_check(db._compare == null and Router.current == "deck_builder", "Esc closes the comparison and stays on Cards & Deck")
+	# Shift-click starts a comparison as well.
+	var s1 := _visible_card(db, [])
+	var s2 := _visible_card(db, [s1])
+	if s1 != "" and s2 != "":
+		await _shift_click(_ctl_center(db._col_views[s1]))
+		await _wait(0.3)
+		_check(db._pick_side == 1 and db.deck.size() == Profile.DECK_SIZE, "shift-click starts a comparison without editing the deck")
+		await _click(_ctl_center(db._col_views[s2]))
+		await _wait(0.5)
+		_check(db._compare != null and db._compare.ids == [s1, s2], "then a click opens it")
+		await _key("pause")
+		await _wait(0.4)
+		_check(db._compare == null, "Esc closes it")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	Profile.data.cards = saved_cards   # leave the collection as the other sections expect it
+	Profile.data.deck = saved_deck
+	Profile.save_soon()
 
 
 ## 16. Daily Challenge: the main-menu tile opens Play with the Daily selected, START plays
