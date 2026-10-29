@@ -43,6 +43,7 @@ func _run() -> void:
 	test_level_road_and_achievements()
 	test_update6_waves()
 	test_upgrade_all()
+	test_deck_ai()
 	await test_menus()
 	test_update5_content()
 	await test_battle_systems()
@@ -1388,4 +1389,121 @@ func test_upgrade_all() -> void:
 	ok(Profile.upgrade_all_plan().levels == 0, "after Upgrade All nothing affordable is left over")
 	Profile.data.coins = 0
 	ok(Profile.upgrade_all_plan().levels == 0 and Profile.upgrade_all().is_empty(), "with no coins nothing is upgraded")
+	Profile.reset_profile()
+
+
+# ---------------------------------------------------------------- deck AI (Auto Build)
+
+func _ai_ctx(owned: Array, team: Array = [], captain := "ace", levels := {}) -> Dictionary:
+	if team.is_empty():
+		team = ["ace", "rico", "maya", "jax", "kai", "bruno"]
+	var dl := {}
+	for d in team:
+		dl[d] = 1
+	return {"owned": owned, "levels": levels, "mastery": {}, "team": team, "captain": captain, "defender_levels": dl}
+
+
+func _unique_owned(deck: Array, owned: Array) -> bool:
+	var seen := {}
+	for cid in deck:
+		if seen.has(cid) or not cid in owned or not DB.cards.has(cid):
+			return false
+		seen[cid] = true
+	return true
+
+
+func test_deck_ai() -> void:
+	section("deck AI (auto build)")
+	var all: Array = []
+	for cid in DB.card_order:
+		all.append(cid)
+	# Every card can be analysed from generic data, with or without a "role" field.
+	var bad: Array = []
+	for cid in all:
+		var a := DeckAI.analyze(cid, 1)
+		if not str(a.get("role", "")) in DeckAI.ROLES or float(a.get("power", 0.0)) <= 0.0 or (a.tags as Array).is_empty():
+			bad.append(cid)
+	ok(bad.is_empty(), "every card gets a role, tags and a positive power (%s)" % [bad])
+	ok(float(DeckAI.analyze("heat_wave", 5).power) > float(DeckAI.analyze("heat_wave", 1).power), "a higher level means more power")
+	ok("aoe" in DeckAI.analyze("heat_wave").tags and "boss" in DeckAI.analyze("time_out").tags and "run_stop" in DeckAI.analyze("wall_of_dirt").tags
+		and "control" in DeckAI.analyze("curveball").tags and "economy" in DeckAI.analyze("bullpen_call").tags, "roles are inferred from params and target")
+	# Full collection: every mode gives 8 unique owned cards, covers the roles and keeps the curve.
+	var full := _ai_ctx(all)
+	var decks := {}
+	for m in DeckAI.MODES:
+		var r := DeckAI.build(m, full)
+		decks[m] = r
+		var d: Array = r.deck
+		ok(d.size() == Profile.DECK_SIZE and _unique_owned(d, all), "%s: 8 unique owned cards (%s)" % [m, d])
+		var n: Dictionary = r.counts
+		ok(int(n.damage) >= 2 and int(n.aoe) >= 1 and int(n.control) >= 1 and int(n.stop) >= 1 and int(n.boss) >= 1,
+			"%s: covers damage/AoE/control/run-stop/boss (%s)" % [m, n])
+		var band: Array = DeckAI.MODE_CFG[m].band
+		ok(float(r.avg_cost) >= float(band[0]) - 0.01 and float(r.avg_cost) <= float(band[1]) + 0.3 and int(n.heavy) <= 2,
+			"%s: average cost %.2f in the band, %d cards cost 6+" % [m, r.avg_cost, n.heavy])
+		ok(r.deck == DeckAI.build(m, full).deck, "%s: the same input gives the same deck" % m)
+		ok(str(r.summary).contains("avg cost") and (r.reasons as Dictionary).size() == d.size(), "%s: summary and a reason for every card" % m)
+	ok(int(decks.aggressive.counts.damage) >= int(decks.balanced.counts.damage), "Aggressive has at least as much damage as Balanced")
+	ok(int(decks.control.counts.control) >= int(decks.balanced.counts.control) and int(decks.control.counts.control) >= 3, "Control has 3+ control cards")
+	ok(int(decks.boss.counts.boss) >= 2, "Boss Killer has 2+ boss answers (%d)" % int(decks.boss.counts.boss))
+	ok(DeckAI.build("nonsense", full).mode == "balanced", "an unknown mode falls back to Balanced")
+	# Signatures: preferred when the defender is on the team, penalised when absent.
+	var with_ace := _ai_ctx(all, ["ace", "rico", "maya", "jax", "kai", "bruno"], "ace")
+	var no_ace := _ai_ctx(all, ["nova", "rico", "maya", "jax", "kai", "bruno"], "rico")
+	var hw := DeckAI.analyze("heat_wave", 1)
+	ok(DeckAI.card_score(hw, "balanced", with_ace) > DeckAI.card_score(hw, "balanced", no_ace) + 2.0, "a signature scores higher with its defender on the team")
+	var r_ace := DeckAI.build("balanced", with_ace)
+	ok("heat_wave" in r_ace.deck and "heat_wave" in r_ace.signatures, "Heat Wave is picked as a signature when Ace is on the team")
+	var absent := 0
+	for cid in DeckAI.build("balanced", no_ace).deck:
+		var l := str(DB.card(cid).get("linked", ""))
+		if l != "" and not l in no_ace.team:
+			absent += 1
+	ok(absent <= 1, "linked cards of absent defenders are mostly left out (%d)" % absent)
+	ok(str(r_ace.summary).contains("Ace is on your team") or str(r_ace.summary).contains("signatures"), "the summary names the signatures (%s)" % r_ace.summary)
+	# Combos count: a deck score with a combo pair beats the same cards without it.
+	var info := {}
+	for cid in ["curveball", "heat_wave", "power_throw"]:
+		info[cid] = DeckAI.analyze(cid, 1)
+		info[cid]["score"] = 0.0
+	ok(float(DeckAI.deck_score(["curveball", "heat_wave"], info, "balanced", full, {}).combos) > 0.0
+		and float(DeckAI.deck_score(["curveball", "power_throw"], info, "balanced", full, {}).combos) == 0.0, "combo pairs add to the deck score")
+	# Tiny and odd collections.
+	var five: Array = all.slice(0, 5)
+	var r5 := DeckAI.build("balanced", _ai_ctx(five))
+	ok(r5.deck.size() == 5 and _unique_owned(r5.deck, five) and str(r5.summary).contains("only 5"), "5 owned cards: all of them, and the summary says so")
+	var eight: Array = ["power_throw", "curveball", "wall_of_dirt", "field_vision", "heat_wave", "lockdown", "frost_field", "twin_play"]
+	var r8 := DeckAI.build("aggressive", _ai_ctx(eight))
+	var same: Array = r8.deck.duplicate()
+	same.sort()
+	eight.sort()
+	ok(same == eight, "exactly 8 owned: the deck is those 8")
+	ok(DeckAI.build("balanced", _ai_ctx([])).deck.is_empty(), "no cards owned: an empty deck, no crash")
+	ok(DeckAI.build("balanced", _ai_ctx(["heat_wave", "heat_wave", "nope", "curveball"])).deck.size() == 2, "duplicates and unknown ids in the owned list are ignored")
+	# Random collections of 8..all cards: always 8 unique owned cards, stable.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var all_ok := true
+	for i in 12:
+		var pool := all.duplicate()
+		for k in range(pool.size() - 1, 0, -1):
+			var j := rng.randi_range(0, k)
+			var t: Variant = pool[k]
+			pool[k] = pool[j]
+			pool[j] = t
+		var owned: Array = pool.slice(0, rng.randi_range(8, pool.size()))
+		var lv := {}
+		for cid in owned:
+			lv[cid] = rng.randi_range(1, DB.card_max_level)
+		var ctx := _ai_ctx(owned, [], "ace", lv)
+		var m: String = DeckAI.MODES[i % DeckAI.MODES.size()]
+		var d: Array = DeckAI.build(m, ctx).deck
+		if d.size() != Profile.DECK_SIZE or not _unique_owned(d, owned) or d != DeckAI.build(m, ctx).deck:
+			all_ok = false
+	ok(all_ok, "random collections (8 to %d cards, random levels): 8 unique owned cards, deterministic" % all.size())
+	# The default context reads the profile.
+	Profile.reset_profile()
+	var rp := DeckAI.build()
+	ok(rp.deck.size() == mini(Profile.DECK_SIZE, DeckAI.profile_context().owned.size()) and _unique_owned(rp.deck, DeckAI.profile_context().owned), "profile context: owned cards only")
+	ok(Profile.set_deck(rp.deck) or rp.deck.size() < Profile.DECK_SIZE, "the auto-built deck is a valid saved deck")
 	Profile.reset_profile()
