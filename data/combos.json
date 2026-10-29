@@ -25,6 +25,23 @@
     {"cards": ["tag_at_the_plate", "base_shield"], "text": "Tag the first runner home; the shield stops the next one."},
     {"cards": ["bullpen_call", "seventh_inning_stretch"], "text": "Chain the draws to dig straight to your best card."},
     {"cards": ["hot_corner", "diamond_aura"], "text": "Stack both on one defender: armor-piercing throws with bonus damage and speed."},
-    {"cards": ["perfect_game", "grand_slam_barrage"], "text": "Stunned runners stand still under the barrage."}
+    {"cards": ["perfect_game", "grand_slam_barrage"], "text": "Stunned runners stand still under the barrage."},
+    {"cards": ["bean_ball", "pickoff"], "text": "Bean Ball cuts a fast runner down to size; Pickoff finishes it."},
+    {"cards": ["around_the_horn", "twin_play"], "text": "Twin Play adds one more runner to Around the Horn."},
+    {"cards": ["grand_salami", "curveball"], "text": "Curved runners take +50% fire damage from the rolling fireball and its flames."},
+    {"cards": ["grand_salami", "wall_of_dirt"], "text": "Runners stacked up at the wall all get flattened by the rolling ball."},
+    {"cards": ["rundown", "pickoff"], "text": "Every rundown tag chips away health until Pickoff can take the runner."},
+    {"cards": ["rundown", "power_catch"], "text": "A runner stuck in a rundown never leaves the slam zone."},
+    {"cards": ["rain_delay", "called_shot"], "text": "Bosses get the full rain slow: an easy Called Shot."},
+    {"cards": ["rain_delay", "grand_slam_barrage"], "text": "Clear the field while the gates are closed."},
+    {"cards": ["intentional_walk", "base_shield"], "text": "A walked runner scores nothing, so your shields stay up."},
+    {"cards": ["infield_fly", "wall_of_dirt"], "text": "Runners held at the wall sit in the fly zone until the ball comes down."},
+    {"cards": ["golden_glove", "magnet_glove"], "text": "Pull runners straight into the Golden Glove's reach."},
+    {"cards": ["golden_glove", "the_shift"], "text": "Shift the golden-gloved defender right at the runners."},
+    {"cards": ["the_shift", "diamond_aura"], "text": "Shifted defenders bunch up inside the aura."},
+    {"cards": ["momentum", "grand_slam_barrage"], "text": "A barrage full of outs refills your energy."},
+    {"cards": ["relief_pitcher", "frost_field"], "text": "The reliever's throws crit chilled runners too."},
+    {"cards": ["instant_replay", "thunderbolt"], "text": "Replay a Thunderbolt for a second, stronger chain of lightning."},
+    {"cards": ["instant_replay", "heat_wave"], "text": "Replay a Heat Wave: a second line of fire, one level hotter."}
   ]
 }

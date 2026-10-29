@@ -121,6 +121,10 @@ func anticipate(card_id: String, caster: Node3D, face_point: Vector3, windup: fl
 			col = GOLD
 		"line_drive":
 			col = Color(1.0, 0.92, 0.7)
+		"bean_ball":
+			col = BEAN
+		"rundown":
+			col = RUNDOWN_V
 	if anim != "special":
 		# Quick throw: a spark of power gathering in the throwing hand.
 		vfx.emit_one("glow", hand, Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.3), 0.9), 1.2, windup * 2.0)
@@ -265,8 +269,17 @@ func ball_impact(kind: String, at: Vector3, color: Color, target: Node3D = null)
 			vfx.dust(at, 1.2)
 			vfx.shake(0.12)
 		"split":
-			impact_flash(at, Color(0.75, 0.9, 1.0), 0.8, 0.0, 10)
-			vfx.emit("magic", at, 4, Color(0.8, 0.9, 1.0), 3.0, 0.6)
+			# Each split ball lands with its own clear pop and a small scorch.
+			impact_flash(at, Color(0.75, 0.9, 1.0), 1.35, 3.0, 14)
+			vfx.emit_one("ring", at, Vector3.ZERO, Color(0.85, 0.95, 1.0), 1.5, 0.9)
+			vfx.emit("magic", at, 8, Color(0.8, 0.9, 1.0), 4.0, 0.7)
+			vfx.shockwave(_flat(at), 1.5, Color(0.7, 0.88, 1.0), 0.3, 0.08)
+			vfx.decal("scorch", _flat(at), 0.75, Color(0.1, 0.12, 0.16, 0.5), Color(0.6, 0.85, 1.0), 2.2)
+		"bean", "bean_fast":
+			_bean_impact(at, target, kind == "bean_fast")
+		"relief":
+			impact_flash(at, RELIEF, 0.9, 0.0, 8)
+			vfx.emit("magic", at, 4, RELIEF, 3.0, 0.6)
 		"knuckle":
 			# A dizzy "pop": violet flash, a small spinning swirl on the ground under the
 			# runner and a big spiral + question mark over its head that linger.
@@ -359,7 +372,18 @@ func line_drive_impact(point: Vector3, r: float, dir: Vector3) -> void:
 	dir = dir.normalized() if dir.length() > 0.01 else Vector3.FORWARD
 	vfx.spray("dust", g + Vector3(0, 0.3, 0), 12, Color(0.62, 0.46, 0.33, 0.7), 6.0, (dir + Vector3(0, 0.8, 0)).normalized(), 0.7, 1.2, 0.9)
 	vfx.spray("debris", g + Vector3(0, 0.3, 0), 6, Color(0.5, 0.37, 0.27), 7.0, (dir + Vector3(0, 1.0, 0)).normalized(), 0.6, 0.7, 1.0)
-	vfx.decal("scorch", g, r * 0.7, Color(0.12, 0.08, 0.05, 0.55), Color(1.0, 0.6, 0.2), 1.8)
+	vfx.decal("scorch", g, r * 0.8, Color(0.12, 0.08, 0.05, 0.7), Color(1.0, 0.6, 0.2), 4.0)
+	# Linger: a skid mark where the liner hit and dust that hangs in the air.
+	var skid := vfx.decal("crater", g - dir * 0.6, 1.0, Color(0.22, 0.15, 0.1, 0.65), Color(1.0, 0.75, 0.4), 3.5)
+	skid.rotation.y = atan2(dir.x, dir.z)
+	skid.scale = Vector3(r * 0.35, 1, r * 1.1)
+	vfx.emit("mist", g + Vector3(0, 0.4, 0), 5, Color(0.62, 0.5, 0.4, 0.45), 1.2, 0.3, r * 0.5, 2.4, 2.2)
+	vfx.every_frame(1.4, func(k: float) -> void:
+		if _rate(9.0 * (1.0 - k)):
+			var off := Vector2.from_angle(randf() * TAU) * randf() * r * 0.8
+			vfx.emit_one("dust", g + Vector3(off.x, 0.3, off.y), Vector3(0, 0.6, 0), Color(0.62, 0.48, 0.36, 0.55), 1.6, 1.2)
+		if _rate(5.0 * (1.0 - k)):
+			vfx.emit_one("ember", g + Vector3(randf_range(-0.4, 0.4), 0.2, randf_range(-0.4, 0.4)), Vector3(0, 1.2, 0), Color(1.0, 0.6, 0.25), 0.8, 0.8))
 
 
 ## Tag at the Plate: the plate lights up teal and stays armed (a pulsing ring and a glove
@@ -624,6 +648,12 @@ func splitter_burst(at: Vector3, ground: Vector3) -> void:
 	vfx.emit_one("ring", at, Vector3.ZERO, Color(0.85, 0.95, 1.0), 2.4, 1.0)
 	vfx.spray("streak", at, 18, Color(0.85, 0.95, 1.0), 14.0, Vector3.DOWN, 1.2, 1.0, 0.7)
 	vfx.shockwave(_flat(ground), 3.5, Color(0.7, 0.88, 1.0), 0.45, 0.05)
+	# Fan-shaped mark under the split, and glints that hang where the ball broke apart.
+	vfx.ground_fx("rays", _flat(ground), 4.2, Color(0.55, 0.8, 1.0, 0.55), Color.WHITE, 1.4)
+	vfx.zone_ring(_flat(ground), 5.0, Color(0.75, 0.9, 1.0, 0.8), 1.2, 0.1, 1.5, 10.0)
+	for i in 6:
+		vfx.emit_one("glow", at + Vector3(randf_range(-0.6, 0.6), randf_range(-0.4, 0.4), randf_range(-0.6, 0.6)), Vector3.ZERO, Color(0.85, 0.95, 1.0, 0.9), 1.5, 0.7)
+	vfx.flash_light(at, Color(0.7, 0.88, 1.0), 4.0, 12.0, 0.35)
 
 
 ## Grand Slam Barrage: a burning target zone and an embers sky.
@@ -1154,6 +1184,7 @@ func showcase(list: String) -> void:
 
 
 func _showcase_clear() -> void:
+	battle.effects.clear_active()
 	for e in battle.enemies.duplicate():
 		battle.enemies.erase(e)
 		e.queue_free()
@@ -1223,9 +1254,18 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 		"perfect_game", "bullpen_call":
 			focus = Field.MOUND + Vector3(0, 0, 2)
 			view = Vector3(0.0, -46.0, 50.0)
-		"hot_corner":
+		"hot_corner", "golden_glove":
 			focus = target.lerp(Field.MOUND, 0.5)
 			view = Vector3(25.0, -40.0, 28.0)
+		"rain_delay", "momentum", "around_the_horn", "the_shift":
+			focus = Field.MOUND
+			view = Vector3(0.0, -50.0, 52.0)
+		"bean_ball", "rundown", "intentional_walk", "infield_fly", "relief_pitcher", "instant_replay":
+			focus = target.lerp(Field.MOUND, 0.3)
+			view = Vector3(25.0, -40.0, 30.0)
+		"grand_salami":
+			focus = target.lerp(route.points[0], 0.3)
+			view = Vector3(30.0, -42.0, 40.0)
 	if cam_arg != "":
 		var v := cam_arg.split(",")
 		view = Vector3(float(v[0]), float(v[1]), float(v[2]))
@@ -1247,6 +1287,12 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 		if dd < best:
 			best = dd
 			df_target = df
+	if card_id == "instant_replay" and battle.effects.last_play.is_empty():
+		battle.effects.last_play = {"id": "thunderbolt", "level": level, "target": {"point": target, "enemy": lead[0] if not lead.is_empty() else null, "valid": true}}
+	if card_id == "golden_glove":
+		# A runner comes into the gilded glove's reach.
+		var pr: Dictionary = route.project(df_target.global_position)
+		battle.spawn_enemy("runner", route, float(pr.d) - 2.5, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 0.5})
 	battle.effects.execute(card_id, level, {"point": target, "enemy": lead[0] if not lead.is_empty() else null, "defender": df_target, "valid": true})
 	print("[VFX] cast %s" % card_id)
 	if card_id in ["tag_at_the_plate", "perfect_game"]:
@@ -1265,3 +1311,539 @@ func _showcase_one(card_id: String, times: Array[float], out_dir: String) -> voi
 		var path := "%s/%s_%d.png" % [out_dir, card_id, int(round(times[i] * 100.0))]
 		img.save_png(path)
 		print("[VFX] saved ", path)
+
+
+# ---------------------------------------------------------------- Update 7 cards
+
+const BEAN := Color(1.0, 0.35, 0.25)
+const HORN := Color(1.0, 0.66, 0.3)
+const RAIN := Color(0.62, 0.78, 1.0)
+const WALK := Color(0.62, 1.0, 0.72)
+const FLY := Color(0.86, 0.95, 1.0)
+const GLOVE_GOLD := Color(1.0, 0.78, 0.25)
+const SHIFT_TEAL := Color(0.25, 0.95, 0.85)
+const ENERGY := Color(0.45, 0.9, 1.0)
+const REPLAY := Color(0.5, 0.95, 1.0)
+const RUNDOWN_V := Color(0.78, 0.72, 1.0)
+const RELIEF := Color(0.55, 1.0, 0.5)
+
+
+## A ring that follows `follow` (a Node3D, or a fixed point when null) while `alive.call()`
+## is true, then fades. Used by the lasting Update 7 mechanics.
+func _live_ring(pos: Vector3, follow: Node3D, radius: float, color: Color, dur: float, alive: Callable, dashes := 0.0, spin := 0.0) -> void:
+	var ring: MeshInstance3D = vfx._take("ring")
+	ring.global_position = _flat(pos, 0.08)
+	ring.scale = Vector3(radius, 1, radius)
+	ring.set_instance_shader_parameter("color", color)
+	ring.set_instance_shader_parameter("mode", 1.0)
+	ring.set_instance_shader_parameter("params", Vector4(0.05, 0.14, spin, dashes))
+	ring.set_instance_shader_parameter("progress", 0.0)
+	var fade := [0.0]
+	var fw: WeakRef = weakref(follow) if follow != null else null
+	vfx.animate(ring, dur, func(n: Node3D, k: float) -> void:
+		var tt := k * dur
+		var f: Object = fw.get_ref() if fw != null else null
+		if f != null:
+			n.global_position = _flat((f as Node3D).global_position, 0.08)
+		var on: bool = alive.call() and tt < dur - 0.35
+		fade[0] = move_toward(float(fade[0]), 1.0 if on else 0.0, _dt() * (6.0 if on else 3.0))
+		var grow := 1.0 - pow(1.0 - clampf(tt / 0.25, 0.0, 1.0), 3.0)
+		n.scale = Vector3.ONE * radius * (0.3 + 0.7 * grow)
+		(n as MeshInstance3D).set_instance_shader_parameter("progress", float(fade[0]) * (0.8 + 0.2 * sin(tt * 6.0))))
+
+
+## Bean Ball release: a red crack at the hand and a tight streak toward the runner.
+func bean_release(from: Vector3, to: Vector3) -> void:
+	var dir := (to - from).normalized()
+	vfx.emit_one("flash", from, Vector3.ZERO, Color(1.0, 0.62, 0.52, 0.9), 0.9, 0.8)
+	vfx.emit_one("ring", from + dir * 0.6, dir * 5.0, Color(1.0, 0.6, 0.5), 1.0, 0.8)
+	vfx.spray("streak", from, 12, Color(1.0, 0.55, 0.45), 15.0, dir, 0.16, 1.0, 0.5)
+
+
+## Bean Ball impact: a comic POW, dizzy stars and a skid mark where the runner flies back.
+func _bean_impact(at: Vector3, target: Node3D, fast: bool) -> void:
+	var s := 1.35 if fast else 1.0
+	impact_flash(at, BEAN, 1.5 * s, 6.0, int(20 * s))
+	vfx.emit_one("impact", at, Vector3.ZERO, Color(1.0, 0.85, 0.6), 1.7 * s, 1.0)
+	vfx.emit_one("ring", at, Vector3.ZERO, Color(1.0, 0.75, 0.6), 2.0 * s, 1.0)
+	vfx.shockwave(_flat(at), 2.4 * s, BEAN, 0.35, 0.08)
+	for i in 5:
+		var a := TAU * i / 5.0
+		vfx.emit_one("magic", at + Vector3(0, 0.9, 0) + Vector3(cos(a), 0, sin(a)) * 0.6, Vector3(-sin(a), 0.3, cos(a)) * 2.5,
+			Color(1.0, 0.9, 0.4), 1.6, 1.2)
+	vfx.glyph(at + Vector3(0, 1.4, 0), 0, 1.5 * s, Color(1.0, 0.88, 0.4), 1.0, 0.0, 0.7)
+	vfx.text_popup(at + Vector3(0, 2.2, 0), "BEANED x2!" if fast else "BEANED!", Color(1.0, 0.58, 0.48), 1.05 * s, 1.0)
+	vfx.shake(0.1 * s)
+	if target and is_instance_valid(target) and "route" in target and target.route:
+		var back: Vector3 = -target.route.direction_at(target.d)
+		var g := _flat(target.global_position) + back * 1.2 * s
+		var skid := vfx.decal("crater", g, 1.0, Color(0.25, 0.16, 0.1, 0.6), BEAN, 2.6)
+		skid.rotation.y = atan2(back.x, back.z)
+		skid.scale = Vector3(0.55 * s, 1, 1.5 * s)
+		vfx.spray("dust", _flat(target.global_position, 0.3), 10, Color(0.62, 0.46, 0.33, 0.7), 5.0, (back + Vector3(0, 0.6, 0)).normalized(), 0.6, 1.1, 1.0)
+
+
+## Around the Horn: one leg of the throw, base to base: a bright arc, the base lights up.
+func horn_link(a: Vector3, b: Vector3) -> void:
+	var a3 := a + Vector3(0, 1.2, 0)
+	var b3 := b + Vector3(0, 1.2, 0)
+	var pts := vfx.arc_points(a3, b3, 1.4, 14)
+	vfx.ribbon(pts, HORN, 0.36, 0.6)
+	vfx.ribbon(pts, Color(1.0, 0.95, 0.85), 0.11, 0.45)
+	vfx.line_emit("streak", a3, b3, 8, Color(1.0, 0.85, 0.6), (b3 - a3).normalized() * 10.0, 0.2, 1.0, 0.4)
+	impact_flash(b3, HORN, 1.1, 3.0, 10)
+	vfx.beam(_flat(b), 0.9, 6.0, HORN, 1.0)
+	vfx.shockwave(_flat(b), 2.6, HORN, 0.4, 0.08)
+	vfx.dust(b, 1.0)
+	# The base path itself glows for a moment: the "horn" traced on the field.
+	vfx.ribbon(PackedVector3Array([_flat(a, 0.12), _flat(a.lerp(b, 0.5), 0.12), _flat(b, 0.12)]), Color(HORN, 0.9), 0.5, 1.6, 0.0, false)
+	vfx.ground_fx("hexdisc", b, 1.5, Color(HORN, 0.85), Color.WHITE, 1.4)
+
+
+## Around the Horn: the throw from a base into a lead runner.
+func horn_strike(from: Vector3, to: Vector3) -> void:
+	var pts := PackedVector3Array([from, from.lerp(to, 0.5) + Vector3(0, 0.8, 0), to])
+	vfx.ribbon(pts, HORN, 0.28, 0.4, 0.0, false)
+	vfx.ribbon(pts, Color(1.0, 0.95, 0.85), 0.09, 0.3, 0.0, false)
+	impact_flash(to, HORN, 1.4, 4.0, 16)
+	vfx.emit_one("impact", to, Vector3.ZERO, Color(1.0, 0.85, 0.6), 1.3, 1.0)
+	vfx.shockwave(_flat(to), 2.0, HORN, 0.3, 0.07)
+	vfx.glyph(to + Vector3(0, 1.3, 0), 0, 1.1, Color(1.0, 0.85, 0.5), 0.8, 0.0, 0.6)
+
+
+## Grand Salami: a colossal flaming baseball (owned by the caller, freed when it stops).
+func _giant_ball(at: Vector3, radius := 1.25) -> Node3D:
+	var root := Node3D.new()
+	vfx.add_child(root)
+	root.global_position = _flat(at)
+	var mi := MeshInstance3D.new()
+	var pm = battle.projectiles
+	mi.mesh = pm._ball_mesh
+	var sphere: bool = pm._ball_mesh is SphereMesh
+	mi.scale = Vector3.ONE * radius / 0.13 * (1.0 if sphere else 3.2)
+	if sphere:
+		mi.material_override = pm._ball_mat
+	var glow := StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	glow.albedo_color = Color(1.0, 0.42, 0.1, 0.55)
+	mi.material_overlay = glow
+	mi.position = Vector3(0, radius, 0)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	root.add_child(mi)
+	return root
+
+
+## Grand Salami wind-up: a red target on the path, a growing shadow and the ball falling in
+## flames from the sky.
+func salami_drop(land: Vector3, flight: float) -> void:
+	var g := _flat(land)
+	var m: Node3D = vfx.telegraph(g, 3.0, Color(1.0, 0.3, 0.1, 0.9), flight)
+	vfx.after(flight + 0.02, func() -> void:
+		if is_instance_valid(m):
+			m.queue_free())
+	vfx.zone_ring(g, 3.6, Color(1.0, 0.4, 0.1, 0.95), flight + 0.1, 0.2, 2.0, 14.0)
+	vfx.beam(g, 1.4, 22.0, Color(1.0, 0.45, 0.12, 0.8), flight + 0.1)
+	vfx.decal("scorch", g, 2.4, Color(0.05, 0.03, 0.02, 0.7), FIRE, flight + 0.05, func(n: Node3D, k: float) -> void:
+		n.scale = Vector3.ONE * lerpf(0.6, 2.6, k * k)
+		(n as MeshInstance3D).set_instance_shader_parameter("anim", Vector4(k, k, 0.0, 1.0)))
+	var sky := g + Vector3(3.0, 26.0, 6.0)
+	var ball := _giant_ball(sky)
+	var an := vfx.animate(ball, flight, func(n: Node3D, k: float) -> void:
+		var pos := sky.lerp(g, k * k)
+		n.global_position = pos
+		if _rate(80.0):
+			vfx.emit_one("fire", pos + Vector3(randf_range(-0.6, 0.6), 1.2 + randf_range(-0.6, 0.6), randf_range(-0.6, 0.6)),
+				(sky - g).normalized() * 6.0, FIRE, 2.4, 0.5)
+		if _rate(30.0):
+			vfx.emit_one("smoke", pos + Vector3(0, 1.4, 0), Vector3(0, 1.0, 0), Color(0.15, 0.12, 0.1, 0.7), 2.2, 1.0))
+	an.free_node = true
+
+
+## Grand Salami landing: a fiery explosion and a big crater.
+func salami_impact(land: Vector3) -> void:
+	var g := _flat(land)
+	impact_flash(g + Vector3(0, 1.0, 0), Color(1.0, 0.55, 0.2), 2.8, 10.0, 34)
+	vfx.burst("explosion", g + Vector3(0, 0.8, 0))
+	vfx.shockwave(g, 6.0, Color(1.0, 0.55, 0.2), 0.55, 0.1)
+	vfx.shockwave(g, 9.0, Color(1.0, 0.8, 0.5, 0.7), 0.8, 0.04, 0.08)
+	vfx.sphere_pulse(g + Vector3(0, 0.2, 0), 3.6, Color(1.0, 0.5, 0.15, 0.6), 0.5)
+	vfx.decal("crater", g, 3.0, Color(0.08, 0.05, 0.04, 0.9), Color(1.0, 0.4, 0.08), 7.0)
+	for i in vfx._count(10):
+		var d := Vector3(randf_range(-1, 1), 0.0, randf_range(-1, 1)).normalized() * randf_range(1.5, 4.5)
+		vfx.emit_one("fire", g + Vector3(0, 0.5, 0), d + Vector3(0, randf_range(4.0, 7.0), 0), FIRE, randf_range(2.2, 3.0), randf_range(0.8, 1.1))
+	vfx.spray("debris", g + Vector3(0, 0.4, 0), 16, Color(0.36, 0.26, 0.2), 12.0, Vector3.UP, 0.8, 1.5, 1.2)
+	vfx.emit("smoke", g + Vector3(0, 2.0, 0), 10, Color(0.14, 0.12, 0.11, 0.75), 2.0, 2.5, 1.5, 2.2, 1.6)
+	vfx.text_popup(g + Vector3(0, 4.5, 0), "GRAND SALAMI!", Color(1.0, 0.6, 0.25), 1.4, 1.2)
+	vfx.shake(0.35)
+
+
+func salami_ball(land: Vector3) -> Node3D:
+	return _giant_ball(land)
+
+
+## The ball rolls: it spins, spits fire and kicks up dirt.
+func salami_roll(node: Node3D, pos: Vector3, dir: Vector3, delta: float) -> void:
+	node.global_position = _flat(pos)
+	var mi := node.get_child(0) as Node3D
+	var axis := dir.cross(Vector3.UP)
+	if axis.length() > 0.01:
+		mi.global_rotate(axis.normalized(), -13.0 * delta / 1.25)
+	var c := node.global_position + Vector3(0, 1.25, 0)
+	if _rate(60.0):
+		vfx.emit_one("fire", c - dir * 1.0 + Vector3(randf_range(-0.6, 0.6), randf_range(-0.4, 0.8), randf_range(-0.6, 0.6)),
+			-dir * 3.0 + Vector3(0, 2.5, 0), FIRE, 2.0, 0.55)
+	if _rate(20.0):
+		vfx.emit_one("ember", c, Vector3(randf_range(-3, 3), randf_range(2, 5), randf_range(-3, 3)), Color(1.0, 0.55, 0.15), 1.2, 0.9)
+	if _rate(14.0):
+		vfx.dust(node.global_position + dir * 0.8, 0.8)
+
+
+## A stretch of the fire trail the ball leaves behind.
+func salami_fire(pos: Vector3, life: float) -> void:
+	var g := _flat(pos)
+	vfx.flame_sheet(g, 1.9, 1.9, maxf(life, 0.5))
+	vfx.decal("scorch", g, 1.5, Color(0.08, 0.05, 0.03, 0.8), Color(1.0, 0.45, 0.1), life + 2.0)
+	vfx.emit("ember", g + Vector3(0, 0.4, 0), 3, Color(1.0, 0.55, 0.15), 2.0, 1.0)
+
+
+func salami_hit(e: Node3D) -> void:
+	var c: Vector3 = e.center()
+	impact_flash(c, Color(1.0, 0.55, 0.2), 1.4, 0.0, 16)
+	vfx.burst("fire", c)
+	vfx.emit_one("impact", c, Vector3.ZERO, Color(1.0, 0.75, 0.4), 1.4, 1.0)
+
+
+func salami_end(pos: Vector3) -> void:
+	var g := _flat(pos)
+	impact_flash(g + Vector3(0, 1.0, 0), FIRE, 1.8, 6.0, 20)
+	vfx.burst("explosion", g + Vector3(0, 0.8, 0))
+	vfx.shockwave(g, 4.0, FIRE, 0.45, 0.07)
+	vfx.emit("smoke", g + Vector3(0, 1.5, 0), 6, Color(0.14, 0.12, 0.11, 0.7), 1.6, 2.0, 1.0, 1.8, 1.4)
+
+
+## Rundown: two glowing bases, the chalk line between them, and a ring on the runner.
+func rundown_start(e: Node3D, a: Vector3, b: Vector3, dur: float) -> void:
+	var wr := weakref(e)
+	var alive := func() -> bool:
+		var o: Object = wr.get_ref()
+		return o != null and o.alive and o.rundown_t > 0.0
+	for q in [a, b]:
+		var g := _flat(q)
+		vfx.ground_fx("hexdisc", g, 1.1, Color(RUNDOWN_V, 0.9), Color.WHITE, dur)
+		vfx.beam(g, 0.7, 4.0, RUNDOWN_V, 0.6)
+		vfx.shockwave(g, 2.0, RUNDOWN_V, 0.35, 0.08)
+		_live_ring(g, null, 0.75, Color(1.0, 1.0, 1.0, 0.95), dur, alive)
+	var pts := PackedVector3Array()
+	for i in 9:
+		pts.append(_flat(a.lerp(b, i / 8.0), 0.1))
+	vfx.ribbon(pts, Color(1.0, 1.0, 1.0, 0.95), 0.22, dur, 0.0, false)
+	vfx.ribbon(pts, Color(RUNDOWN_V, 0.9), 0.5, dur * 0.7, 0.0, false)
+	_live_ring(e.global_position, e, 1.0, Color(RUNDOWN_V, 0.95), dur + 0.4, alive, 10.0, 2.0)
+	impact_flash(e.center(), RUNDOWN_V, 1.3, 4.0, 14)
+	vfx.glyph(_flat(a.lerp(b, 0.5), 2.6), 6, 1.3, RUNDOWN_V, 1.2, 0.0, 0.4)
+
+
+## Rundown: tagged at a turn.
+func rundown_tag(e: Node3D) -> void:
+	var c: Vector3 = e.center()
+	vfx.catch_pop(c, RUNDOWN_V)
+	impact_flash(c, RUNDOWN_V, 1.0, 0.0, 10)
+	vfx.shockwave(_flat(c), 1.6, RUNDOWN_V, 0.3, 0.07)
+	vfx.text_popup(c + Vector3(0, 1.2, 0), "TAG!", Color(0.9, 0.85, 1.0), 0.8, 0.6)
+
+
+## Rain Delay: rain over the whole field, puddles splashing, a grey sky and the gates
+## shut (a blue seal and a padlock at each gate) until the delay is over.
+func rain_delay(dur: float) -> void:
+	vfx.emit("smoke", Field.MOUND + Vector3(0, 18, -6), 18, Color(0.2, 0.24, 0.3, 0.8), 6.0, 0.1, 3.0, 5.0, minf(dur, 2.5))
+	vfx.flash_light(Field.MOUND + Vector3(0, 10, 0), Color(0.6, 0.75, 1.0), 3.0, 40.0, 0.25)
+	vfx.shockwave(Field.MOUND, 30.0, Color(RAIN, 0.8), 0.9, 0.03)
+	vfx.every_frame(dur, func(k: float) -> void:
+		var fade := 1.0 - smoothstep(0.85, 1.0, k)
+		for i in 2:
+			if _rate(200.0 * fade):
+				var off := Vector2.from_angle(randf() * TAU) * sqrt(randf()) * 30.0
+				var p := Field.MOUND + Vector3(off.x, randf_range(12.0, 18.0), off.y - 6.0)
+				vfx.emit_one("streak", p, Vector3(1.5, -30.0, 0.5), Color(RAIN, 0.75), 1.5, 0.6)
+		if _rate(40.0 * fade):
+			var off2 := Vector2.from_angle(randf() * TAU) * sqrt(randf()) * 26.0
+			var gp := Field.MOUND + Vector3(off2.x, 0.06, off2.y - 4.0)
+			vfx.emit_one("ring", gp, Vector3.ZERO, Color(0.8, 0.9, 1.0, 0.7), 0.7, 0.7)
+			vfx.emit_one("snow", gp + Vector3(0, 0.1, 0), Vector3(randf_range(-1, 1), 2.0, randf_range(-1, 1)), Color(0.8, 0.9, 1.0), 1.2, 0.5)
+		if _rate(6.0 * fade):
+			var off3 := Vector2.from_angle(randf() * TAU) * sqrt(randf()) * 18.0
+			vfx.emit_one("mist", Field.MOUND + Vector3(off3.x, 0.3, off3.y - 2.0), Vector3(0, 0.1, 0), Color(0.7, 0.78, 0.9, 0.35), 3.0, 2.0))
+	if battle and "gate_positions" in battle:
+		for gp2 in battle.gate_positions.values():
+			var g: Vector3 = _flat(gp2)
+			vfx.ground_fx("hexdisc", g, 3.0, Color(RAIN, 0.85), Color.WHITE, dur)
+			vfx.beam(g, 2.2, 8.0, RAIN, 0.8)
+			vfx.glyph(g + Vector3(0, 3.2, 0), 5, 2.0, Color(0.7, 0.85, 1.0), dur, 0.0, 0.3)
+
+
+## Intentional Walk: four balls pop over the runner (BALL FOUR), then a mint ring walks with it.
+func intentional_walk(e: Node3D, dur: float) -> void:
+	var c: Vector3 = e.center()
+	for i in 4:
+		var a := lerpf(-0.9, 0.9, i / 3.0)
+		var p := c + Vector3(a * 1.1, 1.4 + 0.35 * cos(a), 0)
+		vfx.glyph(p, 13, 0.9, Color(0.95, 1.0, 0.95), 1.1, i * 0.12, 0.35)
+		vfx.after(i * 0.12, func() -> void:
+			vfx.emit_one("flash", p, Vector3.ZERO, Color(WALK, 0.8), 0.6, 0.6)
+			Audio.play("glove_catch", -14.0, 0.1))
+	var wr := weakref(e)
+	vfx.after(0.5, func() -> void:
+		var o: Object = wr.get_ref()
+		if o != null:
+			vfx.text_popup((o as Node3D).center() + Vector3(0, 2.3, 0), "BALL FOUR!", Color(0.7, 1.0, 0.78), 1.0, 1.0))
+	vfx.shockwave(_flat(c), 2.2, WALK, 0.4, 0.07)
+	var alive := func() -> bool:
+		var o: Object = wr.get_ref()
+		return o != null and o.alive and o.slows.has("intentional_walk")
+	_live_ring(e.global_position, e, 1.1, Color(WALK, 0.95), dur + 0.4, alive, 8.0, 0.6)
+	vfx.every_frame(dur, func(_k: float) -> void:
+		if alive.call() and _rate(5.0):
+			vfx.emit_one("glow", _flat((wr.get_ref() as Node3D).global_position, 0.15), Vector3.ZERO, Color(WALK, 0.7), 0.9, 1.0))
+
+
+## A walking runner reaches home: no run.
+func walk_no_run(e: Node3D) -> void:
+	var h := Field.HOME
+	vfx.shockwave(h, 3.2, WALK, 0.45, 0.08)
+	impact_flash(e.center(), WALK, 1.2, 4.0, 12)
+	vfx.text_popup(h + Vector3(0, 2.6, 0), "NO RUN!", Color(0.7, 1.0, 0.78), 1.2, 1.1)
+	vfx.glyph(h + Vector3(0, 1.8, 0), 14, 1.4, WALK, 0.9, 0.0, 0.6)
+
+
+## Infield Fly: the pop-up goes straight up and hangs (a glint high above the zone, a white
+## ring on the ground) until a runner steps in.
+func infield_fly(point: Vector3, r: float, dur: float, item: Dictionary) -> void:
+	var g := _flat(point)
+	var top := g + Vector3(0, 15.0, 0)
+	vfx.emit_one("flash", g + Vector3(0, 0.8, 0), Vector3.ZERO, Color(1.0, 1.0, 1.0, 0.9), 1.2, 0.8)
+	vfx.ribbon(PackedVector3Array([g + Vector3(0, 0.6, 0), g + Vector3(0, 8.0, 0), top]), Color(FLY, 0.9), 0.2, 0.7, 0.0, false)
+	vfx.spray("streak", g + Vector3(0, 0.8, 0), 12, FLY, 18.0, Vector3.UP, 0.12, 1.0, 0.6)
+	vfx.shockwave(g, r * 1.4, FLY, 0.4, 0.07)
+	var waiting := func() -> bool: return battle.effects.active.has(item) and item.victim == null
+	var armed := func() -> bool: return battle.effects.active.has(item)
+	_live_ring(g, null, r, Color(FLY, 0.95), dur + 2.0, armed, 14.0, 0.8)
+	vfx.ground_fx("radar", g, r * 0.9, Color(0.75, 0.9, 1.0, 0.45), Color.WHITE, dur, Vector2(0.6, 0.0), func(n: Node3D, k: float) -> void:
+		var tt := k * dur
+		var vis := smoothstep(0.0, 0.3, tt) * (1.0 if waiting.call() else 0.0)
+		n.scale = Vector3.ONE * r * 0.9
+		(n as MeshInstance3D).set_instance_shader_parameter("anim", Vector4(k, vis * 0.8, 0.6, 0.0)))
+	var icon := vfx.glyph(g + Vector3(0, 3.0, 0), 2, 1.5, FLY, dur, 0.0, 0.0)
+	vfx.every_frame(dur, func(_k: float) -> void:
+		var on: bool = waiting.call()
+		if is_instance_valid(icon):
+			icon.visible = on
+		if on:
+			if _rate(14.0):
+				vfx.emit_one("glow", top + Vector3(0, sin(Time.get_ticks_msec() * 0.003) * 0.3, 0), Vector3.ZERO, Color(1.0, 1.0, 1.0, 0.95), 1.4, 0.25)
+			if _rate(6.0):
+				vfx.emit_one("magic", top, Vector3(randf_range(-1, 1), -1.0, randf_range(-1, 1)), FLY, 1.0, 0.8))
+
+
+## Infield Fly: a runner stepped in: the ball comes down on it.
+func infield_fly_drop(point: Vector3, e: Node3D, delay: float) -> void:
+	var top := _flat(point, 15.0)
+	lock_on(e, delay, FLY)
+	vfx.text_popup(e.center() + Vector3(0, 1.8, 0), "INFIELD FLY!", Color(0.9, 0.97, 1.0), 1.0, delay + 0.2)
+	var wr := weakref(e)
+	vfx.every_frame(delay, func(k: float) -> void:
+		var o: Object = wr.get_ref()
+		if o == null:
+			return
+		var pos := top.lerp((o as Node3D).center() + Vector3(0, 0.6, 0), k * k)
+		vfx.emit_one("glow", pos, Vector3.ZERO, Color(1.0, 1.0, 1.0, 0.95), 1.0, 0.12)
+		if _rate(30.0):
+			vfx.emit_one("streak", pos, Vector3(0, -8.0, 0), FLY, 1.0, 0.3))
+
+
+## Infield Fly: caught. The runner is out (a boss is stunned instead).
+func infield_fly_catch(e: Node3D, out: bool) -> void:
+	var c: Vector3 = e.center()
+	impact_flash(c, FLY, 1.6, 6.0, 18)
+	vfx.catch_pop(c + Vector3(0, 0.6, 0), FLY)
+	vfx.shockwave(_flat(c), 2.8, FLY, 0.4, 0.08)
+	vfx.beam(_flat(c), 0.9, 10.0, FLY, 0.5)
+	vfx.glyph(c + Vector3(0, 1.5, 0), 13, 1.4, FLY, 0.9, 0.0, 0.7)
+	vfx.text_popup(c + Vector3(0, 2.4, 0), "CALLED OUT!" if out else "CAUGHT!", Color(0.9, 0.97, 1.0), 1.2, 1.0)
+
+
+## Golden Glove: gold light pours into the glove; while armed, a gold ring of its reach
+## follows the defender and one orb per catch left circles it.
+func golden_glove(df: Node3D, item: Dictionary) -> void:
+	if df == null or not is_instance_valid(df):
+		return
+	var dur := float(item.t)
+	var r := float(item.radius)
+	var feet := _flat(df.global_position)
+	vfx.beam(feet, 1.1, 9.0, GLOVE_GOLD, 0.7)
+	vfx.shockwave(feet, r * 1.6, GLOVE_GOLD, 0.5, 0.08)
+	impact_flash(df.model.glove_position(), GLOVE_GOLD, 1.6, 6.0, 20)
+	vfx.ring_emit("magic", feet + Vector3(0, 0.3, 0), 1.2, 18, GLOVE_GOLD, 0.8, 4.5, 1.1, 0.9)
+	vfx.glyph(df.model.head_position() + Vector3(0, 1.1, 0), 0, 1.5, GLOVE_GOLD, 1.0, 0.1, 0.6)
+	var armed := func() -> bool: return battle.effects.active.has(item) and int(item.charges) > 0
+	_live_ring(feet, df, r, Color(GLOVE_GOLD, 0.95), dur + 0.4, armed, 0.0, 0.0)
+	var wr := weakref(df)
+	vfx.every_frame(dur, func(_k: float) -> void:
+		var o: Object = wr.get_ref()
+		if o == null or not armed.call():
+			return
+		var df2 := o as Node3D
+		var n := int(item.charges)
+		var t := Time.get_ticks_msec() * 0.004
+		for i in n:
+			var a := t + TAU * i / float(n)
+			var p: Vector3 = df2.global_position + Vector3(cos(a) * 1.0, 1.6 + 0.15 * sin(t * 2.0 + i), sin(a) * 1.0)
+			vfx.emit_one("glow", p, Vector3.ZERO, Color(GLOVE_GOLD, 0.95), 0.75, 0.1)
+		if _rate(8.0):
+			vfx.emit_one("magic", df2.model.glove_position(), Vector3(0, 1.0, 0), GLOVE_GOLD, 0.9, 0.6))
+
+
+## Golden Glove: snag! A gold arc from the glove to the runner.
+func golden_catch(df: Node3D, e: Node3D, boss: bool) -> void:
+	var c: Vector3 = e.center()
+	var gl: Vector3 = df.model.glove_position()
+	vfx.ribbon(vfx.arc_points(gl, c, 0.8, 10), GLOVE_GOLD, 0.3, 0.45)
+	vfx.ribbon(vfx.arc_points(gl, c, 0.8, 10), Color(1.0, 0.97, 0.8), 0.1, 0.35)
+	impact_flash(c, GLOVE_GOLD, 1.6, 6.0, 20)
+	vfx.catch_pop(c, GLOVE_GOLD)
+	vfx.burst("gold", c)
+	vfx.shockwave(_flat(c), 2.4, GLOVE_GOLD, 0.35, 0.08)
+	vfx.glyph(c + Vector3(0, 1.4, 0), 13, 1.3, GLOVE_GOLD, 0.8, 0.0, 0.7)
+	vfx.text_popup(c + Vector3(0, 2.2, 0), "SNAGGED!" if not boss else "ROBBED!", Color(1.0, 0.88, 0.45), 1.1, 1.0)
+
+
+## The Shift: chevrons at the spot, every defender slides along a teal arrow (with an
+## after-image where it stood) and keeps a quiet teal ring until it jogs back.
+func shift(point: Vector3, moves: Array, dur: float) -> void:
+	var g := _flat(point)
+	vfx.zone_ring(g, 2.2, Color(SHIFT_TEAL, 0.95), 1.0, 0.25, 2.0, 12.0)
+	vfx.shockwave(g, 5.0, SHIFT_TEAL, 0.45, 0.07, 0.0, true)
+	vfx.glyph(g + Vector3(0, 2.4, 0), 6, 1.8, SHIFT_TEAL, 1.0, 0.0, 0.5)
+	for m in moves:
+		var df: Node3D = m.df
+		if not is_instance_valid(df):
+			continue
+		var a: Vector3 = _flat(m.from, 0.12)
+		var b: Vector3 = _flat(m.to, 0.12)
+		vfx.emit_one("glow", a + Vector3(0, 1.2, 0), Vector3.ZERO, Color(SHIFT_TEAL, 0.6), 2.2, 0.9)
+		if a.distance_to(b) > 0.5:
+			vfx.ribbon(PackedVector3Array([a, a.lerp(b, 0.5), b]), Color(SHIFT_TEAL, 0.95), 0.45, 0.9, 0.0, true)
+			vfx.line_emit("streak", a + Vector3(0, 0.6, 0), b + Vector3(0, 0.6, 0), 6, SHIFT_TEAL, (b - a).normalized() * 8.0, 0.3, 1.0, 0.4)
+			vfx.after(dur - 0.5, func() -> void:
+				vfx.ribbon(PackedVector3Array([b, b.lerp(a, 0.5), a]), Color(SHIFT_TEAL, 0.6), 0.25, 0.6, 0.0, true))
+		defender_aura(df, Color(SHIFT_TEAL, 0.85), dur, 1.15)
+
+
+## Momentum: a burst of chevrons at the plate; while it lasts, a cyan ring pulses there.
+func momentum(dur: float) -> void:
+	var h := Field.HOME
+	vfx.shockwave(h, 8.0, ENERGY, 0.55, 0.05)
+	vfx.beam(h, 1.2, 8.0, ENERGY, 0.6)
+	vfx.glyph(h + Vector3(0, 2.8, 0), 6, 2.0, ENERGY, 1.0, 0.0, 1.2)
+	vfx.glyph(h + Vector3(0, 2.0, 0), 8, 1.4, Color(0.7, 0.95, 1.0), 0.9, 0.15, 1.2)
+	vfx.ring_emit("streak", h + Vector3(0, 0.3, 0), 1.0, 16, ENERGY, 1.0, 9.0, 1.0, 0.6)
+	var armed := func() -> bool: return battle.buff_active("momentum")
+	_live_ring(h, null, 2.4, Color(ENERGY, 0.9), dur, armed, 12.0, 1.5)
+
+
+## Momentum: an out pays energy; a spark of it flies from the runner down to the hand.
+func momentum_gain(pos: Vector3, amount: float) -> void:
+	var dest := Field.HOME + Vector3(0, 3.5, 2.0)
+	var pts := vfx.arc_points(pos, dest, 3.0, 12)
+	vfx.ribbon(pts, ENERGY, 0.2, 0.5)
+	vfx.emit_one("flash", pos, Vector3.ZERO, Color(ENERGY, 0.9), 0.8, 0.7)
+	for i in 6:
+		var p: Vector3 = pts[i * 2]
+		vfx.after(i * 0.05, func() -> void: vfx.emit_one("glow", p, Vector3.ZERO, Color(ENERGY, 0.9), 1.0, 0.35))
+	vfx.text_popup(pos + Vector3(0, 1.4, 0), "+%s ENERGY" % (str(int(amount)) if is_equal_approx(amount, roundf(amount)) else "%.1f" % amount),
+		Color(0.6, 0.95, 1.0), 0.8, 0.8)
+
+
+## Relief Pitcher: a bench arm from the bullpen (a defender not on the field), owned by
+## CardEffects, which moves it.
+func make_reliever(start: Vector3, spot: Vector3) -> Node3D:
+	var used := {}
+	for df in battle.defenders:
+		used[df.id] = true
+	var pick := ""
+	for id in DB.defender_order:
+		if not used.has(id) and DB.defender(id).get("role", "") == "pitcher":
+			pick = id
+			break
+	if pick == "":
+		for id in DB.defender_order:
+			if not used.has(id):
+				pick = id
+				break
+	if pick == "":
+		pick = String(DB.defender_order[0])
+	var holder := Node3D.new()
+	battle.add_child(holder)
+	holder.global_position = start
+	var to := spot - start
+	holder.rotation.y = atan2(to.x, to.z)
+	var model := CharacterModel.new()
+	holder.add_child(model)
+	var colors: Dictionary = battle._uniform_colors.duplicate()
+	colors["Undershirt"] = DB.defender(pick).get("accent", "#FFFFFF")
+	model.setup(pick, {"accent": Color(DB.defender(pick).get("accent", "#FFFFFF")), "colors": colors, "cache_key": pick, "base": "run",
+		"scale": Battle.UNIT_SCALE * 1.12})
+	model.set_rim(Color(RELIEF, 0.7))
+	var hw := weakref(holder)
+	vfx.every_frame(0.9, func(_k: float) -> void:
+		var o: Object = hw.get_ref()
+		if o != null and _rate(20.0):
+			vfx.emit_one("glow", (o as Node3D).global_position + Vector3(0, 0.3, 0), Vector3(0, 0.5, 0), Color(RELIEF, 0.8), 1.0, 0.5))
+	return holder
+
+
+## Relief Pitcher: the bullpen gate lights up and a green streak shows where he comes from.
+func reliever_call(gate: Vector3, start: Vector3, spot: Vector3) -> void:
+	vfx.beam(gate, 1.6, 8.0, RELIEF, 0.8)
+	vfx.shockwave(_flat(gate), 4.0, RELIEF, 0.5, 0.06)
+	var pts := vfx.arc_points(gate + Vector3(0, 1.5, 0), start + Vector3(0, 1.0, 0), 6.0, 16)
+	vfx.ribbon(pts, RELIEF, 0.4, 0.8)
+	vfx.ribbon(pts, Color(0.9, 1.0, 0.85), 0.12, 0.6)
+	impact_flash(start + Vector3(0, 0.8, 0), RELIEF, 1.4, 4.0, 14)
+	vfx.zone_ring(_flat(spot), 1.4, Color(RELIEF, 0.9), 1.0, 0.3, 2.0, 8.0)
+	vfx.ribbon(PackedVector3Array([_flat(start, 0.12), _flat(start.lerp(spot, 0.5), 0.12), _flat(spot, 0.12)]), Color(RELIEF, 0.8), 0.35, 1.0, 0.0, true)
+
+
+## Relief Pitcher in position: a green pitching circle and his throwing range.
+func reliever_arrive(spot: Vector3, rng: float, dur: float) -> void:
+	var g := _flat(spot)
+	vfx.ground_fx("hexdisc", g, 1.3, Color(RELIEF, 0.8), Color.WHITE, dur)
+	vfx.zone_ring(g, rng, Color(RELIEF, 0.55), dur, 0.03, 0.4, 32.0)
+	vfx.shockwave(g, rng, RELIEF, 0.6, 0.04)
+	vfx.beam(g, 0.9, 6.0, RELIEF, 0.5)
+	vfx.text_popup(g + Vector3(0, 3.6, 0), "NOW PITCHING!", Color(0.7, 1.0, 0.65), 1.0, 1.1)
+
+
+func reliever_leave(pos: Vector3) -> void:
+	vfx.shockwave(_flat(pos), 2.0, RELIEF, 0.35, 0.06)
+
+
+func reliever_gone(pos: Vector3) -> void:
+	vfx.puff(pos + Vector3(0, 1.0, 0), RELIEF)
+	vfx.emit_one("flash", pos + Vector3(0, 1.0, 0), Vector3.ZERO, Color(RELIEF, 0.8), 1.2, 0.6)
+
+
+## Instant Replay: the moment rewinds: implode rings and a big rewind spiral at the spot,
+## then the replayed card goes off there.
+func instant_replay(at: Vector3, card_id: String) -> void:
+	var g := _flat(at)
+	for i in 3:
+		vfx.shockwave(g, 7.0 - i * 1.5, Color(REPLAY, 0.95 - i * 0.2), 0.35, 0.06, i * 0.1, true)
+	vfx.beam(g, 1.2, 10.0, REPLAY, 0.6)
+	vfx.glyph(g + Vector3(0, 3.6, 0), 11, 2.6, REPLAY, 1.0, 0.0, 0.3)
+	vfx.glyph(g + Vector3(1.6, 4.6, 0), 6, 1.2, Color(1.0, 0.35, 0.35), 0.9, 0.05, 0.3)
+	vfx.text_popup(g + Vector3(0, 6.0, 0), "REPLAY", Color(0.75, 1.0, 1.0), 1.3, 1.0)
+	vfx.ring_emit("magic", g + Vector3(0, 0.4, 0), 3.0, 20, REPLAY, -4.0, 2.0, 1.0, 0.6)
+	if battle:
+		battle.hud_flash(Color(0.5, 0.95, 1.0, 0.12))

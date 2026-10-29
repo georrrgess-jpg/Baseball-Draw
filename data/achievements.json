@@ -23,7 +23,7 @@
     {"id": "old_school", "name": "Old School", "text": "Win Quick Defense without playing a card.", "stars": 20, "stat": "no_card_wins", "goal": 1},
     {"id": "card_max", "name": "Maxed Out", "text": "Upgrade any card to level 5.", "stars": 15, "stat": "max_card_level", "goal": 5},
     {"id": "defender_max", "name": "Franchise Player", "text": "Raise a defender to level 10.", "stars": 25, "stat": "max_defender_level", "goal": 10},
-    {"id": "full_collection", "name": "Full Deck", "text": "Collect every ability card.", "stars": 50, "stat": "cards_owned", "goal": 32},
+    {"id": "full_collection", "name": "Full Deck", "text": "Collect every ability card.", "stars": 50, "stat": "cards_owned", "goal": 44},
     {"id": "full_roster", "name": "Full Roster", "text": "Unlock every defender.", "stars": 20, "stat": "defenders_owned", "goal": 9},
     {"id": "rank_gold", "name": "Golden Glove", "text": "Reach the Gold division.", "stars": 20, "stat": "division", "goal": 3},
     {"id": "rank_legend", "name": "Hall of Famer", "text": "Reach the Legend division.", "stars": 80, "stat": "division", "goal": 7},

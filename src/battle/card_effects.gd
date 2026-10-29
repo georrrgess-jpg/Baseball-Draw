@@ -9,9 +9,21 @@ var battle: Battle
 ## Cards that resolve instantly (no caster wind-up): they get a cast acknowledgement pop.
 const DIRECT_CARDS := ["grand_slam_barrage", "shadow_change", "time_out", "changeup", "frost_field", "wall_of_dirt",
 	"base_shield", "bunt_trap", "field_vision", "diamond_aura", "rally_cry", "magnet_glove", "seventh_inning_stretch",
-	"tag_at_the_plate", "bullpen_call", "hot_corner", "perfect_game"]
+	"tag_at_the_plate", "bullpen_call", "hot_corner", "perfect_game",
+	"around_the_horn", "grand_salami", "rain_delay", "intentional_walk", "infield_fly", "golden_glove", "the_shift", "momentum",
+	"relief_pitcher", "instant_replay"]
 const GOLD := Color(1.0, 0.82, 0.3)
 const TAG_TEAL := Color(0.35, 1.0, 0.85)
+const BEAN := Color(1.0, 0.35, 0.25)
+const RELIEF := Color(0.55, 1.0, 0.5)
+const SALAMI_SPEED := 13.0
+
+## Update 7 mechanics that last: Rundown, Infield Fly, Golden Glove, The Shift, Relief Pitcher
+## and Grand Salami's rolling ball and fire trail. Each is {kind, t, ...}; Battle ticks them.
+var active: Array = []
+## Instant Replay: the last card played this game (not a Legendary) and its target.
+var last_play: Dictionary = {}
+var _replaying := false
 
 
 func _init(p_battle: Battle) -> void:
@@ -67,6 +79,10 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 	Audio.play("card_play", -4.0)
 	if card_id in DIRECT_CARDS:
 		fx.cast_ack(card_id, _ack_point(card_id, target, point))
+	if not _replaying and card_id != "instant_replay" and String(DB.card(card_id).get("rarity", "")) != "legendary":
+		last_play = {"id": card_id, "level": level, "target": target.duplicate()}
+	if _execute_u7(card_id, level, target, point):
+		return
 	match card_id:
 		"heat_wave":
 			var origin := caster.global_position if caster else Field.HOME
@@ -125,11 +141,11 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 						var n := int(p(card_id, "balls", level)) + (1 if battle.buff_active("twin_play") else 0)
 						for i in n:
 							if victims.is_empty():
-								battle.projectiles.launch_at(at, point + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), 18.0, {"arc_mult": 0.3, "color": Color(0.7, 0.9, 1.0), "trail": "comet"}, func(x: Vector3) -> void: fx.ball_impact("split", x, Color(0.7, 0.9, 1.0)))
+								battle.projectiles.launch_at(at, point + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), 18.0, {"arc_mult": 0.3, "color": Color(0.7, 0.9, 1.0), "trail": "comet", "big": true}, func(x: Vector3) -> void: fx.ball_impact("split", x, Color(0.7, 0.9, 1.0)))
 								continue
 							var v: Enemy = victims[i % victims.size()]
 							battle.projectiles.launch(at, v, 20.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level), "accuracy": 200.0, "color": Color(0.7, 0.9, 1.0), "arc_mult": 0.3,
-								"fx": "split", "trail": "comet"}))
+								"fx": "split", "trail": "comet", "big": true}))
 			_cast(df, go, point, "throw", card_id)
 
 		"grand_slam_barrage":
@@ -605,8 +621,590 @@ func _cast(caster: Defender, effect: Callable, face_point: Vector3, anim := "spe
 ## path cards, the chosen defender for Diamond Aura, home plate otherwise.
 func _ack_point(card_id: String, target: Dictionary, point: Vector3) -> Vector3:
 	var df = target.get("defender")
-	if card_id in ["diamond_aura", "hot_corner"] and df is Node3D and is_instance_valid(df):
+	if card_id in ["diamond_aura", "hot_corner", "golden_glove"] and df is Node3D and is_instance_valid(df):
 		return (df as Node3D).global_position
 	if String(DB.card(card_id).get("target", "none")) in ["area", "path"]:
 		return point
 	return Field.HOME
+
+
+# ---------------------------------------------------------------- Update 7 cards
+
+## Update 7 cards. Returns false for every other card.
+func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3) -> bool:
+	var fx = battle.vfx.cards
+	match card_id:
+		"bean_ball":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return true
+			var df := nearest_thrower(e.global_position)
+			var last_pos := e.center()
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					fx.lost_throw(_origin(df), last_pos, BEAN)
+					return
+				var mult := p(card_id, "fast_mult", level) if is_fast(e) else 1.0
+				fx.bean_release(_origin(df), e.center())
+				Audio.play("bat_crack", -6.0)
+				battle.projectiles.launch(_origin(df), e, 44.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level) * mult,
+					"knockback": p(card_id, "knockback", level) * mult, "stun": p(card_id, "stun", level) * control_mult(), "accuracy": 999.0,
+					"big": true, "color": BEAN, "fx": "bean_fast" if mult > 1.0 else "bean", "trail": "comet", "arc_mult": 0.15})
+			_cast(df, go, e.global_position, "throw", card_id)
+
+		"around_the_horn":
+			var targets := horn_targets(int(p(card_id, "targets", level)) + (1 if battle.buff_active("twin_play") else 0))
+			var path: Array[Vector3] = [Field.HOME, Field.THIRD, Field.SECOND, Field.FIRST]
+			Audio.play("throw", -2.0)
+			for i in path.size() - 1:
+				var a := path[i]
+				var b := path[i + 1]
+				battle.get_tree().create_timer(i * 0.13, false).timeout.connect(func() -> void:
+					fx.horn_link(a, b)
+					Audio.play("glove_catch", -8.0, 0.1))
+			var t0 := (path.size() - 1) * 0.13 + 0.05
+			if targets.is_empty():
+				battle.get_tree().create_timer(t0, false).timeout.connect(func() -> void: fx.fizzle(Field.FIRST + Vector3(0, 1.5, 0), "NO RUNNERS"))
+			for i in targets.size():
+				var wr := weakref(targets[i])
+				battle.get_tree().create_timer(t0 + i * 0.1, false).timeout.connect(func() -> void:
+					var e := wr.get_ref() as Enemy
+					if e == null or not e.targetable():
+						return
+					var from := _nearest_base(e.global_position) + Vector3(0, 1.2, 0)
+					fx.horn_strike(from, e.center())
+					Audio.play("ball_hit", -3.0, 0.1)
+					battle.deal_damage(e, p(card_id, "damage", level), {"kind": "throw", "card": card_id, "dir": e.global_position - from,
+						"at": e.center(), "color": Color(1.0, 0.7, 0.4)})
+					if e.alive:
+						e.apply_stun(p(card_id, "stun", level) * control_mult()))
+
+		"grand_salami":
+			var best_r: Route = null
+			var best_d := 0.0
+			var best_dist := INF
+			for rt: Route in battle.routes:
+				var pr: Dictionary = rt.project(point)
+				if float(pr.dist) < best_dist:
+					best_dist = float(pr.dist)
+					best_r = rt
+					best_d = clampf(float(pr.d), 1.5, rt.length - 1.0)
+			if best_r == null:
+				return true
+			var land := best_r.position_at(best_d)
+			var flight := 0.6
+			var length := p(card_id, "length", level)
+			var life := p(card_id, "burn_time", level)
+			Audio.play("rally_horn", -6.0)
+			battle.notify("GRAND SALAMI!", Color(1.0, 0.45, 0.15))
+			fx.salami_drop(land, flight)
+			battle.get_tree().create_timer(flight, false).timeout.connect(func() -> void:
+				if not is_instance_valid(battle):
+					return
+				Audio.play("boss_slam", -2.0)
+				Audio.play("barrage_impact", -3.0)
+				battle.shake(0.5)
+				fx.salami_impact(land)
+				var hit := {}
+				for e: Enemy in battle.enemies_in_radius(land, 2.4):
+					hit[e.get_instance_id()] = true   # the rolling ball doesn't hit them a second time
+					battle.deal_damage(e, p(card_id, "damage", level), {"kind": "fire", "card": card_id, "dir": e.global_position - land, "at": e.center()})
+					if e.alive:
+						e.knockback(p(card_id, "knockback", level))
+				active.append({"kind": "salami_fire", "pts": [land], "t": life + length / SALAMI_SPEED, "tick": 0.0,
+					"dps": p(card_id, "burn_dps", level), "life": life})
+				fx.salami_fire(land, life)
+				active.append({"kind": "salami", "route": best_r, "d": best_d, "end": maxf(0.0, best_d - length),
+					"hit": hit, "node": fx.salami_ball(land), "damage": p(card_id, "damage", level), "knockback": p(card_id, "knockback", level),
+					"last": land, "t": 99.0}))
+
+		"rundown":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return true
+			var df := nearest_thrower(e.global_position)
+			var last_pos := e.center()
+			var go := func() -> void:
+				if not is_instance_valid(e) or not e.targetable():
+					fx.lost_throw(_origin(df), last_pos, DB.category_color("control"))
+					return
+				battle.projectiles.launch_at(_origin(df), e.center(), 30.0, {"color": Color(0.75, 0.7, 1.0), "arc_mult": 0.4, "trail": "comet"}, func(_at: Vector3) -> void:
+					if not is_instance_valid(e) or not e.alive:
+						return
+					var dur := p(card_id, "duration", level) * control_mult() * (p(card_id, "boss_time", level) if e.is_boss else 1.0)
+					var span := p(card_id, "span", level)
+					e.rundown_lo = maxf(0.0, e.d - span * 0.65)
+					e.rundown_hi = minf(e.route.length - 1.0, e.d + span * 0.35)
+					e.rundown_dir = -1.0
+					e.rundown_t = dur
+					for it in active.duplicate():
+						if it.kind == "rundown" and it.e == e:
+							active.erase(it)
+					active.append({"kind": "rundown", "e": e, "t": dur, "damage": p(card_id, "damage", level)})
+					Audio.play("glove_catch")
+					battle.vfx.text_popup(e.center() + Vector3(0, 1.3, 0), "RUNDOWN!", Color(0.8, 0.75, 1.0), 1.0, 1.0)
+					fx.rundown_start(e, e.route.position_at(e.rundown_lo), e.route.position_at(e.rundown_hi), dur))
+			_cast(df, go, e.global_position, "throw", card_id)
+
+		"rain_delay":
+			var hold := p(card_id, "delay", level) * control_mult()
+			battle.spawn_hold = maxf(battle.spawn_hold, hold)
+			Audio.play("frost_cast", -4.0)
+			Audio.play("crowd_groan", -10.0)
+			battle.notify("RAIN DELAY!", Color(0.6, 0.8, 1.0))
+			battle.hud_flash(Color(0.35, 0.5, 0.75, 0.22))
+			fx.rain_delay(hold)
+			var slow := p(card_id, "slow", level) / 100.0
+			for e: Enemy in battle.enemies:
+				if e.alive:
+					# Bosses shrug off 40% of a slow (Enemy.current_speed); the rain gets them in full.
+					e.slows["rain"] = [minf(slow / 0.6, 0.85) if e.is_boss else slow, hold]
+
+		"intentional_walk":
+			var e: Enemy = target.get("enemy")
+			if e == null:
+				return true
+			Audio.play("crowd_ooh", -8.0)
+			if e.is_boss:
+				fx.fizzle(e.center() + Vector3(0, 0.6, 0), "IMMUNE")
+				return true
+			var dur := p(card_id, "duration", level) * control_mult()
+			e.slows["intentional_walk"] = [p(card_id, "slow", level) / 100.0, dur]
+			fx.intentional_walk(e, dur)
+
+		"infield_fly":
+			var r := float(DB.card(card_id).get("radius", 3.0))
+			var dur := p(card_id, "duration", level)
+			Audio.play("bat_crack", -4.0)
+			Audio.play("crowd_ooh", -10.0)
+			var item := {"kind": "infield_fly", "point": point, "r": r, "t": dur, "delay": p(card_id, "delay", level),
+				"victim": null, "land": 0.0, "boss_damage": p(card_id, "boss_damage", level)}
+			active.append(item)
+			fx.infield_fly(point, r, dur, item)
+
+		"golden_glove":
+			var df: Defender = target.get("defender")
+			if df == null:
+				return true
+			for it in active.duplicate():
+				if it.kind == "golden_glove" and it.df == df:
+					active.erase(it)
+			var item := {"kind": "golden_glove", "df": df, "t": p(card_id, "duration", level), "charges": int(p(card_id, "charges", level)),
+				"radius": p(card_id, "radius", level), "boss_damage": p(card_id, "boss_damage", level), "cd": 0.2}
+			active.append(item)
+			Audio.play("heal_chime", -4.0)
+			Audio.play("glove_catch", -6.0)
+			fx.golden_glove(df, item)
+
+		"the_shift":
+			var dur := p(card_id, "duration", level)
+			var reach := p(card_id, "shift", level)
+			var moves: Array = []
+			for df: Defender in battle.defenders:
+				var to := point - df.post
+				to.y = 0.0
+				var dist := to.length()
+				var step := minf(reach, maxf(0.0, dist - 2.0))
+				var dest := df.post + (to / maxf(dist, 0.01)) * step
+				if Field.v2(dest).distance_to(Field.v2(Field.HOME)) > Field.WALL_RADIUS - 2.5:
+					dest = df.post
+				moves.append({"df": df, "to": dest, "from": df.post})
+			for it in active.duplicate():
+				if it.kind == "shift":
+					_end_shift(it)
+					active.erase(it)
+			for b in battle.buffs.duplicate():
+				if b.kind == "shift":
+					battle.buffs.erase(b)
+			active.append({"kind": "shift", "t": dur, "dur": dur, "moves": moves})
+			battle.add_buff("shift", p(card_id, "speed_bonus", level), dur)
+			Audio.play("swing_whoosh", -2.0)
+			Audio.play("crowd_small", -8.0)
+			battle.notify("THE SHIFT!", DB.category_color("defense"))
+			fx.shift(point, moves, dur)
+
+		"momentum":
+			for b in battle.buffs.duplicate():
+				if b.kind == "momentum":
+					battle.buffs.erase(b)
+			var dur := p(card_id, "duration", level)
+			battle.add_buff("momentum", p(card_id, "energy", level), dur, {"left": p(card_id, "max_energy", level)})
+			Audio.play("aura_hum", -4.0)
+			battle.notify("MOMENTUM!", Color(0.45, 0.9, 1.0))
+			fx.momentum(dur)
+
+		"relief_pitcher":
+			var spot := point
+			var snap := battle.snap_to_route(point)
+			if float(snap.dist) < 2.0:
+				# Step off the base path, on the mound side.
+				var dir: Vector3 = snap.dir
+				var side := Vector3(-dir.z, 0, dir.x)
+				if side.dot(Field.MOUND - (snap.point as Vector3)) < 0.0:
+					side = -side
+				spot = (snap.point as Vector3) + side * 2.4
+			spot.y = 0.0
+			var gate := Field.wall_point(-38.0, 29.0)
+			var start := spot + (gate - spot).normalized() * 8.0
+			start.y = 0.0
+			var holder: Node3D = fx.make_reliever(start, spot)
+			Audio.play("card_draw", -2.0)
+			Audio.play("crowd_cheer", -10.0)
+			battle.notify("RELIEF PITCHER!", RELIEF)
+			fx.reliever_call(gate, start, spot)
+			active.append({"kind": "reliever", "node": holder, "from": start, "spot": spot, "phase": "in", "k": 0.0,
+				"t": 99.0, "cd": 0.0, "damage": p(card_id, "damage", level), "interval": p(card_id, "interval", level),
+				"range": p(card_id, "range", level), "dur": p(card_id, "duration", level)})
+
+		"instant_replay":
+			if last_play.is_empty():
+				battle.cards.add_energy(float(DB.card(card_id).cost))
+				fx.fizzle(Field.HOME + Vector3(0, 2.0, 0), "NOTHING TO REPLAY")
+				return true
+			var rid: String = last_play.id
+			var tgt: Dictionary = (last_play.target as Dictionary).duplicate()
+			var rc := DB.card(rid)
+			if rc.target == "enemy":
+				var e0: Variant = tgt.get("enemy")
+				if e0 == null or not is_instance_valid(e0) or not (e0 as Enemy).targetable():
+					var lead := battle.lead_runners(1)
+					if lead.is_empty():
+						battle.cards.add_energy(float(DB.card(card_id).cost))
+						fx.fizzle(Field.HOME + Vector3(0, 2.0, 0), "NO TARGET")
+						return true
+					tgt.enemy = lead[0]
+					tgt.point = (lead[0] as Enemy).global_position
+			if rc.target == "defender":
+				var d0: Variant = tgt.get("defender")
+				if (d0 == null or not is_instance_valid(d0)) and not battle.defenders.is_empty():
+					tgt.defender = battle.defenders[0]
+			var lv := mini(int(last_play.level) + int(p(card_id, "levels", level)), DB.card_max_level + 1)
+			var at: Vector3 = tgt.get("point", Field.HOME)
+			var te: Variant = tgt.get("enemy")
+			if te != null and is_instance_valid(te):
+				at = (te as Enemy).global_position
+			Audio.play("card_whoosh", -2.0)
+			Audio.play("crowd_ooh", -6.0)
+			battle.notify("INSTANT REPLAY: %s!" % String(rc.name).to_upper(), Color(0.5, 0.95, 1.0))
+			fx.instant_replay(at, rid)
+			battle.get_tree().create_timer(0.45, false).timeout.connect(func() -> void:
+				if not is_instance_valid(battle):
+					return
+				_replaying = true
+				execute(rid, lv, tgt)
+				_replaying = false)
+		_:
+			return false
+	return true
+
+
+## Sprinters, Swarmers and anything stealing: Bean Ball hits them twice as hard.
+func is_fast(e: Enemy) -> bool:
+	return float(e.data.get("speed", 3.0)) >= 3.8 or e.is_stealing()
+
+
+## Around the Horn: the lead runner on each base path first, then the next runners.
+func horn_targets(n: int) -> Array:
+	var by_route := {}
+	for e: Enemy in battle.enemies:
+		if e.targetable() and e.id != "decoy":
+			if not by_route.has(e.route):
+				by_route[e.route] = []
+			(by_route[e.route] as Array).append(e)
+	var lead_first := func(a: Enemy, b: Enemy) -> bool: return a.remaining() < b.remaining()
+	for k in by_route.keys():
+		(by_route[k] as Array).sort_custom(lead_first)
+	var out: Array = []
+	var rank := 0
+	while out.size() < n:
+		var tier: Array = []
+		for k in by_route.keys():
+			if (by_route[k] as Array).size() > rank:
+				tier.append(by_route[k][rank])
+		if tier.is_empty():
+			break
+		tier.sort_custom(lead_first)
+		for e in tier:
+			if out.size() < n:
+				out.append(e)
+		rank += 1
+	return out
+
+
+func _nearest_base(pos: Vector3) -> Vector3:
+	var best := Field.HOME
+	for b in Field.bases():
+		if Field.v2(b).distance_to(Field.v2(pos)) < Field.v2(best).distance_to(Field.v2(pos)):
+			best = b
+	return best
+
+
+## Intentional Walk: a walking runner that reaches home scores no run.
+func walked_home(e: Enemy) -> bool:
+	if e.is_boss or e.id == "decoy" or not e.slows.has("intentional_walk"):
+		return false
+	battle.vfx.cards.walk_no_run(e)
+	return true
+
+
+## A runner was put out (Battle.on_enemy_out): Momentum pays energy.
+func on_out(e: Enemy, _info: Dictionary) -> void:
+	for b in battle.buffs:
+		if b.kind == "momentum" and float(b.get("left", 0.0)) > 0.0:
+			var give := minf(float(b.value), float(b.left))
+			b.left = float(b.left) - give
+			battle.cards.add_energy(give)
+			battle.vfx.cards.momentum_gain(e.center(), give)
+			return
+
+
+## Rundown: the runner turned around, so it gets tagged.
+func on_rundown_turn(e: Enemy) -> void:
+	for it in active:
+		if it.kind == "rundown" and it.e == e:
+			battle.vfx.cards.rundown_tag(e)
+			Audio.play("glove_catch", -6.0, 0.1)
+			battle.deal_damage(e, float(it.damage), {"kind": "tag", "card": "rundown", "dir": e.route.direction_at(e.d) * e.rundown_dir,
+				"at": e.center(), "color": Color(0.8, 0.75, 1.0)})
+			return
+
+
+## The active Update 7 mechanic of `kind` (for a defender or runner `key`), or an empty dictionary.
+func active_item(kind: String, key: Variant = null) -> Dictionary:
+	for it in active:
+		if it.kind == kind and (key == null or it.get("df") == key or it.get("e") == key):
+			return it
+	return {}
+
+
+## Ends every lasting mechanic at once (practice showcase, tests).
+func clear_active() -> void:
+	for it in active:
+		if it.kind == "shift":
+			_end_shift(it)
+		var n: Variant = it.get("node")
+		if n != null and is_instance_valid(n):
+			(n as Node).queue_free()
+	active.clear()
+	battle.spawn_hold = 0.0
+
+
+## Per-frame update of the lasting mechanics (called by Battle._process).
+func tick(delta: float) -> void:
+	if active.is_empty():
+		return
+	for it in active.duplicate():
+		it.t = float(it.t) - delta
+		var done := float(it.t) <= 0.0
+		match String(it.kind):
+			"rundown":
+				var e: Enemy = it.e if is_instance_valid(it.e) else null
+				done = done or e == null or not e.alive or e.rundown_t <= 0.0
+			"infield_fly":
+				done = _tick_fly(it, delta)
+			"golden_glove":
+				done = _tick_glove(it, delta) or done
+			"shift":
+				_tick_shift(it)
+				if done:
+					_end_shift(it)
+			"reliever":
+				done = _tick_reliever(it, delta)
+			"salami":
+				done = _tick_salami(it, delta)
+			"salami_fire":
+				_tick_fire(it, delta)
+		if done:
+			active.erase(it)
+
+
+func _tick_fly(it: Dictionary, delta: float) -> bool:
+	var fx = battle.vfx.cards
+	var v: Variant = it.victim
+	if v == null:
+		if float(it.t) <= 0.0:
+			return true
+		for e: Enemy in battle.enemies_in_radius(it.point, float(it.r)):
+			if e.id != "decoy":
+				it.victim = e
+				it.land = float(it.delay)
+				fx.infield_fly_drop(it.point, e, float(it.delay))
+				break
+		return false
+	it.land = float(it.land) - delta
+	if float(it.land) > 0.0:
+		return false
+	if not is_instance_valid(v) or not (v as Enemy).alive:
+		fx.fizzle(it.point + Vector3(0, 1.0, 0), "SAFE")
+		return true
+	var e := v as Enemy
+	Audio.play("glove_catch")
+	if e.is_boss:
+		fx.infield_fly_catch(e, false)
+		battle.deal_damage(e, float(it.boss_damage), {"kind": "catch", "card": "infield_fly", "at": e.center()})
+		if e.alive:
+			e.apply_stun(2.0 * control_mult())
+	else:
+		fx.infield_fly_catch(e, true)
+		Audio.play("crowd_cheer", -8.0)
+		e.die({"kind": "catch", "card": "infield_fly", "dir": Vector3.UP})
+	return true
+
+
+func _tick_glove(it: Dictionary, delta: float) -> bool:
+	var df: Defender = it.df if is_instance_valid(it.df) else null
+	if df == null or int(it.charges) <= 0:
+		return true
+	it.cd = float(it.cd) - delta
+	if float(it.cd) > 0.0 or df.is_stunned():
+		return false
+	for e: Enemy in battle.enemies:
+		if not e.targetable() or e.id == "decoy" or e.is_airborne():
+			continue
+		if Field.v2(e.global_position).distance_to(Field.v2(df.global_position)) > float(it.radius):
+			continue
+		it.charges = int(it.charges) - 1
+		it.cd = 0.35
+		var to := e.global_position - df.global_position
+		df.rotation.y = atan2(to.x, to.z)
+		if df.model.action == "":
+			df.model.play_action("catch", 1.4)
+		Audio.play("glove_catch")
+		battle.vfx.cards.golden_catch(df, e, e.is_boss)
+		if e.is_boss:
+			battle.deal_damage(e, float(it.boss_damage), {"source": df, "kind": "catch", "card": "golden_glove", "at": e.center()})
+			if e.alive:
+				e.apply_stun(1.5 * control_mult())
+		else:
+			Audio.play("crowd_cheer", -10.0)
+			e.die({"source": df, "kind": "catch", "card": "golden_glove", "dir": to})
+		break
+	return int(it.charges) <= 0
+
+
+func _tick_shift(it: Dictionary) -> void:
+	var tt := float(it.dur) - float(it.t)
+	var k := 1.0
+	if tt < 0.4:
+		k = 1.0 - pow(1.0 - tt / 0.4, 3.0)
+	elif float(it.t) < 0.5:
+		k = smoothstep(0.0, 0.5, maxf(float(it.t), 0.0))
+	for m in it.moves:
+		var df: Defender = m.df if is_instance_valid(m.df) else null
+		if df == null or df == battle.dragging or df._dash_state != "" or df.post != m.from:
+			continue
+		var pos: Vector3 = (m.from as Vector3).lerp(m.to, k)
+		df.global_position = Vector3(pos.x, 0.0, pos.z)
+
+
+## The shift is over: every defender that still has the same post stands on it again.
+func _end_shift(it: Dictionary) -> void:
+	for m in it.moves:
+		var df: Defender = m.df if is_instance_valid(m.df) else null
+		if df and df != battle.dragging and df._dash_state == "":
+			df.global_position = df.post
+
+
+func _tick_reliever(it: Dictionary, delta: float) -> bool:
+	var node: Node3D = it.node if is_instance_valid(it.node) else null
+	if node == null:
+		return true
+	var model: CharacterModel = node.get_child(0) as CharacterModel
+	match String(it.phase):
+		"in":
+			it.t = 99.0
+			it.k = float(it.k) + delta / 0.9
+			node.global_position = (it.from as Vector3).lerp(it.spot, minf(float(it.k), 1.0))
+			if float(it.k) >= 1.0:
+				it.phase = "pitch"
+				it.t = float(it.dur)
+				model.play_base("ready", 0.2)
+				battle.vfx.cards.reliever_arrive(it.spot, float(it.range), float(it.dur))
+		"pitch":
+			it.cd = float(it.cd) - delta
+			if float(it.t) <= 0.0:
+				it.phase = "out"
+				it.k = 0.0
+				it.t = 99.0
+				model.play_base("run", 0.2)
+				var back: Vector3 = (it.from as Vector3) - node.global_position
+				node.rotation.y = atan2(back.x, back.z)
+				battle.vfx.cards.reliever_leave(node.global_position)
+				return false
+			if float(it.cd) <= 0.0:
+				var tgt: Enemy = null
+				for e: Enemy in battle.enemies:
+					if e.targetable() and Field.v2(e.global_position).distance_to(Field.v2(node.global_position)) <= float(it.range):
+						if tgt == null or e.remaining() < tgt.remaining():
+							tgt = e
+				if tgt:
+					it.cd = float(it.interval)
+					var to := tgt.global_position - node.global_position
+					node.rotation.y = atan2(to.x, to.z)
+					model.play_action("throw", 1.6)
+					Audio.play("throw", -8.0, 0.1, 70)
+					var dmg := float(it.damage)
+					var crit := randf() < 0.1 + tgt.crit_bonus()
+					if crit:
+						dmg *= 1.75
+					battle.get_tree().create_timer(0.3 / 1.6, false).timeout.connect(func() -> void:
+						if not is_instance_valid(node) or not is_instance_valid(tgt) or not tgt.targetable():
+							return
+						battle.vfx.arm_swoosh(model, RELIEF)
+						battle.projectiles.launch(model.hand_position(), tgt, 30.0, {"card": "relief_pitcher", "damage": dmg, "crit": crit,
+							"accuracy": 90.0, "color": RELIEF, "trail": "comet", "fx": "relief"}))
+		"out":
+			it.t = 99.0
+			it.k = float(it.k) + delta / 0.9
+			node.global_position = (it.spot as Vector3).lerp(it.from, minf(float(it.k), 1.0))
+			if float(it.k) >= 1.0:
+				battle.vfx.cards.reliever_gone(node.global_position)
+				node.queue_free()
+				return true
+	return false
+
+
+func _tick_salami(it: Dictionary, delta: float) -> bool:
+	var node: Node3D = it.node if is_instance_valid(it.node) else null
+	var route: Route = it.route
+	it.d = float(it.d) - SALAMI_SPEED * delta
+	var pos := route.position_at(maxf(float(it.d), 0.0))
+	var dir := -route.direction_at(maxf(float(it.d), 0.0))
+	if node:
+		battle.vfx.cards.salami_roll(node, pos, dir, delta)
+	if pos.distance_to(it.last) >= 1.2:
+		it.last = pos
+		var fire := active_item("salami_fire")
+		if not fire.is_empty():
+			(fire.pts as Array).append(pos)
+			battle.vfx.cards.salami_fire(pos, float(fire.t) - 0.3)
+	for e: Enemy in battle.enemies:
+		if not e.targetable() or it.hit.has(e.get_instance_id()):
+			continue
+		if Field.v2(e.global_position).distance_to(Field.v2(pos)) < 1.9:
+			it.hit[e.get_instance_id()] = true
+			battle.vfx.cards.salami_hit(e)
+			battle.deal_damage(e, float(it.damage), {"kind": "fire", "card": "grand_salami", "dir": dir, "at": e.center(), "color": Color(1.0, 0.5, 0.15)})
+			if e.alive:
+				e.knockback(float(it.knockback))
+	if float(it.d) <= float(it.end) or float(it.d) <= 0.0:
+		battle.vfx.cards.salami_end(pos)
+		if node:
+			node.queue_free()
+		return true
+	return false
+
+
+## Grand Salami's fire trail: runners on it burn (re-applied every half second).
+func _tick_fire(it: Dictionary, delta: float) -> void:
+	it.tick = float(it.tick) - delta
+	if float(it.tick) > 0.0:
+		return
+	it.tick = 0.5
+	for e: Enemy in battle.enemies:
+		if not e.targetable():
+			continue
+		for q in it.pts:
+			if Field.v2(e.global_position).distance_to(Field.v2(q)) < 1.5:
+				e.apply_burn(float(it.dps), 1.2, null)
+				break
