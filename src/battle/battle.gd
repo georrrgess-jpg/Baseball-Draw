@@ -90,6 +90,7 @@ var _boss_intro_node: BossIntro
 var _intro_seen := {}
 var _slowmo_tw: Tween
 var _slowmo_base := 1.0
+var spawn_hold := 0.0                # Rain Delay: seconds the gates stay closed
 
 
 func _ready() -> void:
@@ -719,6 +720,9 @@ func _boss_intro(e: Enemy, route: Route) -> void:
 
 
 func _process_spawns(delta: float) -> void:
+	if spawn_hold > 0.0:
+		spawn_hold -= delta
+		return
 	wave_time += delta
 	while not spawn_queue.is_empty() and spawn_queue[0].time <= wave_time:
 		var s: Dictionary = spawn_queue.pop_front()
@@ -741,6 +745,7 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 		return
 	var src: Defender = info.get("source") if info.get("source") is Defender else null
 	var src_id := src.id if src and is_instance_valid(src) else ""
+	effects.on_out(e, info)
 	run.add_out(src_id)
 	run.add_card_impact(str(info.get("card", "")), 0.0, 1)
 	if src and is_instance_valid(src):
@@ -811,6 +816,8 @@ func _on_combo(n: int) -> void:
 func on_enemy_reached_home(e: Enemy) -> void:
 	if not e.alive:
 		return
+	if e.runs > 0 and effects.walked_home(e):
+		e.runs = 0   # Intentional Walk: a walking runner scores nothing
 	if e.id != "decoy" and e.runs > 0 and _plate_tag(e):
 		return
 	e.alive = false
@@ -1112,7 +1119,7 @@ func _update_buffs(delta: float) -> void:
 					df.dyn_ricochet = maxf(df.dyn_ricochet, float(b.value))
 				"field_vision":
 					df.dyn_range += float(b.value)
-				"rally":
+				"rally", "shift":
 					df.dyn_speed += float(b.value)
 				"hot_corner":
 					if b.get("defender") == df:
@@ -1173,6 +1180,7 @@ func _process(delta: float) -> void:
 		w.tick(delta)
 	for t in traps.duplicate():
 		t.tick(delta)
+	effects.tick(delta)
 	_prof_mark("zones_walls")
 	for e in enemies.duplicate():
 		if is_instance_valid(e):
@@ -1486,7 +1494,7 @@ func _preview_units(id: String, gp: Variant) -> Array:
 			return out2
 		"none":
 			match id:
-				"time_out", "changeup", "perfect_game":
+				"time_out", "changeup", "perfect_game", "rain_delay":
 					var all: Array = []
 					for e in enemies:
 						if e.targetable():
@@ -1498,6 +1506,8 @@ func _preview_units(id: String, gp: Variant) -> Array:
 					return lead_runners(int(DB.card_param(id, "targets", run.card_level(id))))
 				"twin_play", "field_vision", "rally_cry":
 					return defenders.duplicate()
+				"around_the_horn":
+					return effects.horn_targets(int(DB.card_param(id, "targets", run.card_level(id))))
 	return []
 
 

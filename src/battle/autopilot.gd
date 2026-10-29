@@ -230,6 +230,14 @@ func _process(delta: float) -> void:
 		return
 
 
+func _live() -> int:
+	var n := 0
+	for e: Enemy in battle.enemies:
+		if e.alive and e.id != "decoy":
+			n += 1
+	return n
+
+
 func _target_for(id: String) -> Dictionary:
 	var c := DB.card(id)
 	var lead := battle.lead_runners(1)
@@ -276,6 +284,83 @@ func _target_for(id: String) -> Dictionary:
 				if e.alive and e.id != "decoy":
 					live += 1
 			if live < 6 and battle.boss_alive == null and (lead[0] as Enemy).remaining() > 10.0:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"bean_ball":
+			# Fast runners take double: the fastest threat first, else the lead runner.
+			for e: Enemy in battle.lead_runners(6):
+				if battle.effects.is_fast(e):
+					return {"enemy": e, "point": e.global_position, "valid": true}
+			return {"enemy": lead[0], "point": lead[0].global_position, "valid": true}
+		"rundown", "intentional_walk":
+			# The non-boss runner closest to scoring that isn't already held up.
+			for e: Enemy in battle.lead_runners(6):
+				if e.is_boss or e.rundown_t > 0.0 or e.slows.has("intentional_walk"):
+					continue
+				if id == "intentional_walk" and e.remaining() > 14.0:
+					return {}
+				return {"enemy": e, "point": e.global_position, "valid": true}
+			return {}
+		"rain_delay":
+			if _live() < 5 and battle.boss_alive == null:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"momentum":
+			if _live() < 4:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"around_the_horn":
+			if battle.effects.horn_targets(4).size() < 2:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"infield_fly":
+			# A pop-up just ahead of the lead runner: it runs right into it.
+			var e: Enemy = lead[0]
+			if not battle.effects.active_item("infield_fly").is_empty():
+				return {}
+			return {"point": e.route.position_at(minf(e.d + 2.5, e.route.length - 1.0)), "valid": true}
+		"golden_glove":
+			# The defender with the most runners close by.
+			var pick: Defender = null
+			var best_n := 0
+			for df: Defender in battle.defenders:
+				var n := 0
+				for e: Enemy in battle.enemies:
+					if e.targetable() and not e.is_boss and Field.v2(e.global_position).distance_to(Field.v2(df.global_position)) < 6.0:
+						n += 1
+				if n > best_n and battle.effects.active_item("golden_glove", df).is_empty():
+					best_n = n
+					pick = df
+			if pick == null:
+				return {}
+			return {"defender": pick, "point": pick.global_position, "valid": true}
+		"the_shift":
+			if _live() < 3:
+				return {}
+			var sum := Vector3.ZERO
+			var leads := battle.lead_runners(4)
+			for e: Enemy in leads:
+				sum += e.global_position
+			return {"point": sum / float(leads.size()), "valid": true}
+		"grand_salami":
+			# The busiest base path: land on its lead runner, the ball rolls back over the rest.
+			var count := {}
+			var front := {}
+			for e: Enemy in battle.lead_runners(30):
+				count[e.route] = int(count.get(e.route, 0)) + 1
+				if not front.has(e.route):
+					front[e.route] = e
+			var best_route: Variant = null
+			for rt in count.keys():
+				if best_route == null or int(count[rt]) > int(count[best_route]):
+					best_route = rt
+			if best_route == null or (int(count[best_route]) < 3 and battle.boss_alive == null):
+				return {}
+			var fe: Enemy = front[best_route]
+			return {"point": fe.route.position_at(minf(fe.d + 1.0, fe.route.length - 1.5)), "valid": true}
+		"instant_replay":
+			var last: Dictionary = battle.effects.last_play
+			if last.is_empty() or int(DB.card(String(last.id)).cost) < 3:
 				return {}
 			return {"valid": true, "point": Field.HOME}
 	match c.target:

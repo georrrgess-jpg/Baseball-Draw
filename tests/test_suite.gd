@@ -7,6 +7,9 @@ var checks := 0
 var failures := 0
 var battle: Battle
 const NEW_CARDS := ["called_shot", "line_drive", "tag_at_the_plate", "bullpen_call", "hot_corner", "perfect_game"]
+const NEW_CARDS_U7 := ["bean_ball", "around_the_horn", "grand_salami", "rundown", "rain_delay", "intentional_walk", "infield_fly",
+	"golden_glove", "the_shift", "momentum", "relief_pitcher", "instant_replay"]
+const ROLES := ["damage", "aoe", "control", "defense", "run_stop", "economy", "buff", "boss"]
 
 
 func ok(cond: bool, what: String) -> void:
@@ -46,6 +49,7 @@ func _run() -> void:
 	test_deck_ai()
 	await test_menus()
 	test_update5_content()
+	test_update7_content()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -55,7 +59,7 @@ func _run() -> void:
 
 func test_data() -> void:
 	section("data integrity")
-	ok(DB.cards.size() == 32, "32 cards defined (%d)" % DB.cards.size())
+	ok(DB.cards.size() == 44, "44 cards defined (%d)" % DB.cards.size())
 	for id in NEW_CARDS:
 		ok(DB.cards.has(id), "Update 5 card %s defined" % id)
 	ok(DB.cards.values().filter(func(c: Dictionary) -> bool: return c.rarity == "legendary").size() >= 3, "at least three Legendary cards")
@@ -991,6 +995,8 @@ func test_battle_systems() -> void:
 	_clear()
 	await _test_update5_battle()
 	_clear()
+	await _test_update7_battle()
+	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
 	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
@@ -1260,6 +1266,7 @@ func test_update5_content() -> void:
 
 
 func _clear() -> void:
+	battle.effects.clear_active()
 	for en in battle.enemies.duplicate():
 		en.die({})
 	for w in battle.walls.duplicate():
@@ -1353,6 +1360,22 @@ func _test_card(cid: String) -> void:
 			ok(battle.cards.hand_count() >= mini(hand_before + 1, CardSystem.MAX_HAND), "bullpen call draws cards")
 		"hot_corner":
 			ok(battle.hot_corner_on(battle.defenders[0]), "hot corner heats up the chosen defender")
+		"rain_delay":
+			ok(battle.spawn_hold > 0.0 or any.call(func(en: Enemy) -> bool: return en.slows.has("rain")), "rain delay holds the gates and slows runners")
+		"intentional_walk":
+			ok(lead.slows.has("intentional_walk") or not lead.alive, "intentional walk walks its target")
+		"rundown":
+			ok(lead.rundown_t > 0.0 or damaged, "rundown traps its target")
+		"infield_fly":
+			ok(any.call(func(en: Enemy) -> bool: return not en.alive) or not battle.effects.active_item("infield_fly").is_empty(), "infield fly catches a runner")
+		"golden_glove":
+			ok(not battle.effects.active_item("golden_glove").is_empty() or any.call(func(en: Enemy) -> bool: return not en.alive), "golden glove arms a defender")
+		"the_shift":
+			ok(battle.buff_active("shift"), "the shift is on")
+		"momentum":
+			ok(battle.buff_active("momentum"), "momentum is on")
+		"instant_replay":
+			ok(damaged or not battle.effects.active.is_empty(), "instant replay plays the last card again")
 		"perfect_game":
 			ok(damaged, "perfect game damages every runner")
 			ok(battle.buff_active("perfect_tag"), "perfect game opens a tag window at the plate")
@@ -1506,4 +1529,309 @@ func test_deck_ai() -> void:
 	var rp := DeckAI.build()
 	ok(rp.deck.size() == mini(Profile.DECK_SIZE, DeckAI.profile_context().owned.size()) and _unique_owned(rp.deck, DeckAI.profile_context().owned), "profile context: owned cards only")
 	ok(Profile.set_deck(rp.deck) or rp.deck.size() < Profile.DECK_SIZE, "the auto-built deck is a valid saved deck")
+
+
+# ---------------------------------------------------------------- Update 7 cards
+
+## Update 7 cards in a live battle: each test checks what the card text says. Defenders hold
+## their throws so the numbers come from the card alone.
+func _test_update7_battle() -> void:
+	section("update 7 cards (battle)")
+	var route := battle.routes[0]
+	var other_route := battle.routes[battle.routes.size() - 1]
+	_hold_fire(true)
+	await _wait(0.1)
+	var lv := 1
+
+	# Bean Ball: damage, stun, knockback; fast runners take double and fly back twice as far.
+	var slow_r := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var fast_r := battle.spawn_enemy("sprinter", other_route, other_route.length * 0.5, {"lateral": 0.0, "hp_mult": 80.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	var h1 := slow_r.hp
+	var h2 := fast_r.hp
+	var d1 := slow_r.d
+	var d2 := fast_r.d
+	battle.effects.execute("bean_ball", lv, {"enemy": slow_r, "point": slow_r.global_position, "valid": true})
+	battle.effects.execute("bean_ball", lv, {"enemy": fast_r, "point": fast_r.global_position, "valid": true})
+	await _wait(1.2)
+	var dmg := DB.card_param("bean_ball", "damage", lv)
+	ok(absf((h1 - slow_r.hp) - dmg) < 2.0, "bean ball hits a runner for %d (%.0f)" % [int(dmg), h1 - slow_r.hp])
+	ok(absf((h2 - fast_r.hp) - dmg * 2.0) < 3.0, "bean ball hits a fast runner for double (%.0f)" % (h2 - fast_r.hp))
+	ok(slow_r.stun_t > 0.0 and fast_r.stun_t > 0.0, "bean ball stuns")
+	ok(d1 - slow_r.d > 1.0 and (d2 - fast_r.d) > (d1 - slow_r.d) * 1.6, "bean ball knocks back, fast runners twice as far (%.1f vs %.1f m)" % [d1 - slow_r.d, d2 - fast_r.d])
+	_clear()
+	await _wait(0.2)
+
+	# Around the Horn: the lead runner on every path first, then the next runners, up to `targets`.
+	var on_a: Array = []
+	for i in 4:
+		on_a.append(battle.spawn_enemy("runner", route, route.length * 0.3 + i * 1.5, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01}))
+	var on_b := battle.spawn_enemy("runner", other_route, other_route.length * 0.2, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	var hp_a: Array = on_a.map(func(en: Enemy) -> float: return en.hp)
+	var hb := on_b.hp
+	battle.effects.execute("around_the_horn", lv, {"valid": true})
+	await _wait(1.2)
+	var hit_n := 0
+	for i in on_a.size():
+		if on_a[i].hp < float(hp_a[i]) - 1.0:
+			hit_n += 1
+	ok(on_b.hp < hb - 1.0, "around the horn hits the lead runner on the second path")
+	ok(on_a[3].hp < float(hp_a[3]) - 1.0 and hit_n == 3 and on_a[0].hp >= float(hp_a[0]) - 0.01,
+		"around the horn hits %d runners in all, leaders first (%d of 4 on the busy path)" % [int(DB.card_param("around_the_horn", "targets", lv)), hit_n])
+	_clear()
+	await _wait(0.2)
+
+	# Grand Salami: hits every runner on the path behind the landing spot, then they burn.
+	var row: Array = []
+	for i in 4:
+		row.append(battle.spawn_enemy("runner", route, route.length * 0.6 - i * 2.5, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 0.01}))
+	var aside := battle.spawn_enemy("runner", other_route, 4.0, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	var hp_row: Array = row.map(func(en: Enemy) -> float: return en.hp)
+	var ha := aside.hp
+	battle.effects.execute("grand_salami", lv, {"point": row[0].global_position, "valid": true})
+	await _wait(1.8)
+	var all_hit := true
+	var burning := false
+	for i in row.size():
+		all_hit = all_hit and row[i].hp <= float(hp_row[i]) - DB.card_param("grand_salami", "damage", lv) * 0.9
+		burning = burning or row[i].burn_t > 0.0
+	ok(all_hit, "grand salami rolls over every runner on the path for its damage")
+	ok(burning, "grand salami's fire trail burns runners")
+	ok(is_equal_approx(aside.hp, ha), "grand salami leaves other paths alone")
+	_clear()
+	await _wait(0.2)
+
+	# Rundown: the runner goes back and forth inside its stretch, tagged at each turn.
+	var rd := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0})
+	await _wait(0.1)
+	var rhp := rd.hp
+	battle.effects.execute("rundown", lv, {"enemy": rd, "point": rd.global_position, "valid": true})
+	await _wait(0.6)
+	var lo := rd.rundown_lo
+	var hi := rd.rundown_hi
+	var stayed := rd.rundown_t > 0.0
+	var turned := false
+	var last_dir := rd.rundown_dir
+	for i in 25:
+		await _wait(0.1)
+		stayed = stayed and rd.d >= lo - 0.3 and rd.d <= hi + 0.3
+		turned = turned or rd.rundown_dir != last_dir
+	ok(stayed and hi - lo > 4.0, "rundown keeps the runner inside its stretch (%.1f m)" % (hi - lo))
+	ok(turned and rd.hp < rhp - DB.card_param("rundown", "damage", lv) * 0.9, "rundown turns the runner and tags it (%.0f damage)" % (rhp - rd.hp))
+	await _wait(2.0)
+	ok(rd.rundown_t <= 0.0, "the rundown ends after its duration")
+	_clear()
+	await _wait(0.2)
+
+	# Rain Delay: the gates stay shut and every runner (a boss too, in full) is slowed.
+	var wet := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0})
+	var wet_boss := battle.spawn_enemy("iron_slugger", other_route, 5.0, {"lateral": 0.0, "hp_mult": 1.0})
+	wet_boss.ability_t = 999.0
+	await _wait(0.1)
+	battle.effects.execute("rain_delay", lv, {"valid": true})
+	var slow := DB.card_param("rain_delay", "slow", lv) / 100.0
+	ok(battle.spawn_hold >= DB.card_param("rain_delay", "delay", lv) - 0.01, "rain delay closes the gates for %ds" % int(DB.card_param("rain_delay", "delay", lv)))
+	ok(wet.slows.has("rain") and absf(float(wet.slows.rain[0]) - slow) < 0.01, "rain delay slows runners %d%%" % int(slow * 100.0))
+	var boss_speed := wet_boss.current_speed()
+	ok(absf(boss_speed - wet_boss.base_speed * (1.0 - slow) * wet_boss.aura_speed) < 0.05, "a boss gets the full rain slow (%.2f of %.2f)" % [boss_speed, wet_boss.base_speed])
+	var queued := {"time": battle.wave_time + 0.05, "route": 0, "enemy": "runner", "affix": "", "hp_mult": 1.0, "speed_mult": 1.0}
+	battle.spawn_queue.append(queued)
+	var count0 := battle.enemies.size()
+	battle._process_spawns(0.5)
+	ok(battle.enemies.size() == count0 and battle.spawn_queue.size() == 1, "no runner leaves the gate during the delay")
+	battle.spawn_hold = 0.0
+	battle._process_spawns(0.2)
+	ok(battle.spawn_queue.is_empty() and battle.enemies.size() == count0 + 1, "runners come out again after the delay")
+	_clear()
+	await _wait(0.2)
+
+	# Intentional Walk: slowed to a walk, and a walking runner home scores nothing.
+	var runs_seen := [0]
+	var on_run := func(n: int) -> void: runs_seen[0] = int(runs_seen[0]) + n
+	battle.run_scored.connect(on_run)
+	var walker := battle.spawn_enemy("runner", route, route.length - 1.0, {"lateral": 0.0, "hp_mult": 40.0})
+	await _wait(0.05)
+	var sp0 := walker.current_speed()
+	battle.effects.execute("intentional_walk", lv, {"enemy": walker, "point": walker.global_position, "valid": true})
+	ok(sp0 > 0.0 and walker.current_speed() <= walker.base_speed * walker.aura_speed * (1.0 - DB.card_param("intentional_walk", "slow", lv) / 100.0) + 0.05, "intentional walk slows the runner to a walk")
+	await _wait(2.0)
+	ok((not is_instance_valid(walker) or (not walker.alive and walker.runs == 0)) and int(runs_seen[0]) == 0, "a walked runner that reaches home scores no run")
+	battle.run.shields = 0
+	var control := battle.spawn_enemy("runner", route, route.length - 0.4, {"lateral": 0.0, "hp_mult": 40.0})
+	await _wait(0.6)
+	ok((not is_instance_valid(control) or not control.alive) and int(runs_seen[0]) == 1, "an ordinary runner home still scores (control)")
+	battle.run_scored.disconnect(on_run)
+	_clear()
+	await _wait(0.2)
+
+	# Infield Fly: the first runner into the zone is out once the ball comes down; a boss is stunned.
+	var fly_r := battle.spawn_enemy("runner", route, route.length * 0.4, {"lateral": 0.0, "hp_mult": 40.0})
+	await _wait(0.05)
+	var spot := route.position_at(fly_r.d + 3.0)
+	battle.effects.execute("infield_fly", lv, {"point": spot, "valid": true})
+	var caught_at := -1.0
+	for i in 40:
+		await _wait(0.1)
+		if not battle.effects.active_item("infield_fly").is_empty() and battle.effects.active_item("infield_fly").victim != null and caught_at < 0.0:
+			caught_at = i * 0.1
+		if not fly_r.alive:
+			break
+	ok(caught_at >= 0.0 and not fly_r.alive and fly_r.hp <= 0.0, "infield fly calls out the first runner in the zone")
+	var fly_b := battle.spawn_enemy("iron_slugger", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 1.0})
+	fly_b.ability_t = 999.0
+	await _wait(0.05)
+	var fbh := fly_b.hp
+	battle.effects.execute("infield_fly", lv, {"point": fly_b.global_position, "valid": true})
+	await _wait(DB.card_param("infield_fly", "delay", lv) + 0.4)
+	ok(fly_b.alive and fly_b.hp < fbh - 1.0 and fly_b.stun_t > 0.0, "a boss under an infield fly is damaged and stunned, not out")
+	_clear()
+	await _wait(0.2)
+
+	# Golden Glove: the next runners within reach are put out; a boss uses a catch and is hurt.
+	var gg: Defender = battle.defenders[0]
+	for df in battle.defenders:
+		if df.trait_id != "quick_hands":
+			gg = df
+			break
+	var post0 := gg.post
+	var gg_d := route.length * 0.45
+	var side := route.direction_at(gg_d).cross(Vector3.UP).normalized()
+	gg.place(route.position_at(gg_d) + side * 2.0)
+	battle.effects.execute("golden_glove", lv, {"defender": gg, "valid": true})
+	var g1 := battle.spawn_enemy("runner", route, gg_d - 6.0, {"lateral": 0.0, "hp_mult": 40.0})
+	var g2 := battle.spawn_enemy("runner", route, gg_d - 9.0, {"lateral": 0.0, "hp_mult": 40.0})
+	for i in 40:
+		await _wait(0.1)
+		if not g1.alive and not g2.alive:
+			break
+	var item := battle.effects.active_item("golden_glove", gg)
+	ok(not g1.alive and not g2.alive and g1.hp <= 0.0, "golden glove puts out runners that come within reach")
+	ok(not item.is_empty() and int(item.charges) == int(DB.card_param("golden_glove", "charges", lv)) - 2, "each catch uses a charge (%s left)" % str(item.get("charges", "?")))
+	var gb := battle.spawn_enemy("iron_slugger", route, gg_d - 2.0, {"lateral": 0.0, "hp_mult": 1.0})
+	gb.ability_t = 999.0
+	var gbh := gb.hp
+	await _wait(0.6)
+	ok(gb.alive and gb.hp < gbh - 1.0 and battle.effects.active_item("golden_glove", gg).is_empty(), "a boss can't be caught: it is hurt and uses the last catch")
+	gg.place(post0)
+	_clear()
+	await _wait(0.2)
+
+	# The Shift: every defender slides toward the spot, throws faster, then returns to its post.
+	var focus := route.position_at(route.length * 0.5)
+	var before: Array = battle.defenders.map(func(df: Defender) -> float: return Field.v2(df.global_position).distance_to(Field.v2(focus)))
+	battle.effects.execute("the_shift", lv, {"point": focus, "valid": true})
+	await _wait(0.7)
+	var closer := 0
+	for i in battle.defenders.size():
+		if Field.v2(battle.defenders[i].global_position).distance_to(Field.v2(focus)) < float(before[i]) - 1.0:
+			closer += 1
+	ok(closer >= battle.defenders.size() - 1, "the shift moves the defenders toward the spot (%d of %d)" % [closer, battle.defenders.size()])
+	ok(battle.buff_active("shift") and battle.defenders[0].dyn_speed >= DB.card_param("the_shift", "speed_bonus", lv) - 0.01, "shifted defenders throw faster")
+	await _wait(DB.card_param("the_shift", "duration", lv))
+	var home := true
+	for df in battle.defenders:
+		home = home and df.global_position.distance_to(df.post) < 0.05
+	ok(home and not battle.buff_active("shift"), "after the shift every defender is back on its post")
+	_clear()
+	await _wait(0.2)
+
+	# Momentum: each out gives energy, up to the cap.
+	battle.cards.infinite_energy = false
+	battle.cards.energy = 0.0
+	battle.effects.execute("momentum", lv, {"valid": true})
+	var mom: Array = _spawn_pack(10)
+	await _wait(0.1)
+	for i in 2:
+		mom[i].die({})
+	ok(absf(battle.cards.energy - 2.0 * DB.card_param("momentum", "energy", lv)) < 0.2, "momentum: each out gives %.1f energy (%.2f)" % [DB.card_param("momentum", "energy", lv), battle.cards.energy])
+	for i in range(2, 10):
+		mom[i].die({})
+	# (Triple plays and five-out combos pay +1 energy each on their own.)
+	var mb: Array = battle.buffs.filter(func(b: Dictionary) -> bool: return b.kind == "momentum")
+	ok(not mb.is_empty() and float(mb[0].left) <= 0.01 and battle.cards.energy <= DB.card_param("momentum", "max_energy", lv) + 2.3,
+		"momentum stops at %d energy (%.2f with combo bonuses)" % [int(DB.card_param("momentum", "max_energy", lv)), battle.cards.energy])
+	battle.cards.infinite_energy = true
+	_clear()
+	await _wait(0.2)
+
+	# Relief Pitcher: a reliever comes in, throws at runners in range, then leaves.
+	var rp_pack := _spawn_pack(3)
+	await _wait(0.1)
+	var rp_hp := 0.0
+	for en in rp_pack:
+		rp_hp += en.hp
+	var dmg_rp0 := float(battle.run.card_impact.get("relief_pitcher", {}).get("damage", 0.0))
+	battle.effects.execute("relief_pitcher", lv, {"point": rp_pack[1].global_position, "valid": true})
+	await _wait(0.3)
+	ok(not battle.effects.active_item("reliever").is_empty(), "a relief pitcher comes in")
+	await _wait(3.0)
+	var rp_after := 0.0
+	for en in rp_pack:
+		rp_after += maxf(en.hp, 0.0)
+	ok(rp_after < rp_hp - DB.card_param("relief_pitcher", "damage", lv) * 2.0, "the reliever's throws hit runners (%.0f damage)" % (rp_hp - rp_after))
+	ok(float(battle.run.card_impact.get("relief_pitcher", {}).get("damage", 0.0)) > dmg_rp0, "relief pitcher damage is credited to the card")
+	await _wait(DB.card_param("relief_pitcher", "duration", lv) + 1.0)
+	ok(battle.effects.active_item("reliever").is_empty(), "the reliever leaves when time is up")
+	_clear()
+	await _wait(0.2)
+
+	# Instant Replay: replays the last non-Legendary card at one level higher; refunds when empty.
+	battle.effects.last_play = {}
+	battle.cards.infinite_energy = false
+	battle.cards.energy = 1.0
+	battle.effects.execute("instant_replay", lv, {"valid": true})
+	ok(absf(battle.cards.energy - (1.0 + float(DB.card("instant_replay").cost))) < 0.05, "instant replay with nothing to replay refunds its energy")
+	battle.cards.infinite_energy = true
+	var ir := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 60.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	battle.effects.execute("power_throw", 1, {"enemy": ir, "point": ir.global_position, "valid": true})
+	await _wait(1.0)
+	battle.effects.execute("perfect_game", 1, {"valid": true})
+	ok(String(battle.effects.last_play.get("id", "")) == "power_throw", "a Legendary isn't recorded for Instant Replay")
+	await _wait(1.5)
+	var ih := ir.hp
+	battle.effects.execute("instant_replay", lv, {"valid": true})
+	await _wait(1.4)
+	var want := DB.card_param("power_throw", "damage", 2)
+	ok(ih - ir.hp >= want - 2.0 and ih - ir.hp <= want * 1.8, "instant replay throws the last card again, one level up (%.0f, want %.0f)" % [ih - ir.hp, want])
+	_hold_fire(false)
+	_clear()
+
+
+## Update 7 content outside battle: collection, saves, packs, roles.
+func test_update7_content() -> void:
+	section("update 7 cards (data)")
+	for id in DB.card_order:
+		ok(String(DB.card(id).get("role", "")) in ROLES, "%s has a deck-builder role (%s)" % [id, DB.card(id).get("role", "")])
+	Profile.reset_profile()
+	for id in NEW_CARDS_U7:
+		ok(DB.cards.has(id), "Update 7 card %s defined" % id)
+		ok(Profile.data.cards.has(id) and not Profile.is_card_owned(id), "fresh profile lists %s, not owned" % id)
+		ok(DB.combos_for(id).size() > 0, "%s has a combo" % id)
+		var details := str(DB.card(id).get("details", ""))
+		for key in DB.card(id).params.keys():
+			details = details.replace("{%s}" % key, "1")
+		ok(details != "" and not "{" in details, "%s has details text with resolvable values" % id)
+	var old: Dictionary = Profile.data.duplicate(true)
+	for id in NEW_CARDS_U7:
+		old.cards.erase(id)
+	old.cards.curveball.owned = true
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	var all_there := true
+	for id in NEW_CARDS_U7:
+		all_there = all_there and Profile.data.cards.has(id) and not Profile.is_card_owned(id)
+	ok(all_there and Profile.is_card_owned("curveball"), "an existing save gains the Update 7 cards as not owned")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var seen := {}
+	for i in 600:
+		for cid in Profile.roll_pack("champion", rng):
+			seen[cid] = true
+	for id in NEW_CARDS_U7:
+		ok(seen.has(id), "packs can contain %s" % id)
 	Profile.reset_profile()

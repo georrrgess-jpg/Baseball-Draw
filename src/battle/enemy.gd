@@ -45,6 +45,10 @@ var armor_break_t := 0.0
 var untargetable_t := 0.0
 var magnet_t := 0.0
 var magnet_center := Vector3.ZERO
+var rundown_t := 0.0                # Rundown card: runs back and forth between rundown_lo and rundown_hi
+var rundown_lo := 0.0
+var rundown_hi := 0.0
+var rundown_dir := -1.0
 var knock_from := 0.0
 var knock_t := 0.0
 var airborne_t := 0.0
@@ -611,6 +615,7 @@ func _tick_status(delta: float) -> void:
 	armor_break_t = maxf(0.0, armor_break_t - delta)
 	untargetable_t = maxf(0.0, untargetable_t - delta)
 	magnet_t = maxf(0.0, magnet_t - delta)
+	rundown_t = maxf(0.0, rundown_t - delta)
 	dash_t = maxf(0.0, dash_t - delta)
 	if steal_t > 0.0:
 		steal_t -= delta
@@ -654,6 +659,14 @@ func _move(delta: float) -> void:
 			battle.vfx.dust(global_position, 1.0)
 	elif knock_t > 0.0:
 		knock_t -= delta
+	elif rundown_t > 0.0:
+		# Caught in a rundown: back and forth, a tag at every turn (CardEffects.on_rundown_turn).
+		if speed > 0.0:
+			d += rundown_dir * maxf(speed, 2.6) * delta
+			if (rundown_dir > 0.0 and d >= rundown_hi) or (rundown_dir < 0.0 and d <= rundown_lo):
+				d = clampf(d, rundown_lo, rundown_hi)
+				rundown_dir = -rundown_dir
+				battle.effects.on_rundown_turn(self)
 	elif confuse_t > 0.0:
 		d = maxf(0.0, d - speed * 0.8 * delta)
 	else:
@@ -688,7 +701,7 @@ func _update_transform(delta: float) -> void:
 		var k := 1.0 - airborne_t / maxf(airborne_len, 0.01)
 		pos.y = sin(k * PI) * 2.0
 	global_position = pos
-	var face := -dir if confuse_t > 0.0 else dir
+	var face := -dir if confuse_t > 0.0 or (rundown_t > 0.0 and rundown_dir < 0.0) else dir
 	var target_yaw := atan2(face.x, face.z)
 	if delta <= 0.0:
 		rotation.y = target_yaw

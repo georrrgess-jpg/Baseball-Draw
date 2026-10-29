@@ -49,13 +49,13 @@ const MISSING_PENALTY := 6.0
 
 ## Per mode: role weights (missing = 1.0), minimum role counts, average-cost band.
 const MODE_CFG := {
-	"balanced": {"w": {}, "need": {"damage": 2, "aoe": 1, "control": 1, "stop": 1, "boss": 1}, "band": [2.6, 4.0]},
+	"balanced": {"w": {}, "need": {"damage": 2, "aoe": 1, "control": 1, "stop": 1, "boss": 1}, "band": [2.6, 4.0], "heavy": 1},
 	"aggressive": {"w": {"damage": 1.35, "aoe": 1.35, "buff": 1.2, "control": 0.8, "defense": 0.8, "run_stop": 0.85},
-		"need": {"damage": 4, "aoe": 2, "control": 0, "stop": 1, "boss": 1}, "band": [2.8, 4.2]},
+		"need": {"damage": 4, "aoe": 2, "control": 0, "stop": 1, "boss": 1}, "band": [2.8, 4.2], "heavy": 2},
 	"control": {"w": {"control": 1.4, "run_stop": 1.25, "defense": 1.25, "damage": 0.85, "aoe": 0.9, "buff": 0.85},
-		"need": {"damage": 2, "aoe": 1, "control": 3, "stop": 2, "boss": 1}, "band": [2.6, 4.0]},
+		"need": {"damage": 2, "aoe": 1, "control": 3, "stop": 2, "boss": 1}, "band": [2.6, 4.0], "heavy": 1},
 	"boss": {"w": {"boss": 1.8, "damage": 1.2, "aoe": 0.95, "buff": 1.05},
-		"need": {"damage": 3, "aoe": 1, "control": 1, "stop": 1, "boss": 2}, "band": [2.8, 4.4]},
+		"need": {"damage": 3, "aoe": 1, "control": 1, "stop": 1, "boss": 2}, "band": [2.8, 4.4], "heavy": 2},
 }
 
 static var _norm: Dictionary = {}     # "eff_<kind>" / "raw_<kind>" -> best level-1 value over every card
@@ -323,8 +323,10 @@ static func deck_score(deck: Array, info: Dictionary, mode: String, ctx: Diction
 		var avg := float(n.cost) / deck.size()
 		var band: Array = cfg.band
 		var off := maxf(0.0, float(band[0]) - avg) + maxf(0.0, avg - float(band[1]))
-		curve -= 5.0 * off * float(deck.size()) / Profile.DECK_SIZE   # partial decks (greedy) count less
-		curve -= 6.0 * maxi(0, int(n.heavy) - 2)
+		# Steep: half an energy over the band costs about one strong card's worth, so a big pool of
+		# expensive Legendaries can't push the deck into a hand you can't afford to play.
+		curve -= 18.0 * off * float(deck.size()) / Profile.DECK_SIZE   # partial decks (greedy) count less
+		curve -= 8.0 * maxi(0, int(n.heavy) - int(cfg.get("heavy", 2)))
 		if deck.size() >= Profile.DECK_SIZE and int(n.cheap) == 0 and int(avail.get("cheap", 0)) > 0:
 			curve -= 2.0
 	return {"total": cards + combos + cover + curve, "cards": cards, "combos": combos, "coverage": cover, "curve": curve, "counts": n}

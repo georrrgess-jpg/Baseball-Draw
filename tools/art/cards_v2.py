@@ -1018,6 +1018,285 @@ def perfect_game(c: Card):
 
 
 # ---------------------------------------------------------------------------
+# Update 7 cards
+# ---------------------------------------------------------------------------
+def bag_svg(x, y, s, top="#F4F1EA", side="#B9BCC6"):
+    """A base bag in three-quarter view (centre x, y; s = half width)."""
+    return (f'<path d="{props.poly_d([(x - s, y), (x, y - s * 0.5), (x + s, y), (x, y + s * 0.5)])}" fill="{top}"/>'
+            f'<path d="{props.poly_d([(x - s, y), (x, y + s * 0.5), (x + s, y), (x + s, y + s * 0.22), (x, y + s * 0.72), (x - s, y + s * 0.22)])}" fill="{side}"/>')
+
+
+@painter
+def bean_ball(c: Card):
+    hx, hy = 400, 420
+    backdrop(c, (hx + 80, hy - 20))
+    # the pitch comes in hot from the right
+    trail(c, [(1060, 240), (hx + 210, hy - 70)], 0, 190, col="#FF9A7A", glow=1.0)
+    speed(c, 160, n=18, k=0.5, region=(560, 120, 1024, 460))
+    burst = lay(fx.comic_burst_svg(hx + 170, hy - 80, 190, seed=21, points=12,
+                                   colors=("#FF3A2A", "#FF8A3A", "#FFE08A", "#FFFFFF"), squash=0.9))
+    energy(c, burst, "#FF6A3A", core=1.0, glow=1.0)
+    # batting helmet: dome, ear flap, brim
+    helm = lay(f'<path d="M{hx - 230},{hy + 90} C{hx - 250},{hy - 160} {hx + 150},{hy - 210} {hx + 190},{hy + 40} '
+               f'L{hx + 260},{hy + 70} L{hx + 250},{hy + 105} L{hx - 230},{hy + 120}Z" fill="url(#hm)"/>'
+               f'<path d="M{hx - 150},{hy + 30} C{hx - 120},{hy + 170} {hx - 10},{hy + 190} {hx + 40},{hy + 110} L{hx - 40},{hy + 40}Z" fill="#14306A"/>'
+               f'<circle cx="{hx - 60}" cy="{hy + 90}" r="26" fill="#0A1838"/>'
+               f'<path d="M{hx - 150},{hy - 100} C{hx - 80},{hy - 150} {hx + 20},{hy - 150} {hx + 80},{hy - 110}" fill="none" '
+               f'stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="22" stroke-linecap="round"/>',
+               props.lin_grad("hm", [(0, "#4A7ADA"), (0.5, "#1E4CA8"), (1, "#0E2458")], 0, 0, 0, 1))
+    subject(c, helm, glow=0.8, rim_col="#FFD0B0")
+    # dizzy stars over the helmet
+    st = "".join(fx.sparkle_svg(x, y, r, "#FFE14A", 1.0, rot, 0.3) for x, y, r, rot in
+                 ((hx - 220, hy - 190, 46, 10), (hx - 60, hy - 250, 36, -8), (hx + 90, hy - 230, 30, 20)))
+    subject(c, lay(st), glow=0.8, glow_col="#FFE14A", ow=8, rim=False)
+    subject(c, ball_layer(190, hx + 210, hy - 70, rot=(0.4, 1.0, 0.2), bounce=c.col))
+    finish(c)
+
+
+@painter
+def around_the_horn(c: Card):
+    cx, cy = 512, 470
+    backdrop(c, (cx, cy - 40))
+    bases = [(cx, cy + 200), (cx + 340, cy), (cx, cy - 170), (cx - 340, cy)]   # home, 1st, 2nd, 3rd
+    dia = lay(f'<path d="{props.poly_d(bases)}" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-opacity="0.5" stroke-linejoin="round"/>')
+    energy(c, dia, "#FFB08A", core=0.6, glow=0.5)
+    # the throw: home -> third -> second -> first, a ribbon of light that grows as it goes
+    h, f1, s2, t3 = bases
+    pts = np.concatenate([props.bezier(h, (h[0] - 140, h[1] - 40), (t3[0] + 40, t3[1] + 90), t3, 30),
+                          props.bezier(t3, (t3[0] + 60, t3[1] - 150), (s2[0] - 160, s2[1] - 30), s2, 30),
+                          props.bezier(s2, (s2[0] + 160, s2[1] - 30), (f1[0] - 60, f1[1] - 150), (f1[0] - 10, f1[1] - 40), 30)])
+    trail(c, pts, 4, 130, col="#FFB86A", glow=1.1, power=1.4)
+    bags = "".join(bag_svg(x, y, 50) for x, y in bases[1:])
+    hx, hy = h
+    bags += f'<path d="{props.poly_d([(hx - 52, hy - 16), (hx + 52, hy - 16), (hx + 52, hy + 4), (hx, hy + 28), (hx - 52, hy + 4)])}" fill="#F4F1EA"/>'
+    subject(c, lay(bags), glow=0.6, glow_col="#FFB08A", rim_col="#FFFFFF", ow=9)
+    pil = "".join(f'<path d="{taper([(x, y), (x, y - 220)], 34, 2)}" fill="#FFE2C0"/>' for x, y in bases[1:])
+    energy(c, lay(pil), "#FF9A4A", core=0.6, glow=0.8)
+    subject(c, ball_layer(170, f1[0] - 10, f1[1] - 60, rot=(0.6, 0.4, 0.2), bounce=c.col))
+    finish(c)
+
+
+@painter
+def grand_salami(c: Card):
+    backdrop(c, (560, 360), stops=[(0, "#FFE08A"), (0.18, "#FF8A3A"), (0.45, "#B4242A"), (0.75, "#3E0E22"), (1.0, "#160610")], ray_k=1.4)
+    c.add(fx.light_rays(W, H, 600, 380, 24, c.seed, GOLD, spread=0.9, opacity=(0.05, 0.12)), 1.0)
+    # the base path running into the distance, chalk lines either side
+    path = lay(f'<path d="M-40,{H + 20} L300,330 L520,330 L760,{H + 20}Z" fill="#8A5A36"/>'
+               f'<path d="M-40,{H + 20} L300,330" stroke="#FFFFFF" stroke-width="12"/>'
+               f'<path d="M760,{H + 20} L520,330" stroke="#FFFFFF" stroke-width="12"/>')
+    c.over(path, 0.9)
+    # wall of fire behind the ball
+    tg = []
+    rng = c.rng(3)
+    for i in range(16):
+        x = 220 + i * 40 + rng.uniform(-14, 14)
+        tg += fx.fireball_tongues(x, 600 - i * 14, 85, 90 + rng.uniform(-20, 20), n=3, length=3.5, seed=c.seed + i, spread=30)
+    fl = lay(fx.flames_svg(tg))
+    c.add(from_mask(blur(fl[..., 3], 40), "#FF4A1A"), 0.9)
+    c.over(fl, 0.95)
+    flame_ball(c, 560, 470, 380, 150, length=3.0, n=30, spread=60, glow=1.4)
+    sparkles(c, 20, region=(80, 60, 980, 420), col=["#FFFFFF", "#FFD27A"])
+    finish(c, bloom=1.3)
+    final_sparkles(c)
+
+
+@painter
+def rundown(c: Card):
+    cy = 520
+    backdrop(c, (512, 420))
+    chalk = lay(f'<path d="M60,{cy + 20} L964,{cy - 20}" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>')
+    energy(c, chalk, "#B8AEFF", core=0.8, glow=0.6)
+    subject(c, lay(bag_svg(150, cy + 20, 95) + bag_svg(874, cy - 20, 95)), glow=0.7, rim_col="#FFFFFF", ow=10)
+    # back-and-forth arcs
+    arc1 = arc_pts(512, cy - 40, 330, 190, 200, 340)
+    arc2 = arc_pts(512, cy - 40, 300, 150, 340, 200)[::-1]
+    trail(c, arc1, 6, 60, col="#C8BEFF", glow=0.9)
+    trail(c, arc2[::-1], 6, 60, col="#C8BEFF", glow=0.9)
+    heads = (f'<path d="{props.poly_d([(842, 410), (790, 360), (800, 430)])}" fill="#FFFFFF"/>'
+             f'<path d="{props.poly_d([(182, 420), (234, 372), (226, 442)])}" fill="#FFFFFF"/>')
+    energy(c, lay(heads), "#C8BEFF", core=1.0, glow=0.7)
+    defs, g = glove_svg(760, 250, 0.55, 210, leather="#C46A2C", dark="#6E3714", light="#F0A866", trim="#7B6CFF")
+    subject(c, lay(g, defs), glow=0.9)
+    subject(c, ball_layer(200, 512, cy - 140, rot=(0.6, 0.5, 0.3), bounce=c.col))
+    finish(c)
+
+
+@painter
+def rain_delay(c: Card):
+    backdrop(c, (512, 300), col="#5A7ADA", stops=[(0, "#9FB8E8"), (0.25, "#4A64A8"), (0.6, "#1E2A55"), (1.0, "#0A0F22")])
+    # rain
+    speed(c, 100, n=60, col="#CFE4FF", k=0.6, region=(0, 160, 1024, 768), width=(2, 5), length=(0.08, 0.2))
+    # the tarp over the infield (a diamond in perspective)
+    tarp = lay(f'<path d="{props.poly_d([(512, 470), (900, 590), (512, 740), (124, 590)])}" fill="url(#tp)"/>'
+               + "".join(f'<path d="M{124 + k * 97},{590 - k * 30} L{512 + k * 97},{740 - k * 37}" stroke="#2A4A8A" stroke-width="6" stroke-opacity="0.6"/>'
+                         for k in range(1, 4)),
+               props.lin_grad("tp", [(0, "#7AA8FF"), (0.5, "#3A6ADA"), (1, "#1A3A8A")], 0, 0, 0, 1))
+    subject(c, tarp, glow=0.6, glow_col="#7AA8FF", rim_col="#DDEBFF", ow=10)
+    pud = lay(ring(330, 640, 70, 18, 6, "#FFFFFF", 0.8) + ring(700, 660, 90, 22, 6, "#FFFFFF", 0.8)
+              + ring(560, 700, 50, 13, 5, "#FFFFFF", 0.7))
+    energy(c, pud, "#9FC8FF", core=0.8, glow=0.6)
+    # storm cloud
+    cl = "".join(f'<circle cx="{x}" cy="{y}" r="{r}" fill="url(#cl)"/>' for x, y, r in
+                 ((300, 230, 130), (460, 170, 170), (640, 200, 150), (780, 250, 110), (540, 280, 120), (380, 290, 100)))
+    cloud = lay(cl, props.lin_grad("cl", [(0, "#E4EAF4"), (0.6, "#8C98B0"), (1, "#4A5468")], 0, 0, 0, 1))
+    subject(c, cloud, glow=0.6, glow_col="#9FB8E8", rim_col="#FFFFFF")
+    _, bolt = fx.lightning_svg((620, 330), (700, 470), c.seed, 10, "#FFE14A", branches=1, detail=4, rough=0.3)
+    energy(c, lay(bolt), "#FFE14A", core=1.0, glow=0.8)
+    finish(c)
+    final_sparkles(c)
+
+
+@painter
+def intentional_walk(c: Card):
+    backdrop(c, (600, 380))
+    # four balls in an arc: BALL FOUR
+    pos = [(300, 300), (470, 220), (650, 220), (820, 300)]
+    for i, (x, y) in enumerate(pos):
+        rg = lay(ring(x, y, 112, 112, 8, "#FFFFFF", 0.7))
+        energy(c, rg, "#B8AEFF", core=0.5, glow=0.6)
+    balls = blank(H, W)
+    for i, (x, y) in enumerate(pos):
+        balls = over(balls, ball_layer(170, x, y, rot=(0.3 + i * 0.7, 0.6, 0.2 * i), bounce=c.col))
+    subject(c, balls, glow=0.8)
+    # the umpire's hand pointing toward first base
+    hand = lay(f'<g transform="translate(250,560) rotate(-8)">{props.flat_hand_svg(300, 96)}</g>')
+    subject(c, hand, glow=0.8, glow_col="#B8AEFF", rim_col="#FFFFFF", outline=False)
+    arrow = lay(f'<path d="{taper([(590, 560), (930, 540)], 18, 30)}" fill="#FFFFFF"/>'
+                f'<path d="{props.poly_d([(930, 480), (1010, 538), (930, 600)])}" fill="#FFFFFF"/>')
+    energy(c, arrow, "#9BFFB0", core=0.9, glow=0.9)
+    finish(c)
+
+
+@painter
+def infield_fly(c: Card):
+    bx, by = 512, 190
+    backdrop(c, (bx, by + 60), stops=[(0, "#E8FFFB"), (0.2, "#5ACFC4"), (0.55, "#105A58"), (1.0, "#031614")])
+    # spotlight cone from the ball down to the infield
+    cone = lay(f'<path d="M{bx - 60},{by} L{bx - 330},{H + 20} L{bx + 330},{H + 20} L{bx + 60},{by}Z" fill="#E8FFFB"/>')
+    c.add(from_mask(blur(cone[..., 3], 40), "#BFFFF6"), 0.35)
+    c.add(from_mask(cone[..., 3] * 0.12, "#FFFFFF"), 1.0)
+    zone = lay(ring(bx, 640, 300, 70, 10, "#FFFFFF", 0.9) + ring(bx, 640, 200, 46, 6, "#FFFFFF", 0.6))
+    energy(c, zone, "#7FF5E8", core=0.8, glow=0.8)
+    # the pop-up's flight: straight up and hanging
+    trail(c, [(bx + 6, 600), (bx, by + 70)], 0, 60, col="#BFFFF6", glow=0.8)
+    c.add(fx.light_rays(W, H, bx, by, 18, c.seed, "#FFFFFF", spread=0.5, opacity=(0.04, 0.1)), 1.0)
+    subject(c, ball_layer(170, bx, by, rot=(0.3, 0.7, 0.4), bounce=c.col), glow=1.3, glow_col="#BFFFF6")
+    defs, g = glove_svg(bx + 20, 560, 0.62, 0, leather="#C46A2C", dark="#6E3714", light="#F0A866", trim="#2EC4B6")
+    subject(c, lay(g, defs), glow=0.9)
+    finish(c)
+
+
+@painter
+def golden_glove(c: Card):
+    gx, gy = 470, 430
+    backdrop(c, (gx + 40, gy - 30), col="#FFC93C", bright=0.75, ray_k=1.3)
+    c.add(fx.light_rays(W, H, gx, gy, 20, c.seed, "#FFF2B0", spread=0.8, opacity=(0.05, 0.12)), 1.0)
+    trail(c, [(1060, 120), (gx + 150, gy - 110)], 0, 150, col="#FFE07A", glow=1.0)
+    defs, g = glove_svg(gx, gy, 0.95, -12, leather="#F2B230", dark="#8A5A0A", light="#FFF0A0", lace="#6A3A00", trim="#2EC4B6")
+    gl = over(lay(g, defs), ball_layer(170, gx + 120, gy - 100, rot=(0.6, 0.5, 0.3), bounce=GOLD))
+    subject(c, gl, glow=1.4, glow_col=GOLD, rim_col="#FFFFFF")
+    st = "".join(fx.sparkle_svg(x, y, r, "#FFFFFF", 1.0, rot, 0.2) for x, y, r, rot in
+                 ((200, 200, 40, 0), (780, 600, 50, 15), (820, 260, 30, 5), (180, 620, 28, 30)))
+    energy(c, lay(st), GOLD, core=1.0, glow=0.8)
+    finish(c, bloom=1.2)
+
+
+@painter
+def the_shift(c: Card):
+    cx, cy = 512, 420
+    backdrop(c, (cx, cy))
+    bases = [(cx, cy + 250), (cx + 300, cy), (cx, cy - 230), (cx - 300, cy)]
+    grass = lay(f'<path d="{props.poly_d(bases)}" fill="#1A6A4A" fill-opacity="0.6"/>'
+                f'<path d="{props.poly_d(bases)}" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>')
+    c.over(grass, 0.9)
+    subject(c, lay("".join(bag_svg(x, y, 34) for x, y in bases)), glow=0.3, ow=7, rim=False)
+    # defender markers before (dim) and after (bright), with arrows sliding right
+    old = [(cx - 230, cy - 60), (cx - 90, cy - 150), (cx + 40, cy + 40), (cx - 160, cy + 110)]
+    new = [(cx + 10, cy - 70), (cx + 170, cy - 140), (cx + 260, cy + 50), (cx + 110, cy + 140)]
+    ghosts = "".join(f'<circle cx="{x}" cy="{y}" r="34" fill="#7FF5E8" fill-opacity="0.35"/>' for x, y in old)
+    c.add(lay(ghosts), 0.8)
+    for (x0, y0), (x1, y1) in zip(old, new):
+        trail(c, [(x0, y0), (x1 - 40, y1)], 6, 46, col="#7FF5E8", glow=0.8)
+    heads = "".join(f'<path d="{props.poly_d([(x1 - 50, y1 - 34), (x1 - 4, y1), (x1 - 50, y1 + 34)])}" fill="#FFFFFF"/>' for x1, y1 in new)
+    energy(c, lay(heads), "#7FF5E8", core=1.0, glow=0.6)
+    dots = "".join(f'<circle cx="{x}" cy="{y}" r="40" fill="#2EC4B6"/><circle cx="{x - 10}" cy="{y - 12}" r="14" fill="#BFFFF6"/>'
+                   for x, y in new)
+    subject(c, lay(dots), glow=1.0, rim_col="#FFFFFF", ow=10)
+    finish(c)
+
+
+@painter
+def momentum(c: Card):
+    bx, by = 700, 430
+    backdrop(c, (bx - 80, by))
+    # downhill slope
+    hill = lay(f'<path d="M-20,250 L1044,{by + 170} L1044,{H + 20} L-20,{H + 20}Z" fill="#3A2A0A" fill-opacity="0.55"/>'
+               f'<path d="M-20,250 L1044,{by + 170}" stroke="#FFFFFF" stroke-width="10" stroke-opacity="0.8"/>')
+    c.over(hill, 0.9)
+    # energy chevrons streaming behind the ball
+    chev = ""
+    for i in range(4):
+        x = bx - 200 - i * 150
+        y = by + 40 - i * 45
+        s = 90 - i * 12
+        chev += f'<path d="{props.poly_d([(x - s * 0.6, y - s), (x + s * 0.4, y), (x - s * 0.6, y + s), (x - s * 0.95, y + s), (x + s * 0.05, y), (x - s * 0.95, y - s)])}" fill="#FFFFFF" fill-opacity="{1.0 - i * 0.18:.2f}"/>'
+    energy(c, lay(chev), "#4ADFFF", core=0.9, glow=1.1)
+    speed(c, 18, n=20, col="#BFF4FF", k=0.5, region=(0, 150, 640, 640))
+    subject(c, ball_layer(240, bx, by, rot=(0.9, 0.4, 0.6), bounce="#4ADFFF"), glow=1.1, glow_col="#4ADFFF")
+    _, bolt = fx.lightning_svg((bx + 90, by - 200), (bx + 260, by - 40), c.seed, 9, "#BFF4FF", branches=1, detail=4, rough=0.3)
+    energy(c, lay(bolt), "#4ADFFF", core=1.0, glow=0.8)
+    finish(c)
+
+
+@painter
+def relief_pitcher(c: Card):
+    gx, gy = 330, 400
+    backdrop(c, (gx + 120, gy))
+    # the bullpen door, swung open, light pouring out
+    frame = lay(f'<rect x="{gx - 170}" y="{gy - 300}" width="340" height="560" rx="16" fill="#2A3A2A"/>'
+                f'<rect x="{gx - 140}" y="{gy - 270}" width="280" height="510" rx="8" fill="#E8FFD8"/>')
+    subject(c, frame, glow=1.3, glow_col="#9BFF7A", rim_col="#FFFFFF")
+    door = lay(f'<path d="{props.poly_d([(gx - 140, gy - 270), (gx - 290, gy - 230), (gx - 290, gy + 210), (gx - 140, gy + 240)])}" fill="url(#dr)"/>'
+               + "".join(f'<path d="M{gx - 270},{gy - 200 + k * 80} L{gx - 160},{gy - 225 + k * 82}" stroke="#1A4A1A" stroke-width="8"/>' for k in range(6)),
+               props.lin_grad("dr", [(0, "#5BD75B"), (1, "#1E7A2E")], 0, 0, 1, 0))
+    subject(c, door, glow=0.4, rim_col="#CFFFB8")
+    c.add(fx.light_rays(W, H, gx, gy, 14, c.seed, "#E8FFD8", spread=0.5, opacity=(0.04, 0.1)), 1.0)
+    # the fresh arm: a ball rocketing out of the bullpen
+    trail(c, [(gx, gy), (780, 330)], 0, 220, col="#9BFF7A", glow=1.1)
+    speed(c, -8, n=16, col="#E8FFD8", k=0.45, region=(380, 180, 1000, 520))
+    subject(c, ball_layer(230, 790, 330, rot=(0.5, 0.8, 0.2), bounce="#5BD75B"), glow=1.0, glow_col="#9BFF7A")
+    finish(c)
+    final_sparkles(c)
+
+
+@painter
+def instant_replay(c: Card):
+    cx, cy = 512, 370
+    backdrop(c, (cx, cy), col="#FFC93C", bright=0.75, ray_k=1.3)
+    c.add(fx.light_rays(W, H, cx, cy, 22, c.seed, "#FFF2B0", spread=0.9, opacity=(0.05, 0.12)), 1.0)
+    # jumbotron
+    scr = lay(f'<rect x="{cx - 380}" y="{cy - 230}" width="760" height="460" rx="26" fill="#2A3040"/>'
+              f'<rect x="{cx - 350}" y="{cy - 200}" width="700" height="400" rx="12" fill="url(#sc)"/>'
+              f'<rect x="{cx - 60}" y="{cy + 230}" width="120" height="140" fill="#2A3040"/>',
+              props.lin_grad("sc", [(0, "#1A4A8A"), (1, "#0A1A3A")], 0, 0, 0, 1))
+    subject(c, scr, glow=1.2, glow_col=GOLD, rim_col="#FFF2B0")
+    x, y = grid(H, W)
+    lines = ((np.sin(y * 0.9) > 0.6) * ((x > cx - 350) & (x < cx + 350) & (y > cy - 200) & (y < cy + 200))).astype(np.float32)
+    c.add(from_mask(lines * 0.25, "#9FD8FF"), 1.0)
+    # the replayed ball arc on the screen
+    pts = props.bezier((cx - 300, cy + 140), (cx - 150, cy - 220), (cx + 120, cy - 220), (cx + 240, cy + 30), 60)
+    trail(c, pts, 0, 70, col="#7FE0FF", glow=0.9)
+    subject(c, ball_layer(120, cx + 240, cy + 30, rot=(0.5, 0.6, 0.3), bounce="#7FE0FF"), glow=0.8, glow_col="#7FE0FF", ow=10)
+    # rewind symbol and a REC dot
+    rw = lay(f'<path d="{props.poly_d([(cx - 40, cy - 70), (cx - 150, cy), (cx - 40, cy + 70)])}" fill="#FFFFFF"/>'
+             f'<path d="{props.poly_d([(cx + 70, cy - 70), (cx - 40, cy), (cx + 70, cy + 70)])}" fill="#FFFFFF"/>')
+    energy(c, rw, "#7FE0FF", core=1.0, glow=1.0)
+    energy(c, lay(f'<circle cx="{cx + 290}" cy="{cy - 150}" r="26" fill="#FF3A3A"/>'), "#FF3A3A", core=1.0, glow=0.9)
+    finish(c, bloom=1.2)
+    final_sparkles(c)
+
+
+# ---------------------------------------------------------------------------
 def render(info, out_dir=OUT):
     fn = PAINTERS.get(info["id"])
     if fn is None:
