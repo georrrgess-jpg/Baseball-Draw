@@ -18,6 +18,9 @@ What changed: [Update 6](docs/screenshots/update6_before_after.jpg), [Update 5](
 
 ## Features
 
+- **Animated title screen**: a live night stadium with searchlights, fireworks and home-run balls behind the
+  logo; press any button to start.
+
 - **Real 3D stadiums** — six arenas (The Steel Yard, Sunset Grounds, Neon Diamond, Iron Fortress,
   Frostpark, Champion's Citadel) with fortress walls, enemy gates, light towers, real dugouts, sponsor
   boards and themed skylines. About 1,800 fans that clap, cheer, groan, stand and do the wave. A jumbotron

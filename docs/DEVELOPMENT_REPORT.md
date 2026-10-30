@@ -642,3 +642,26 @@ High contrast). Portraits re-rendered.
 * Veteran Standard Siege starts with one base shield and has slightly smaller waves (per-mode tuning; the shield
   shows on the Play screen). Autopilot: 1–2 wins in 6 per sample, with most losses at the final boss in inning 9.
   Still under the 40 % target.
+
+## 14. Title screen
+
+`src/ui/title_screen.gd`, `scenes/title.tscn`. Shown once when the game launches; it replaces the old logo splash.
+
+* **Background:** a live night stadium (Champion's Citadel).
+  * The camera swoops down from above centre field into a slow crane orbit.
+  * Four coloured searchlights sweep the sky.
+  * Fireworks burst every few seconds.
+  * Home-run balls arc out of the park with glowing trails and a bat crack.
+  * The crowd cheers and does the wave, and the team celebrates on the field.
+* **Logo:** it slams in at about 1.4 s with a whoosh, bat crack and crowd roar, a white flash, a small camera
+  shake, light rays, gold sparkles and fireworks, then a shine sweep every few seconds. Reduce-flashes and
+  screen-shake settings are respected.
+* **Prompt:** "PRESS ANY BUTTON TO START" pulses in a gold-rimmed band at the bottom centre.
+* **Input:**
+  * A key, mouse click or gamepad button during the intro skips to the finished title.
+  * The next press starts: a flash, a roar, the logo rushes forward, and the main menu opens.
+* **Main menu:** it now opens directly on the lineup. The camera no longer pushes in through the stadium; it
+  only breathes slightly.
+* **Test:** UI section `title`, also part of the full run.
+
+![Title screen](screenshots/title.jpg)

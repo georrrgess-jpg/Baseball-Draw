@@ -115,6 +115,10 @@ func _run() -> void:
 		await _test_missions()
 		_finish()
 		return
+	if "--ui-test-section=title" in OS.get_cmdline_user_args():
+		await _test_title()
+		_finish()
+		return
 	if "--ui-test-section=nav" in OS.get_cmdline_user_args():
 		await _test_navigation()
 		_finish()
@@ -344,6 +348,7 @@ func _run() -> void:
 	await _test_daily()
 	await _test_missions()
 	await _test_navigation()
+	await _test_title()
 	await _test_tutorial()
 	_finish()
 
@@ -1080,6 +1085,30 @@ func _test_navigation() -> void:
 	_check(str(get_tree().current_scene.get("mode_id")) == "daily", "Play opens on the Daily Challenge from a shortcut")
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+## Title screen: the logo and prompt appear, input during the intro skips it, a key opens the menu.
+func _test_title() -> void:
+	Router.goto("title")
+	_check(await _wait_scene("title"), "the title screen opens")
+	await _wait(0.4)
+	var ts: Node = get_tree().current_scene
+	_mouse_button(Vector2(800, 450), true)   # a press during the intro skips to the prompt
+	await _wait(0.1)
+	_mouse_button(Vector2(800, 450), false)
+	await _wait(0.4)
+	_check(ts.get("_ready_for_input") == true and (ts.get("_prompt") as Label).modulate.a > 0.0, "a press during the intro shows the prompt at once")
+	_check((ts.get("_prompt") as Label).text == "PRESS ANY BUTTON TO START", "the prompt says PRESS ANY BUTTON TO START")
+	var k := InputEventKey.new()
+	k.keycode = KEY_SPACE
+	k.pressed = true
+	Input.parse_input_event(k)
+	await _wait(0.1)
+	var k2 := k.duplicate() as InputEventKey
+	k2.pressed = false
+	Input.parse_input_event(k2)
+	_check(await _wait_scene("main_menu"), "pressing a key opens the main menu")
+	await _wait(0.5)
 
 
 func _wait_scene(name: String) -> bool:

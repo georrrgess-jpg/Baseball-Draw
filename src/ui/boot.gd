@@ -1,5 +1,5 @@
 extends Control
-## Startup: shows a brief splash while autoloads settle, then opens the main menu.
+## Startup: once autoloads settle, opens the animated title screen (then the main menu).
 ## Command-line flags (after `--`) support automated testing:
 ##   --test-battle=<mode>   jump straight into a battle
 ##   --auto                 let the battle play itself (auto-start waves, autoplay cards)
@@ -64,42 +64,6 @@ func _ready() -> void:
 		Router.toast("Your save was damaged and has been restored from a backup.", "warn", 6.0)
 	elif Profile.load_status == "reset_corrupt":
 		Router.toast("Your save could not be read and a new profile was created. The old file was kept as profile.corrupt.json.", "warn", 8.0)
-	await _splash()
-	Router.goto("main_menu")
-
-
-## Animated logo splash (click or any key skips).
-func _splash() -> void:
-	var path := "res://assets/textures/logo/logo_tagline.png"
-	if not ResourceLoader.exists(path):
-		return
-	var logo := TextureRect.new()
-	logo.texture = load(path)
-	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	logo.offset_left = 360
-	logo.offset_right = -360
-	logo.offset_top = 200
-	logo.offset_bottom = -200
-	logo.pivot_offset = Vector2(600, 340)
-	logo.modulate.a = 0.0
-	logo.scale = Vector2(0.92, 0.92)
-	add_child(logo)
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(logo, "modulate:a", 1.0, 0.5)
-	tw.tween_property(logo, "scale", Vector2.ONE, 1.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	Audio.play("bat_crack", -6.0, 0.0)
-	var t := 0.0
-	while t < 1.7 and not _skip:
-		await get_tree().process_frame
-		t += get_process_delta_time()
-
-
-var _skip := false
-
-
-func _input(event: InputEvent) -> void:
-	if (event is InputEventMouseButton or event is InputEventKey) and event.is_pressed():
-		_skip = true
+	# The animated title screen replaces the old logo splash; "press any button" opens the main menu.
+	await get_tree().process_frame
+	Router.goto("title")

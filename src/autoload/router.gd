@@ -6,6 +6,7 @@ signal scene_changed(name: String)
 const SCENES := {
 	"boot": "res://scenes/boot.tscn",
 	"main_menu": "res://scenes/main_menu.tscn",
+	"title": "res://scenes/title.tscn",
 	"battle": "res://scenes/battle.tscn",
 	"deck_builder": "res://scenes/deck_builder.tscn",
 	"roster": "res://scenes/roster.tscn",

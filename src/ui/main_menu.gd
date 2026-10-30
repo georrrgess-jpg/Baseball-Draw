@@ -93,11 +93,10 @@ func _spawn_team() -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	_update_daily_countdown(delta)
-	# Slow cinematic drift in front of home plate: a gentle push-in on entry, then a lazy
-	# figure-eight sway. During a showcase the camera leans toward the defender showing off.
-	var push := 1.0 - exp(-_t * 0.6)
-	var pos := Vector3(-0.4 + sin(_t * 0.07) * 1.1, 1.8 + sin(_t * 0.11) * 0.18, 18.2 - push * 1.6 + cos(_t * 0.05) * 0.5)
-	var look := Vector3(2.4 + sin(_t * 0.045) * 0.45, 2.3 + sin(_t * 0.08) * 0.08, 4.0)
+	# The camera starts on the lineup (no fly-in through the stadium) and only breathes a little.
+	# During a showcase it leans toward the defender showing off.
+	var pos := Vector3(-0.4 + sin(_t * 0.07) * 0.22, 1.8 + sin(_t * 0.11) * 0.06, 16.6 + cos(_t * 0.05) * 0.12)
+	var look := Vector3(2.4 + sin(_t * 0.045) * 0.12, 2.3 + sin(_t * 0.08) * 0.03, 4.0)
 	_focus_t -= delta
 	_focus_w = move_toward(_focus_w, 1.0 if _focus_t > 0.0 else 0.0, delta * 0.7)
 	var w := smoothstep(0.0, 1.0, _focus_w) * 0.35
