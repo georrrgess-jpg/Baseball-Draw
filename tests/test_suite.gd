@@ -892,13 +892,12 @@ func test_update6_waves() -> void:
 		rising = rising and hp > prev
 		prev = hp
 	ok(rising, "Quick Defense runner health rises with every difficulty step")
-	# Update 8: Veteran Standard Siege eases the late bosses (most losses came there), not the first.
+	# Update 8: Veteran Standard Siege waves are bigger than Update 7's (the stronger catcher made it too
+	# easy) but still smaller than the difficulty's own; boss health is untuned (data/modes.json boss_hp).
 	sv.difficulty = "veteran"
 	var svr := RunState.create(sv)
-	ok(WaveGenerator.boss_hp_tuning(svr, "grand_slammer") < 1.0 and WaveGenerator.boss_hp_tuning(svr, "phantom_captain") < 1.0
-		and is_equal_approx(WaveGenerator.boss_hp_tuning(svr, "iron_slugger"), 1.0), "Veteran Siege: Phantom Captain and Grand Slammer have less health")
-	sv.difficulty = "standard"
-	ok(is_equal_approx(WaveGenerator.boss_hp_tuning(RunState.create(sv), "grand_slammer"), 1.0), "Standard Siege bosses are untouched")
+	ok(WaveGenerator.mode_tuning(svr, "budget") > 0.78 and WaveGenerator.mode_tuning(svr, "budget") < 1.0, "Veteran Siege wave size is tuned between Update 7 and the difficulty default")
+	ok(is_equal_approx(WaveGenerator.boss_hp_tuning(svr, "grand_slammer"), 1.0), "Veteran Siege bosses keep their health")
 	# Leave a fresh profile: the battle checks below measure card damage, which defender
 	# levels (from the Rewards.apply calls above) would raise.
 	Profile.reset_profile()
