@@ -76,6 +76,8 @@ func default_profile() -> Dictionary:
 		"sets_claimed": {},   # collection set id -> date its one-time reward was claimed
 		# Missions (Update 6): daily/weekly missions and the starter chain (src/core/missions.gd).
 		"missions": Missions.default_state(),
+		# Scouting Book (Update 8): runner types, bosses and elites met in a game, and opened in the book.
+		"scouting": Scouting.default_state(),
 	}
 	for id in DB.defender_order:
 		var unlocked: bool = DB.defender(id).get("unlock", {}).get("type", "") == "default"
@@ -129,13 +131,17 @@ func _merge(base: Dictionary, saved: Dictionary) -> void:
 			base[key] = saved[key]
 
 
-## Saves from before Update 6: managers who already know the game skip the starter mission chain.
+## Saves from before Update 6: managers who already know the game skip the starter mission chain;
+## saves from before Update 8 get their Scouting Book filled from their history.
 func _migrate(loaded: Dictionary) -> void:
 	if not loaded.has("missions"):
 		var played := float(loaded.get("stats", {}).get("runs_played", 0)) if typeof(loaded.get("stats")) == TYPE_DICTIONARY else 0.0
 		if int(loaded.get("level", 1)) >= 4 or played >= 5:
 			data.missions.starter_step = Missions.starter_steps().size()
 		data.stats["account_level"] = int(data.level)
+	# Saves from before Update 8: what the manager has certainly met starts scouted.
+	if not loaded.has("scouting"):
+		data.scouting = Scouting.migrate(loaded)
 
 
 ## Repairs anything that could break the game (unknown ids, bad sizes, float ints from JSON).
@@ -213,6 +219,7 @@ func _sanitize() -> void:
 		if not sid in CollectionSets.ids():
 			data.sets_claimed.erase(sid)
 	Missions.sanitize()
+	Scouting.sanitize()
 
 
 func save_now() -> void:

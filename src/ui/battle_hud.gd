@@ -60,6 +60,12 @@ var _hint: Label
 var _banner_tween: Tween
 var _hand_snapshot := []
 var _selected_card_rect := Rect2()
+## Combo hints (Update 8): pairs of hand slots whose cards combo, [[i, j, text]], and the layer
+## that draws the links between them (drawing only: it never takes mouse input).
+var _combo_pairs: Array = []
+var _combo_links: ComboLinks
+const COMBO_COLOR := Color("#4DF2A0")
+var _scout_popup: Control
 
 
 func _ready() -> void:
@@ -89,6 +95,18 @@ func _ready() -> void:
 	battle.wave_started.connect(func(_w: Dictionary) -> void: refresh())
 	_rebuild_hand()
 	_on_state(battle.state)
+	# Scouting Book: record the runner types, bosses and elites met in this game.
+	var tracker := Scouting.attach(battle)
+	tracker.scouted.connect(_on_scouted)
+	for a in OS.get_cmdline_user_args():   # screenshot helpers
+		if a.begins_with("--hand="):   # e.g. --hand=curveball,heat_wave,power_throw
+			var ids := Array(a.split("=")[1].split(",")).filter(func(id: String) -> bool: return DB.cards.has(id))
+			get_tree().create_timer(1.0).timeout.connect(func() -> void:
+				battle.cards.hand = ids
+				battle.cards.hand_changed.emit())
+		elif a.begins_with("--open-scout="):
+			var sid := a.split("=")[1]
+			get_tree().create_timer(2.5).timeout.connect(func() -> void: open_scouting(sid))
 	Router.set_toast_top(380.0)
 	tree_exiting.connect(func() -> void: Router.set_toast_top(90.0))
 	if not battle.practice and not battle.auto_test and not bool(Profile.data.flags.get("battle_tutorial_done", false)) \
@@ -232,6 +250,12 @@ func _build_bottom() -> void:
 	_hand_box.offset_bottom = -236.0 + HAND_CARD.y
 	_hand_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_hand_box)
+	_combo_links = ComboLinks.new()
+	_combo_links.name = "ComboLinks"
+	_combo_links.hud = self
+	_combo_links.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_combo_links.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hand_box.add_child(_combo_links)
 	# Energy bar
 	var eb := HBoxContainer.new()
 	eb.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -611,6 +635,7 @@ func _deal_card(i: int, id: String) -> CardView:
 	cv.clicked.connect(func(_c: CardView) -> void: battle.select_card(i))
 	cv.hovered.connect(_on_card_hover)
 	_hand_box.add_child(cv)
+	_hand_box.move_child(_combo_links, -1)   # the links draw over the cards (they never take input)
 	# Deal-in: a quick pop from the bottom of the slot (the click area stays in place).
 	cv.pivot_offset = Vector2(HAND_CARD.x * 0.5, HAND_CARD.y)
 	cv.scale = Vector2(0.85, 0.85)
@@ -673,6 +698,14 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 				on_field = true
 		t += "\n[color=#%s]Signature of %s%s[/color]" % [DB.defender_accent(linked).to_html(false), DB.defender(linked).name,
 			" — on the field: cast by them with their power." if on_field else " — not on the field: 75% power."]
+	for pair in _combo_pairs:
+		var other := -1
+		if _card_views[pair[0]] == cv:
+			other = pair[1]
+		elif _card_views[pair[1]] == cv:
+			other = pair[0]
+		if other >= 0 and other < battle.cards.hand.size():
+			t += "\n[color=#%s][b]COMBO with %s:[/b] %s[/color]" % [COMBO_COLOR.to_html(false), DB.card(battle.cards.hand[other]).name, pair[2]]
 	t += "\n[color=#8D9AB0]Target: %s[/color]" % {"none": "instant (click to confirm)", "enemy": "a runner", "area": "an area", "path": "a point on a route", "defender": "a defender"}.get(c.target, c.target)
 	_card_tip_label.text = t
 	_card_tip.visible = true
@@ -707,6 +740,83 @@ func _update_cards() -> void:
 		if cv.selected:
 			_selected_card_rect = cv.get_global_rect()
 		cv.queue_redraw()
+	_update_combos()
+
+
+## Combo hints: which hand cards combo with each other (data/combos.json). Partners glow and are
+## linked; the selected card's partner glows brightest. Drawing only: nothing here touches input.
+func _update_combos() -> void:
+	var cs: CardSystem = battle.cards
+	var hand: Array = []
+	for i in _card_views.size():
+		hand.append(cs.hand[i] if i < cs.hand.size() and is_instance_valid(_card_views[i]) else "")
+	_combo_pairs = combo_pairs(hand)
+	var glow := {}
+	var partner := {}
+	for pair in _combo_pairs:
+		glow[pair[0]] = true
+		glow[pair[1]] = true
+		if battle.targeting_index == pair[0]:
+			partner[pair[1]] = true
+		elif battle.targeting_index == pair[1]:
+			partner[pair[0]] = true
+	for i in _card_views.size():
+		var cv: CardView = _card_views[i] if is_instance_valid(_card_views[i]) else null
+		if cv:
+			cv.combo_glow = 1.0 if glow.has(i) else 0.0
+			cv.combo_partner = partner.has(i)
+	if not _combo_pairs.is_empty():
+		_maybe_hint_combo()
+
+
+## Pairs of slots in `hand` (card ids, "" for an empty slot) whose cards form a combo:
+## [[slot_a, slot_b, combo text]], each pair once, in slot order.
+static func combo_pairs(hand: Array) -> Array:
+	var out: Array = []
+	for i in hand.size():
+		var a := str(hand[i])
+		if a == "":
+			continue
+		for j in range(i + 1, hand.size()):
+			var b := str(hand[j])
+			if b == "" or b == a:
+				continue
+			for c in DB.combos:
+				if a in c.cards and b in c.cards:
+					out.append([i, j, str(c.text)])
+					break
+	return out
+
+
+## The first time a combo pair is in the hand (never during the battle tutorial): a tip.
+func _maybe_hint_combo() -> void:
+	if Hints.seen("battle_combo") or not Hints.enabled() or Hints.is_showing() or get_node_or_null("Tutorial") != null \
+			or not bool(Profile.data.flags.get("battle_tutorial_done", false)) or battle.state == "results":
+		return
+	var target: Control = _card_views[_combo_pairs[0][0]]
+	Hints.show_unseen(self, ["battle_combo"], func() -> Dictionary: return {"battle_combo": target})
+
+
+# ---------------------------------------------------------------- scouting
+
+## Opens the scouting card for a runner type over the battle (pauses until closed).
+func open_scouting(enemy_id: String) -> void:
+	if (_scout_popup and is_instance_valid(_scout_popup)) or battle.state == "results" or (_pause and is_instance_valid(_pause)):
+		return
+	Audio.ui("ui_click", -3.0)
+	_card_tip.visible = false
+	_scout_popup = ScoutingBook.popup(root, enemy_id)
+
+
+## A runner type met for the first time: once, point at the threat panel's reports.
+func _on_scouted(keys: Array) -> void:
+	if Hints.seen("battle_scout") or not Hints.enabled() or Hints.is_showing() or get_node_or_null("Tutorial") != null \
+			or not bool(Profile.data.flags.get("battle_tutorial_done", false)) or battle.practice:
+		return
+	for k in keys:
+		if str(k) != "runner" and not Scouting.is_affix(str(k)):
+			Hints.show_unseen(self, ["battle_scout"], func() -> Dictionary: return {"battle_scout": _threat_icons}, 0.6)
+			return
 
 
 # ---------------------------------------------------------------- refresh
@@ -850,8 +960,15 @@ func _fill_threat_icons(by_type: Dictionary) -> void:
 		r.texture = tex if tex else DB.icon("boss" if DB.enemy(id).get("boss", false) else "enemy")
 		if tex == null:
 			r.modulate = Color(1.0, 0.45, 0.35)
-		r.tooltip_text = "%s — %s" % [DB.enemy(id).name, DB.enemy(id).text]
-		r.mouse_filter = Control.MOUSE_FILTER_PASS
+		r.tooltip_text = "%s — %s\nClick for its scouting report." % [DB.enemy(id).name, DB.enemy(id).text]
+		r.mouse_filter = Control.MOUSE_FILTER_STOP
+		r.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		r.name = "Threat_" + str(id)
+		var eid := str(id)
+		r.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+				r.accept_event()
+				open_scouting(eid))
 		box.add_child(r)
 		var l := UITheme.label("x%d" % int(by_type[id]), 15, UITheme.OFFWHITE, UITheme.font_body_bold())
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1452,6 +1569,79 @@ class HandTray:
 				var secs := "%ds" % int(ceil((1.0 - p) * cs.draw_interval))
 				var sw := f.get_string_size(secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
 				draw_string(f, Vector2(r.get_center().x - sw * 0.5, r.end.y - 24), secs, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(UITheme.GOLD, 0.9))
+
+
+## Combo links over the hand: a soft arc from card to card above every combo pair in the hand,
+## with sparks running along it. A pair that includes the selected card is drawn brightest.
+## Pure drawing (mouse_filter IGNORE, drawn last in the tray), so card clicks are untouched.
+class ComboLinks:
+	extends Control
+	var hud: Node
+	var _t := 0.0
+
+	func _process(delta: float) -> void:
+		_t += delta
+		var pairs: Array = hud._combo_pairs if hud else []
+		visible = not pairs.is_empty()
+		if pairs.is_empty():
+			return
+		queue_redraw()
+		for p in pairs:   # the glow pulses: keep both cards redrawing while linked
+			for k in [p[0], p[1]]:
+				var cv: Variant = hud._card_views[k]
+				if is_instance_valid(cv):
+					(cv as CanvasItem).queue_redraw()
+
+	static func _top(cv: CardView) -> Vector2:
+		var s := cv.size.x / 150.0
+		var rise := s * (cv.lift_px * cv._lift + cv.lift_px * 1.2 * cv._sel)
+		return cv.position + Vector2(cv.size.x * 0.5, -rise)
+
+	func _draw() -> void:
+		if hud == null:
+			return
+		var pairs: Array = hud._combo_pairs
+		var sel: int = hud.battle.targeting_index
+		var calm := bool(Settings.get_value("accessibility", "reduce_flashes", false))
+		var col: Color = hud.COMBO_COLOR
+		var n := 0
+		for p in pairs:
+			var a: Variant = hud._card_views[p[0]]
+			var b: Variant = hud._card_views[p[1]]
+			if not is_instance_valid(a) or not is_instance_valid(b):
+				continue
+			var hot: bool = sel == p[0] or sel == p[1]
+			var alpha := 1.0 if hot else (0.4 if sel >= 0 else 0.75)
+			var pa := _top(a) + Vector2(22, 4)
+			var pb := _top(b) + Vector2(-22, 4)
+			var lift := 26.0 + 0.08 * absf(pb.x - pa.x) + 10.0 * (n % 2)
+			var ctrl := (pa + pb) * 0.5 + Vector2(0, -lift * 2.0)
+			var pts := PackedVector2Array()
+			for k in 25:
+				var u := k / 24.0
+				pts.append(pa.lerp(ctrl, u).lerp(ctrl.lerp(pb, u), u))
+			draw_polyline(pts, Color(col, 0.22 * alpha), 11.0 if hot else 8.0, true)
+			draw_polyline(pts, Color(col.lightened(0.25), 0.95 * alpha), 3.0 if hot else 2.2, true)
+			for end in [pa, pb]:
+				draw_circle(end, 5.5 if hot else 4.5, Color(0.02, 0.06, 0.05, 0.9 * alpha))
+				draw_arc(end, 5.5 if hot else 4.5, 0, TAU, 16, Color(col, alpha), 1.6, true)
+			# Sparks running along the arc (they stay put with reduced flashes).
+			for k in 3:
+				var u := fmod(_t * (0.0 if calm else 0.55) + k / 3.0, 1.0)
+				var q: Vector2 = pa.lerp(ctrl, u).lerp(ctrl.lerp(pb, u), u)
+				var fade := sin(u * PI)
+				draw_circle(q, 3.2 if hot else 2.6, Color(1.0, 1.0, 0.95, 0.9 * fade * alpha))
+				draw_circle(q, 7.0, Color(col, 0.18 * fade * alpha))
+			if hot:
+				var f := UITheme.font_body_bold()
+				var label := "COMBO"
+				var mid: Vector2 = pa.lerp(ctrl, 0.5).lerp(ctrl.lerp(pb, 0.5), 0.5)
+				var tw := f.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+				var box := Rect2(mid + Vector2(-tw * 0.5 - 8, -24), Vector2(tw + 16, 20))
+				draw_rect(box, Color(0.02, 0.08, 0.06, 0.92))
+				draw_rect(box, Color(col, 0.9), false, 1.5)
+				draw_string(f, box.position + Vector2(8, 15), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, col.lightened(0.3))
+			n += 1
 
 
 ## Formation preset button face: a mini diamond with the six defender spots, and the name.

@@ -36,6 +36,12 @@ var face_down := false:
 			_update_foil()
 		queue_redraw()
 var foil := true
+## Combo hint in the battle hand (set by the HUD; drawing only): 1 = this card combos with another
+## card in hand (a soft green halo and a link badge); `combo_partner` = it combos with the
+## selected card (a brighter, pulsing halo).
+var combo_glow := 0.0
+var combo_partner := false
+const COMBO_COLOR := Color("#4DF2A0")
 var lift_px := 12.0          # how far the card rises on hover (selected cards rise further)
 var _hover := false
 var _art: Texture2D
@@ -185,6 +191,8 @@ func _draw() -> void:
 		_rr_fill(rect.grow(5 * s), 15 * s, Color(cat_col.lightened(0.35), 0.6 * _sel))
 	elif _lift > 0.01 and playable:
 		_rr_fill(rect.grow(4 * s), 14 * s, Color(rar_col.lightened(0.2), 0.45 * _lift))
+	if combo_glow > 0.01:
+		_draw_combo_halo(rect, s, dim)
 
 	# Metallic rarity frame
 	var hi := 0.55 if r_idx >= 4 else 0.42
@@ -315,11 +323,36 @@ func _draw() -> void:
 		var cb := Rect2(Vector2(rect.end.x - 34 * s, rect.position.y - 8 * s), Vector2(38, 24) * s)
 		_rr_fill(cb, 6 * s, UITheme.SCARLET)
 		draw_string(small, cb.position + Vector2(6, 18) * s, count_badge, HORIZONTAL_ALIGNMENT_LEFT, -1, int(17 * s), Color.WHITE)
+	if combo_glow > 0.01:
+		_draw_combo_badge(rect, s, dim)
 	if _shake > 0.0:
 		# Refused: a red wash, a hot red rim and the cost gem ringed in red (the usual reason).
 		_rr_fill(rect, 12 * s, Color(1.0, 0.15, 0.1, 0.4 * _shake))
 		_rr_outline(rect.grow(1.5 * s), 13 * s, Color(1.0, 0.3, 0.22, 0.95 * _shake), 3.0 * s)
 		draw_arc(gem_c, 16.5 * s, 0, TAU, 28, Color(1.0, 0.35, 0.25, _shake), 2.6 * s, true)
+
+
+## Combo hint: a soft halo around the card, brighter and pulsing on the selected card's partner.
+func _draw_combo_halo(rect: Rect2, s: float, dim: float) -> void:
+	var k := combo_glow * (1.0 if dim >= 1.0 else 0.7)
+	var pulse := 0.5 + 0.5 * sin(_t * (6.0 if combo_partner else 2.4))
+	if combo_partner:
+		_rr_fill(rect.grow(10 * s), 19 * s, Color(COMBO_COLOR, (0.16 + 0.14 * pulse) * k))
+		_rr_fill(rect.grow(5.5 * s), 15 * s, Color(COMBO_COLOR.lightened(0.2), (0.45 + 0.3 * pulse) * k))
+	else:
+		_rr_fill(rect.grow(6.5 * s), 16 * s, Color(COMBO_COLOR, (0.14 + 0.1 * pulse) * k))
+		_rr_outline(rect.grow(3 * s), 14 * s, Color(COMBO_COLOR, (0.6 + 0.3 * pulse) * k), 2.0 * s)
+
+
+## Combo hint: two linked rings on the top-right corner of the frame.
+func _draw_combo_badge(rect: Rect2, s: float, dim: float) -> void:
+	var c := Vector2(rect.end.x - 6 * s, rect.position.y + 6 * s)
+	var r := 11.0 * s
+	draw_circle(c, r + 1.5 * s, Color(0.02, 0.05, 0.04, 0.95))
+	draw_circle(c, r, Color(COMBO_COLOR.darkened(0.55), dim))
+	var col := Color(COMBO_COLOR.lightened(0.35 if combo_partner else 0.15), dim)
+	draw_arc(c + Vector2(-2.8, 0) * s, 4.2 * s, 0, TAU, 16, col, 1.8 * s, true)
+	draw_arc(c + Vector2(2.8, 0) * s, 4.2 * s, 0, TAU, 16, col, 1.8 * s, true)
 
 
 ## Card back: navy and gold with a diamond lattice and the game logo.
