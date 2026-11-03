@@ -177,6 +177,8 @@ def build_enemy(cid):
     print("TRIS", cid, tot, rows[:12])
     style = dict(heavy=cfg.get("heavy", 0.0), bat=bool(cfg.get("bat")),
                  small=cfg.get("small", False), hero=True, gait=cfg.get("gait", "runner"))
+    if cfg.get("bat", {}).get("pose"):
+        style["bat_pose"] = cfg["bat"]["pose"]
     return finish(cid, "boss" if boss else "enemy", sk, arm, parts, style=style,
                   hero_parts=True)
 

@@ -213,7 +213,17 @@ ENEMIES = {
         pauldrons=dict(mat="Metal", size=1.2, layers=2, spikes=3),
         chest_plate=dict(mat="Metal", segs=1, thick=0.022),
         gauntlets="Metal",
-        bat=dict(length=1.18, barrel=0.080, spikes=8, band="Metal"),
+        bat=dict(length=1.18, barrel=0.080, spikes=8, band="Metal", knob_out=0.06,
+                 # poses that keep the big bat clear of the pauldrons and helmet
+                 # (idle/walk/hit/stunned: upright beside the right pad)
+                 pose=dict(grip=(-0.08, -0.22, -0.30), dir=(-0.42, 0.0, 0.91),
+                           taunt=dict(grip=(-0.20, -0.18, 0.06), dir=(-0.45, 0.1, 0.9)),
+                           swing={0: (-0.46, 0.0, 0.89), 0.35: (-0.6, 0.6, 0.5),
+                                  0.70: (0.55, 0.8, -0.05), 0.85: (0.5, -0.6, 0.6),
+                                  1.0: (-0.46, 0.0, 0.89)},
+                           swing_grip={0: (-0.06, -0.22, -0.28), 0.35: (-0.06, 0.06, -0.12),
+                                       0.70: (0.42, -0.08, -0.10), 0.85: (0.20, -0.30, -0.25),
+                                       1.0: (-0.06, -0.22, -0.28)})),
         body=dict(muscle=1.45, chest_w=0.235, chest_d=0.165, waist_w=0.190, waist_d=0.150,
                   pelvis_w=0.185, pelvis_d=0.135, sh_half=0.255, arm_r=0.070, forearm_r=0.066,
                   wrist_r=0.040, thigh_r=0.112, calf_r=0.076, neck_r=0.080, head=0.28,

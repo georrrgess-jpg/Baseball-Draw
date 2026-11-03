@@ -725,3 +725,27 @@ Plan: `docs/plans/UPDATE_8_PLAN.md`. Reviews: `docs/plans/review/card_vibrancy.m
 * Card hit map: 0 of 175 dead points; 12 of 12 fast clicks cast.
 
 ![Scouting Book](screenshots/scouting_book.jpg)
+
+## 16. Fix: Siege Slugger bat clipping
+
+**Problem:** the Siege Slugger's spiked bat went straight up through its right shoulder pad in idle, walk
+and hit, which is the pose the Scouting Book shows. The handle also stuck about 30 cm out below the fist,
+so the hand didn't seem to hold it. During the swing the bat also passed through the helmet and both pads.
+
+**Fix (in the character generator):**
+* The bat now sits in the fist with only a short knob below it.
+* New per-character bat poses (`roster.py` → `bat.pose`, read by `anim.py`):
+  * In idle, walk, hit, stunned and sprint, the bat is held upright in front of and beside the pad.
+  * The taunt and celebrate raise it on a line that clears the pad.
+  * The swing uses re-keyed wind-up and follow-through. The follow-through now returns in front of the body
+    instead of over the head.
+  * The free hand joins the bat during the wind-up and lets go after the follow-through.
+* The other two bat characters (Iron Slugger, Grand Slammer) are unchanged and rebuild byte-identical.
+
+**Verification:**
+* A geometric check over every frame of all 11 clips tests the bat against both pads, the helmet and the
+  head. Before: up to 26 vertices inside in idle, walk, hit and swing. After: 0 in every clip.
+* The rig, clip names, lengths and event times are unchanged. Loop seams are 0 and foot slide is 0.
+* Script check: 88 scripts, 0 failed. System suite: 2,047 checks, 0 failed.
+
+![Siege Slugger before / after](screenshots/slugger_bat_fix.jpg)

@@ -312,19 +312,21 @@ def clip_idle(c, t):
     return P
 
 
-def bat_rest_pose(c, P, t, L, bounce=0.0, two_hands=False):
+def bat_rest_pose(c, P, t, L, bounce=0.0, two_hands=False, left=True):
     """Giant bat resting on the right shoulder, held one-handed; left fist hangs."""
     s = c.s
     br = wave(t, L) if L else 0.0
-    grip = c.S["R"] + c.v(0.03, -0.17, -0.20 + 0.008 * br + bounce)
-    bat_dir = Vector((-0.12, 0.55, 0.83)).normalized()
-    f, p = c.bat_grip("R", bat_dir, Vector((0.9, -0.1, -0.3)))
-    c.arm(P, "R", grip, pole=(-0.8, 0.5, -0.6), fingers=f, palm=p)
+    bp = c.style.get("bat_pose") or {}  # per-character rest pose (big shoulder pads)
+    gx, gy, gz = bp.get("grip", (0.03, -0.17, -0.20))
+    grip = c.S["R"] + c.v(gx, gy, gz + 0.008 * br + bounce)
+    bat_dir = Vector(bp.get("dir", (-0.12, 0.55, 0.83))).normalized()
+    f, p = c.bat_grip("R", bat_dir, Vector(bp.get("fingers", (0.9, -0.1, -0.3))))
+    c.arm(P, "R", grip, pole=Vector(bp.get("pole", (-0.8, 0.5, -0.6))), fingers=f, palm=p)
     if two_hands:
         lg = grip - bat_dir * 0.10 * s * c.sk.p["hand_scale"]
         f2, p2 = c.bat_grip("L", bat_dir, Vector((-0.8, -0.2, 0.0)))
         c.arm(P, "L", lg, pole=(0.5, 0.3, -1.0), fingers=f2, palm=p2)
-    else:
+    elif left:
         c.hang(P, "L", swing=10 + 3 * br, out=16, bend=30)
 
 
@@ -449,9 +451,13 @@ def clip_sprint(c, t):
     g = {}
     if c.style.get("gait") in ("stealer", "sprinter"):
         g = dict(head_up=8, arm_amp=1.1)
-    return _loco(c, t, 0.55, stance=0.32, d_st=0.74 * s * k, lift=0.36 * s * k, lean=26,
-                 bob=0.02 * s * k, arm_amp=1.15, arm_bend=0.05, kick=0.42 * s * k, sprint=True,
-                 heavy=c.style["heavy"] * 0.5, g=g)
+    P = _loco(c, t, 0.55, stance=0.32, d_st=0.74 * s * k, lift=0.36 * s * k, lean=26,
+              bob=0.02 * s * k, arm_amp=1.15, arm_bend=0.05, kick=0.42 * s * k, sprint=True,
+              heavy=c.style["heavy"] * 0.5, g=g)
+    if c.style.get("bat_pose"):
+        # a big bat is carried upright on its rest line (a full arm pump drives it into the ground)
+        bat_rest_pose(c, P, t, 0.55, left=False)
+    return P
 
 
 def clip_walk(c, t):
@@ -564,6 +570,14 @@ def clip_stunned(c, t):
     tgt = tgt + Vector((-0.05, 0.0, -0.03)) * s
     fingers = Vector((0.5, 0.3, 0.8))
     palm = Vector((0.6, 0.6, -0.3))
+    if c.style.get("bat_pose"):
+        # big bat stays on its rest line (clear of the helmet); the free hand goes to the head
+        bat_rest_pose(c, P, t, L)
+        tl = Vector(c.ho) + Vector((0.10 * hz / 0.28, -0.12 * hz / 0.28, 0.06 * hz / 0.28))
+        tl = tl + Vector((0.05, 0.0, -0.03)) * s
+        c.arm(P, "L", tl, pole=(1, 0.2, -0.4), space="head", fingers=Vector((-0.5, 0.3, 0.8)),
+              palm=Vector((-0.6, 0.6, -0.3)))
+        return P
     c.arm(P, "R", tgt, pole=(-1, 0.2, -0.4), space="head", fingers=fingers, palm=palm)
     c.hang(P, "L", swing=6 + 8 * w2, out=16 + 5 * w1, bend=25)
     if c.style["bat"]:
@@ -700,9 +714,22 @@ def clip_celebrate(c, t):
     low = S + c.v(-0.05, -0.12, -0.20)
     high = S + c.v(-0.04, -0.08, 0.52)
     tgt = low.lerp(high, pump)
-    c.arm(P, "R", tgt, pole=(-1, 0.4, -0.5),
-          fingers=Vector((0, -0.4, 1)).lerp(Vector((0, -0.2, 1)), pump),
-          palm=Vector((0.8, -0.3, 0)))
+    bp = c.style.get("bat_pose")
+    if bp:
+        # big bat: raised from its rest line to the taunt hold, leaning out past the pad
+        tp = bp.get("taunt") or {}
+        g0 = S + c.v(*bp.get("grip", (0.03, -0.17, -0.20)))
+        tx, ty, tz = tp.get("grip", (-0.10, -0.10, 0.10))
+        g1 = S + c.v(tx, ty, tz + 0.35)
+        d = Vector(bp.get("dir", (-0.12, 0.55, 0.83))).normalized().lerp(
+            Vector(tp.get("dir", (-0.2, 0.2, 1.0))).normalized(), pump)
+        f, p = c.bat_grip("R", d, Vector(bp.get("fingers", (0.9, -0.1, -0.3))))
+        c.arm(P, "R", g0.lerp(g1, pump), pole=Vector(bp.get("pole", (-0.8, 0.5, -0.6))),
+              fingers=f, palm=p)
+    else:
+        c.arm(P, "R", tgt, pole=(-1, 0.4, -0.5),
+              fingers=Vector((0, -0.4, 1)).lerp(Vector((0, -0.2, 1)), pump),
+              palm=Vector((0.8, -0.3, 0)))
     if c.style["bat"]:
         bat_up = c.S["L"] + c.v(0.10, -0.10, 0.25 + 0.2 * pump)
         c.arm(P, "L", bat_up, pole=(1, 0.3, -0.6))
@@ -1142,13 +1169,19 @@ def clip_swing(c, t):
             c.plant(P, "L", c.fx * 1.9, c.fy - 0.02 * s, yaw=15, knee_out=0.25)
     # hands together, bat direction keyed (chest space)
     S = c.S["R"]
-    grip = KV(t, [(0, S + c.v(0.10, -0.20, -0.18)), (0.35, S + c.v(0.0, 0.0, 0.0)),
-                  (0.45, S + c.v(0.12, -0.26, -0.22)), (0.50, S + c.v(0.22, -0.40, -0.26)),
-                  (0.58, S + c.v(0.40, -0.32, -0.20)), (0.70, S + c.v(0.42, -0.05, 0.02)),
-                  (0.85, S + c.v(0.30, -0.15, -0.10)), (1.0, S + c.v(0.10, -0.20, -0.18))])
-    bat = KV(t, [(0, (-0.25, 0.55, 0.80)), (0.35, (-0.3, 0.7, 0.6)), (0.45, (-0.9, 0.1, 0.1)),
-                 (0.50, (0.15, -1.0, 0.08)), (0.58, (0.9, -0.3, 0.1)), (0.70, (0.6, 0.6, 0.4)),
-                 (0.85, (0.1, 0.6, 0.8)), (1.0, (-0.25, 0.55, 0.80))])
+    bp = c.style.get("bat_pose") or {}
+    gk = [(0, (0.10, -0.20, -0.18)), (0.35, (0.0, 0.0, 0.0)), (0.45, (0.12, -0.26, -0.22)),
+          (0.50, (0.22, -0.40, -0.26)), (0.58, (0.40, -0.32, -0.20)), (0.70, (0.42, -0.05, 0.02)),
+          (0.85, (0.30, -0.15, -0.10)), (1.0, (0.10, -0.20, -0.18))]
+    gov = {float(k): v for k, v in (bp.get("swing_grip") or {}).items()}
+    grip = KV(t, [(k, S + c.v(*gov.get(k, g))) for k, g in gk])
+    keys = [(0, (-0.25, 0.55, 0.80)), (0.35, (-0.3, 0.7, 0.6)), (0.45, (-0.9, 0.1, 0.1)),
+            (0.50, (0.15, -1.0, 0.08)), (0.58, (0.9, -0.3, 0.1)), (0.70, (0.6, 0.6, 0.4)),
+            (0.85, (0.1, 0.6, 0.8)), (1.0, (-0.25, 0.55, 0.80))]
+    # per-character overrides {time: direction} (keeps a big bat off pads / helmet)
+    ov = {float(k): v for k, v in (bp.get("swing") or {}).items()}
+    keys = [(k, ov.get(k, d)) for k, d in keys]
+    bat = KV(t, keys)
     bat.normalize()
     f, p = c.bat_grip("R", bat, Vector((0, 0, -1)).lerp(Vector((0.8, -0.2, 0)), 0.5))
     c.arm(P, "R", grip, pole=KV(t, [(0, (-0.6, 0.6, -0.5)), (0.35, (-0.8, 0.4, -0.6)),
@@ -1157,8 +1190,18 @@ def clip_swing(c, t):
     hs = c.sk.p["hand_scale"]
     lg = grip - bat * 0.10 * s * hs
     f2, p2 = c.bat_grip("L", bat, Vector((0, 0, -1)).lerp(Vector((-0.8, -0.2, 0)), 0.5))
-    c.arm(P, "L", lg, pole=KV(t, [(0, (0.5, 0.3, -1.0)), (0.5, (0.8, 0.2, -0.6)), (0.7, (0.6, -0.2, -0.8)),
-                                  (1, (0.5, 0.3, -1.0))]), fingers=f2, palm=p2)
+    lpole = KV(t, [(0, (0.5, 0.3, -1.0)), (0.5, (0.8, 0.2, -0.6)), (0.7, (0.6, -0.2, -0.8)),
+                   (1, (0.5, 0.3, -1.0))])
+    if bp:
+        # one-handed rest at both ends (matches idle): the free hand joins the
+        # bat during the wind-up and lets go after the follow-through
+        w = sstep(0.04, 0.34, t) * (1.0 - sstep(0.84, 1.0, t))
+        if w < 0.999:
+            lh = c.hang(c.new(), "L", swing=10, out=16, bend=30)
+            c.arm(P, "L", lh.lerp(lg, w), pole=lpole,
+                  fingers=f2 if w > 0.5 else None, palm=p2 if w > 0.5 else None)
+            return P
+    c.arm(P, "L", lg, pole=lpole, fingers=f2, palm=p2)
     return P
 
 
@@ -1218,8 +1261,10 @@ def clip_taunt(c, t):
     if c.style["bat"]:
         # bat raised overhead in the right hand while taunting
         S = c.S["R"]
-        tg = S + c.v(-0.10, -0.10, 0.10 + 0.35 * spread)
-        bat = Vector((-0.2, 0.2, 1.0)).normalized()
+        tp = (c.style.get("bat_pose") or {}).get("taunt") or {}
+        tx, ty, tz = tp.get("grip", (-0.10, -0.10, 0.10))
+        tg = S + c.v(tx, ty, tz + 0.35 * spread)
+        bat = Vector(tp.get("dir", (-0.2, 0.2, 1.0))).normalized()
         f, p = c.bat_grip("R", bat, Vector((0.8, -0.3, 0)))
         c.arm(P, "R", tg, pole=(-1, 0.3, -0.5), fingers=f, palm=p)
     return P

@@ -1627,8 +1627,7 @@
     "length": 0.55,
     "loop": true,
     "warn": [
-     "Larm:0.109m@0.00s",
-     "Rarm:0.108m@0.27s"
+     "Larm:0.109m@0.00s"
     ]
    },
    "stunned": {
@@ -1642,8 +1641,8 @@
     "length": 1.0,
     "loop": false,
     "warn": [
-     "Larm:0.026m@0.00s",
-     "Rarm:0.037m@0.35s"
+     "Larm:0.026m@0.87s",
+     "Rarm:0.028m@0.57s"
     ]
    },
    "taunt": {
@@ -1662,7 +1661,7 @@
   "height": 2.379,
   "id": "slugger",
   "kind": "enemy",
-  "seconds": 72.6,
+  "seconds": 19.2,
   "tris": 15430
  },
  "sprinter": {

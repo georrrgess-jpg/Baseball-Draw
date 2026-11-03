@@ -600,13 +600,16 @@ class EnemyHero(Hero):
         obj.data.shade_smooth()
         return obj
 
-    def bat(self, mat, band_mat=None, length=1.0, barrel=0.05, spikes=0, spike_mat=None):
-        """Bat rigid to hand.R along the hand's thumb axis (t)."""
+    def bat(self, mat, band_mat=None, length=1.0, barrel=0.05, spikes=0, spike_mat=None,
+            knob_out=0.15):
+        """Bat rigid to hand.R along the hand's thumb axis (t); the clips aim
+        that axis (anim.bat_grip). knob_out: how far the handle sticks out
+        below the fist (hand-scaled units)."""
         s = self.s
         W, f, n, t = self.hand_frame("R")
         hs = self.p["hand_scale"]
         grip = W + f * 0.050 * s * hs + n * 0.020 * s * hs
-        knob = grip - t * 0.15 * s * hs
+        knob = grip - t * knob_out * s * hs
         L = length * s
         hr = 0.017 * s * hs
         br = barrel * s
@@ -694,7 +697,8 @@ class EnemyHero(Hero):
             b = cfg["bat"]
             self.bat(m["Bat"], m.get(b.get("band", "Metal")), length=b.get("length", 1.0),
                      barrel=b.get("barrel", 0.06), spikes=b.get("spikes", 0),
-                     spike_mat=m.get(b.get("spike_mat", "")))
+                     spike_mat=m.get(b.get("spike_mat", "")),
+                     knob_out=b.get("knob_out", 0.15))
         return kind
 
 
