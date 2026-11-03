@@ -120,10 +120,10 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			var last_pos := e.center()
 			var go := func() -> void:
 				if not is_instance_valid(e) or not e.targetable():
-					fx.lost_throw(_origin(df), last_pos, Color(1.0, 0.85, 0.4))
+					fx.lost_throw(_origin(df), last_pos, Color(1.0, 0.42, 0.18))
 					return
 				battle.projectiles.launch(_origin(df), e, 42.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level),
-					"knockback": p(card_id, "knockback", level), "accuracy": 200.0, "big": true, "color": Color(1.0, 0.85, 0.4), "crit": true,
+					"knockback": p(card_id, "knockback", level), "accuracy": 200.0, "big": true, "color": Color(1.0, 0.42, 0.18), "crit": true,
 					"fx": "power", "trail": "comet"})
 				fx.power_release(_origin(df), e.center())
 				Audio.play("bat_crack", -6.0)
@@ -132,7 +132,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 		"splitter":
 			var df := nearest_thrower(point)
 			var go := func() -> void:
-				battle.projectiles.launch_at(_origin(df), point + Vector3(0, 3.5, 0), 26.0, {"color": Color(0.9, 0.95, 1.0), "big": true, "trail": "comet"},
+				battle.projectiles.launch_at(_origin(df), point + Vector3(0, 3.5, 0), 26.0, {"color": Color(1.0, 0.5, 0.42), "big": true, "trail": "comet"},
 					func(at: Vector3) -> void:
 						fx.splitter_burst(at, point)
 						var victims := battle.enemies_in_radius(point, float(DB.card(card_id).get("radius", 5.0)))
@@ -141,10 +141,10 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 						var n := int(p(card_id, "balls", level)) + (1 if battle.buff_active("twin_play") else 0)
 						for i in n:
 							if victims.is_empty():
-								battle.projectiles.launch_at(at, point + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), 18.0, {"arc_mult": 0.3, "color": Color(0.7, 0.9, 1.0), "trail": "comet", "big": true}, func(x: Vector3) -> void: fx.ball_impact("split", x, Color(0.7, 0.9, 1.0)))
+								battle.projectiles.launch_at(at, point + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), 18.0, {"arc_mult": 0.3, "color": Color(1.0, 0.25, 0.25), "trail": "comet", "big": true}, func(x: Vector3) -> void: fx.ball_impact("split", x, Color(1.0, 0.25, 0.25)))
 								continue
 							var v: Enemy = victims[i % victims.size()]
-							battle.projectiles.launch(at, v, 20.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level), "accuracy": 200.0, "color": Color(0.7, 0.9, 1.0), "arc_mult": 0.3,
+							battle.projectiles.launch(at, v, 20.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level), "accuracy": 200.0, "color": Color(1.0, 0.25, 0.25), "arc_mult": 0.3,
 								"fx": "split", "trail": "comet", "big": true}))
 			_cast(df, go, point, "throw", card_id)
 
@@ -205,7 +205,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			var r := float(DB.card(card_id).get("radius", 3.0))
 			var go := func() -> void:
 				fx.power_catch_throw(point, r, clampf(_origin(caster).distance_to(point) / 20.0, 0.08, 3.0))
-				battle.projectiles.launch_at(_origin(caster), point, 20.0, {"big": true, "arc_mult": 2.2, "color": Color(0.7, 0.4, 1.0), "trail": "heavy"}, func(at: Vector3) -> void:
+				battle.projectiles.launch_at(_origin(caster), point, 20.0, {"big": true, "arc_mult": 2.2, "color": Color(1.0, 0.25, 0.55), "trail": "heavy"}, func(at: Vector3) -> void:
 					Audio.play("boss_slam", -6.0)
 					battle.shake(0.35)
 					fx.power_catch_impact(point, r)
@@ -321,13 +321,13 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				if not picked:
 					fx.fizzle(e.center() + Vector3(0, 0.6, 0), "IMMUNE" if e.is_boss else "SAFE!")
 				if picked:
-					battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "PICKED OFF!", Color(0.2, 1.0, 0.8), 0.8, 0.7)
+					battle.vfx.text_popup(e.center() + Vector3(0, 0.8, 0), "PICKED OFF!", Color(0.55, 0.8, 1.0), 0.8, 0.7)
 					e.die({"source": caster, "kind": "pickoff", "card": card_id})
 				else:
 					battle.deal_damage(e, p(card_id, "damage", level) * power, {"source": caster, "kind": "throw", "card": card_id})
 				Audio.play("glove_catch")
 			if caster:
-				fx.lock_on(e, Defender.RELEASE.special / 1.3, Color(0.2, 1.0, 0.8))
+				fx.lock_on(e, Defender.RELEASE.special / 1.3, Color(0.3, 0.62, 1.0))
 			_cast(caster, go, e.global_position, "special", card_id)
 
 		"lockdown":
@@ -351,10 +351,12 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 			var dur := p(card_id, "duration", level) * control_mult()
 			Audio.play("frost_cast")
 			battle.add_zone(EffectZone.frost(battle, point, r, dur, p(card_id, "slow", level), p(card_id, "crit_bonus", level)))
+			fx.frost_field_cast(point, r)
 
 		"wall_of_dirt":
 			Audio.play("earth_rumble")
 			battle.add_wall(target.get("point", point), p(card_id, "hp", level), p(card_id, "duration", level) * control_mult())
+			fx.wall_cast(target.get("point", point))
 
 		"base_shield":
 			fx.base_shield()
@@ -502,7 +504,7 @@ func execute(card_id: String, level: int, target: Dictionary) -> void:
 				var from := _origin(df)
 				Audio.play("bat_crack", -3.0)
 				fx.line_drive_release(from, point)
-				battle.projectiles.launch_at(from, point + Vector3(0, 0.6, 0), 46.0, {"color": Color(1.0, 0.96, 0.85), "big": true, "arc_mult": 0.12, "trail": "comet"},
+				battle.projectiles.launch_at(from, point + Vector3(0, 0.6, 0), 46.0, {"color": Color(1.0, 0.7, 0.3), "big": true, "arc_mult": 0.12, "trail": "comet"},
 					func(_at: Vector3) -> void:
 						Audio.play("explosion_small", -5.0)
 						battle.shake(0.15)
@@ -728,7 +730,7 @@ func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3
 				if not is_instance_valid(e) or not e.targetable():
 					fx.lost_throw(_origin(df), last_pos, DB.category_color("control"))
 					return
-				battle.projectiles.launch_at(_origin(df), e.center(), 30.0, {"color": Color(0.75, 0.7, 1.0), "arc_mult": 0.4, "trail": "comet"}, func(_at: Vector3) -> void:
+				battle.projectiles.launch_at(_origin(df), e.center(), 30.0, {"color": Color(0.5, 0.45, 1.0), "arc_mult": 0.4, "trail": "comet"}, func(_at: Vector3) -> void:
 					if not is_instance_valid(e) or not e.alive:
 						return
 					var dur := p(card_id, "duration", level) * control_mult() * (p(card_id, "boss_time", level) if e.is_boss else 1.0)
