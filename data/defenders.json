@@ -68,9 +68,9 @@
    "title": "The Wall",
    "bio": "Nothing gets past Rico. Not fastballs, not runners, not excuses.",
    "stats": {
-    "damage": 24,
-    "interval": 1.0,
-    "range": 8.5,
+    "damage": 30,
+    "interval": 0.85,
+    "range": 12.0,
     "throw_speed": 24.0,
     "accuracy": 75,
     "special_power": 1.0,
@@ -96,7 +96,7 @@
    "title": "Quicksilver",
    "bio": "The fastest glove in the league. Blink and the double play is already turned.",
    "stats": {
-    "damage": 16,
+    "damage": 18,
     "interval": 0.55,
     "range": 8.0,
     "throw_speed": 28.0,
@@ -152,7 +152,7 @@
    "title": "Hawkeye",
    "bio": "Kai can thread a throw through a keyhole from the warning track.",
    "stats": {
-    "damage": 38,
+    "damage": 35,
     "interval": 1.5,
     "range": 15.0,
     "throw_speed": 40.0,
@@ -208,7 +208,7 @@
    "title": "Live Wire",
    "bio": "A closer with a lightning arm. Her fastball arrives before the thunder.",
    "stats": {
-    "damage": 26,
+    "damage": 28,
     "interval": 0.9,
     "range": 11.0,
     "throw_speed": 36.0,
@@ -268,7 +268,7 @@
    "title": "Gap Hunter",
    "bio": "Hana covers more grass than the groundskeeper.",
    "stats": {
-    "damage": 30,
+    "damage": 28,
     "interval": 1.0,
     "range": 15.0,
     "throw_speed": 34.0,

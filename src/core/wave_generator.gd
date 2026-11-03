@@ -46,6 +46,20 @@ static func mode_tuning(run: RunState, key: String) -> float:
 	return float(t.get("all", {}).get(key, 1.0)) * float(t.get(run.difficulty_id, {}).get(key, 1.0))
 
 
+## Per-mode boss health on top of the usual scaling (data/modes.json "tuning": {difficulty or "all":
+## {"boss_hp": 0.9}} for every boss, or {"boss_hp": {"grand_slammer": 0.85}} for one boss).
+static func boss_hp_tuning(run: RunState, boss_id: String) -> float:
+	var t: Dictionary = DB.mode(run.mode_id).get("tuning", {})
+	var mult := 1.0
+	for key in ["all", run.difficulty_id]:
+		var v: Variant = t.get(key, {}).get("boss_hp", 1.0)
+		if typeof(v) == TYPE_DICTIONARY:
+			mult *= float((v as Dictionary).get(boss_id, 1.0))
+		else:
+			mult *= float(v)
+	return mult
+
+
 static func hp_multiplier(run: RunState) -> float:
 	var ei := effective_inning(run)
 	var mult := 1.0 + 0.24 * (ei - 1.0)

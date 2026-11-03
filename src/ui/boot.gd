@@ -54,6 +54,12 @@ func _ready() -> void:
 					cfg.deck = Array(b.split("=")[1].split(",")).filter(func(id: String) -> bool: return DB.cards.has(id))
 				if b.begins_with("--seed="):
 					cfg.seed = int(b.split("=")[1])
+				# Balance simulation: a fixed team (first id is the captain), e.g. to measure Nova/Dex/Hana.
+				if b.begins_with("--team="):
+					var team: Array = Array(b.split("=")[1].split(",")).filter(func(id: String) -> bool: return DB.defenders.has(id))
+					if team.size() == 6:
+						cfg.team = team
+						cfg.captain = team[0]
 			Session.start(cfg)
 			return
 		if a.begins_with("--scene="):

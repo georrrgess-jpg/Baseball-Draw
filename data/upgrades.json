@@ -91,10 +91,10 @@
    "price": 50,
    "max": 4,
    "kind": "core",
-   "text": "Captain's aura: +10% damage to nearby allies and +2m radius.",
+   "text": "Captain's aura: +8% damage to nearby allies and +1.5m radius.",
    "effect": {
-    "captain_damage": 0.1,
-    "captain_radius": 2.0
+    "captain_damage": 0.08,
+    "captain_radius": 1.5
    },
    "fx": {
     "key": "captain_damage",
@@ -126,9 +126,9 @@
    "price": 40,
    "max": 3,
    "kind": "random",
-   "text": "+5% critical hit chance for the whole team.",
+   "text": "+8% critical hit chance for the whole team.",
    "effect": {
-    "crit": 0.05
+    "crit": 0.08
    },
    "fx": {
     "key": "crit",
@@ -157,7 +157,7 @@
    "id": "card_mastery",
    "name": "Card Mastery",
    "icon": "upgrade",
-   "price": 40,
+   "price": 30,
    "max": 3,
    "kind": "random",
    "text": "A random card in your deck gains +1 level for this game.",
@@ -175,9 +175,9 @@
    "price": 40,
    "max": 3,
    "kind": "random_defender",
-   "text": "One defender gains +25% damage for the rest of this game.",
+   "text": "One defender gains +35% damage for the rest of this game.",
    "effect": {
-    "defender_damage": 0.25
+    "defender_damage": 0.35
    },
    "fx": {
     "key": "defender_damage",
@@ -189,7 +189,7 @@
    "id": "scouting_report",
    "name": "Scouting Report",
    "icon": "info",
-   "price": 30,
+   "price": 50,
    "max": 2,
    "kind": "random",
    "text": "Runners have 10% less health for the rest of this game.",

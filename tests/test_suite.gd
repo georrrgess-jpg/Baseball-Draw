@@ -883,6 +883,22 @@ func test_update6_waves() -> void:
 	ok(WaveGenerator.mode_tuning(RunState.create(sv), "enemy_hp") < 1.0, "Standard Siege Veteran is eased")
 	sv.difficulty = "standard"
 	ok(WaveGenerator.mode_tuning(RunState.create(sv), "enemy_hp") == 1.0, "Standard Siege Standard is unchanged")
+	# Update 8: Quick Defense runner health rises at every difficulty step (the per-mode tuning used to
+	# give Standard tougher runners than Veteran).
+	var prev := 0.0
+	var rising := true
+	for did in ["rookie", "standard", "veteran", "legend"]:
+		q.difficulty = did
+		var hp := float(DB.difficulty(did).enemy_hp) * WaveGenerator.mode_tuning(RunState.create(q), "enemy_hp")
+		rising = rising and hp > prev
+		prev = hp
+	ok(rising, "Quick Defense runner health rises with every difficulty step")
+	# Update 8: Veteran Standard Siege waves are bigger than Update 7's (the stronger catcher made it too
+	# easy) but still smaller than the difficulty's own; boss health is untuned (data/modes.json boss_hp).
+	sv.difficulty = "veteran"
+	var svr := RunState.create(sv)
+	ok(WaveGenerator.mode_tuning(svr, "budget") > 0.78 and WaveGenerator.mode_tuning(svr, "budget") < 1.0, "Veteran Siege wave size is tuned between Update 7 and the difficulty default")
+	ok(is_equal_approx(WaveGenerator.boss_hp_tuning(svr, "grand_slammer"), 1.0), "Veteran Siege bosses keep their health")
 	# Leave a fresh profile: the battle checks below measure card damage, which defender
 	# levels (from the Rewards.apply calls above) would raise.
 	Profile.reset_profile()
@@ -1102,6 +1118,8 @@ func test_battle_systems() -> void:
 	await _test_update5_battle()
 	_clear()
 	await _test_update7_battle()
+	_clear()
+	await _test_update8_battle()
 	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
@@ -1904,6 +1922,72 @@ func _test_update7_battle() -> void:
 	ok(ih - ir.hp >= want - 2.0 and ih - ir.hp <= want * 1.8, "instant replay throws the last card again, one level up (%.0f, want %.0f)" % [ih - ir.hp, want])
 	_hold_fire(false)
 	_clear()
+
+
+## Update 8 tuning hooks in a live battle: per-mode boss health, the Home Guard assist statistic and
+## Captain's Rally reading its per-level values from data/upgrades.json.
+func _test_update8_battle() -> void:
+	section("update 8 tuning hooks (battle)")
+	_hold_fire(true)
+	var route := battle.routes[0]
+	# Boss health: a "boss_hp" entry in the mode's tuning scales that boss only.
+	var mode: Dictionary = DB.mode(battle.run.mode_id)
+	var had_tuning := mode.has("tuning")
+	var old_tuning: Variant = mode.get("tuning", {})
+	mode["tuning"] = {battle.run.difficulty_id: {"boss_hp": {"iron_slugger": 0.5}}}
+	ok(is_equal_approx(WaveGenerator.boss_hp_tuning(battle.run, "iron_slugger"), 0.5) and is_equal_approx(WaveGenerator.boss_hp_tuning(battle.run, "grand_slammer"), 1.0),
+		"boss_hp tuning can target one boss")
+	var b := battle.spawn_enemy("iron_slugger", route, route.length * 0.3, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01})
+	ok(absf(b.max_hp - float(DB.enemy("iron_slugger").hp) * 0.5) < 1.0, "a tuned boss spawns with that much health (%.0f)" % b.max_hp)
+	mode["tuning"] = {"all": {"boss_hp": 0.8}}
+	ok(is_equal_approx(WaveGenerator.boss_hp_tuning(battle.run, "phantom_captain"), 0.8), "a plain boss_hp number scales every boss")
+	if had_tuning:
+		mode["tuning"] = old_tuning
+	else:
+		mode.erase("tuning")
+	ok(is_equal_approx(WaveGenerator.boss_hp_tuning(battle.run, "iron_slugger"), 1.0), "practice bosses are untuned")
+	_clear()
+	await _wait(0.1)
+	# Home Guard assist: extra damage inside Rico's aura is credited to it in run.stats.assist_by.
+	var rico: Defender = null
+	for df in battle.defenders:
+		if df.id == "rico":
+			rico = df
+	if rico:
+		var e := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+		await _wait(0.1)
+		rico.place(e.global_position + Vector3(1.5, 0, 0))
+		await _wait(0.2)
+		var before := float(battle.run.stats.get("assist_by", {}).get("home_guard", 0.0))
+		var dealt := battle.deal_damage(e, 100.0, {"kind": "throw"})
+		var after := float(battle.run.stats.get("assist_by", {}).get("home_guard", 0.0))
+		ok(e.home_guard and after - before > 0.0 and absf((after - before) - dealt * 0.10 / 1.10) < 0.5,
+			"Home Guard's +10 %% is credited as an assist (%.1f of %.1f)" % [after - before, dealt])
+		battle.apply_formation(battle.run.formation)
+	_clear()
+	# Captain's Rally: each level adds the data's captain_damage to allies in the captain's radius.
+	var fx: Dictionary = DB.upgrades.captains_rally.effect
+	var cap: Defender = null
+	for df in battle.defenders:
+		if df.is_captain:
+			cap = df
+	if cap == null:
+		cap = battle.defenders[0]
+		battle.set_captain(cap)
+	var ally: Defender = battle.defenders[1] if battle.defenders[0] == cap else battle.defenders[0]
+	var ally_post := ally.post
+	# Just outside the level-0 radius (6 m), inside the level-1 radius.
+	ally.place(cap.post + Vector3(6.0 + float(fx.captain_radius) * 0.5, 0, 0))
+	await _wait(0.15)
+	var lvl0 := ally.dyn_damage
+	battle.run.upgrades["captains_rally"] = 1
+	await _wait(0.15)
+	ok(lvl0 < 0.001 and absf(ally.dyn_damage - (0.08 + float(fx.captain_damage))) < 0.001,
+		"Captain's Rally level 1 reaches %.1f m and gives +%d %% (%.2f -> %.2f)" % [6.0 + float(fx.captain_radius),
+		roundi(100.0 * (0.08 + float(fx.captain_damage))), lvl0, ally.dyn_damage])
+	battle.run.upgrades.erase("captains_rally")
+	ally.place(ally_post)
+	_hold_fire(false)
 
 
 ## Update 7 content outside battle: collection, saves, packs, roles.

@@ -11,6 +11,7 @@ extends Node
 
 var battle: Battle
 var card_timer := 1.0
+var cast_gap := Vector2(1.0, 2.5)   # seconds between casts; `--cast-gap=3,6` models a slower player
 var log_prefix := "[AUTO]"
 var quit_on_finish := true
 var play_cards := true
@@ -52,6 +53,12 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--speed="):
 			Engine.time_scale = float(a.split("=")[1])
+		if a.begins_with("--cast-gap="):
+			var g := a.split("=")[1].split(",")
+			cast_gap = Vector2(float(g[0]), float(g[1] if g.size() > 1 else g[0]))
+		if a.begins_with("--shop="):
+			var ids := a.split("=")[1]
+			shop_order = [] if ids == "none" else Array(ids.split(","))
 	print("%s start mode=%s difficulty=%s arena=%s seed=%d team=%s deck=%s" % [log_prefix, battle.run.mode_id,
 		battle.run.difficulty_id, battle.run.arena_id, battle.run.run_seed, battle.run.team, battle.run.deck])
 
@@ -72,24 +79,93 @@ func _on_state(s: String) -> void:
 		get_tree().create_timer(2.5, true, false, true).timeout.connect(_shop)
 
 
+## Dugout shopping: one level of each upgrade per visit, in priority order. `--shop=a,b,c` (or
+## `--shop=none`) overrides the order so the balance tools can compare purchase orders. Core upgrades
+## are always on offer; specials only when this inning's dugout rolls them (the same roll as
+## DugoutScreen._roll_offers), at its 20 % discount.
+const SHOP_ORDER := ["stronger_arm", "faster_relay", "base_shield", "wider_coverage", "captains_rally"]
+var shop_order: Array = SHOP_ORDER.duplicate()
+var upgrades_bought: Dictionary = {}   # upgrade id -> levels bought this run
+
+
+func _offered_specials() -> Array:
+	var r := battle.run
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([r.run_seed, r.inning, "dugout"])
+	var specials: Array = []
+	for id in DB.upgrade_order:
+		var u: Dictionary = DB.upgrades[id]
+		if r.upgrade_level(id) < int(u.max) and u.kind != "core":
+			specials.append(id)
+	for i in range(specials.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var t: Variant = specials[i]
+		specials[i] = specials[j]
+		specials[j] = t
+	var out: Array = []
+	for i in mini(2, specials.size()):
+		var o := {"id": specials[i]}
+		if DB.upgrades[specials[i]].kind == "random_defender":
+			o.defender = r.team[rng.randi() % r.team.size()]
+		out.append(o)
+	return out
+
+
 func _shop() -> void:
 	var r := battle.run
-	# Buy the cheapest useful upgrades in a fixed priority order.
-	for id in ["stronger_arm", "faster_relay", "base_shield", "wider_coverage", "captains_rally"]:
+	var specials := _offered_specials()
+	for id in shop_order:
+		if not DB.upgrades.has(id):
+			continue
 		var u: Dictionary = DB.upgrades[id]
-		if r.upgrade_level(id) < int(u.max) and r.coins >= r.upgrade_price(id):
-			coins_spent += r.upgrade_price(id)
-			r.coins -= r.upgrade_price(id)
-			r.upgrades[id] = r.upgrade_level(id) + 1
-			if id == "base_shield":
-				battle.add_shield(1)
-			print("%s bought %s (lvl %d)" % [log_prefix, id, r.upgrade_level(id)])
+		var offer: Dictionary = {}
+		if u.kind != "core":
+			for o: Dictionary in specials:
+				if o.id == id:
+					offer = o
+			if offer.is_empty():
+				continue
+		var price := r.upgrade_price(id) if u.kind == "core" else RunState.round_price(r.upgrade_price(id) * 0.8)
+		if r.upgrade_level(id) >= int(u.max) or r.coins < price:
+			continue
+		coins_spent += price
+		r.coins -= price
+		r.upgrades[id] = r.upgrade_level(id) + 1
+		upgrades_bought[id] = int(upgrades_bought.get(id, 0)) + 1
+		_apply_upgrade(id, offer)
+		print("%s bought %s (lvl %d) for %d" % [log_prefix, id, r.upgrade_level(id), price])
 	battle._refresh_team_stats()
 	var hud: Node = battle.hud
 	var dug: Node = hud.get("_dugout")
 	if dug and is_instance_valid(dug):
 		dug.queue_free()
 	battle.next_inning()
+
+
+## The one-off effects DugoutScreen._buy applies on purchase (the rest are read from run.upgrades).
+func _apply_upgrade(id: String, offer: Dictionary) -> void:
+	var r := battle.run
+	match id:
+		"base_shield":
+			battle.add_shield(1)
+		"card_mastery":
+			var rng := RandomNumberGenerator.new()
+			rng.seed = hash([r.run_seed, r.inning, "mastery", r.upgrade_level(id)])
+			var cid: String = r.deck[rng.randi() % r.deck.size()]
+			r.card_level_bonus[cid] = int(r.card_level_bonus.get(cid, 0)) + 1
+		"hot_streak":
+			var did: String = offer.get("defender", r.team[0])
+			r.defender_bonus[did] = float(r.defender_bonus.get(did, 0.0)) + float(DB.upgrades[id].effect.defender_damage)
+		"new_pitch_card":
+			# The autopilot takes the first of the three offered cards.
+			var rng := RandomNumberGenerator.new()
+			rng.seed = hash([r.run_seed, r.inning, "pick", r.upgrade_level(id) - 1])
+			var pool: Array = DB.card_order.filter(func(c: String) -> bool: return not c in r.deck)
+			if not pool.is_empty():
+				var cid: String = pool[rng.randi() % pool.size()]
+				r.deck.append(cid)
+				r.temp_cards.append(cid)
+				battle.cards.add_card(cid)
 
 
 func _on_run_scored(n: int) -> void:
@@ -183,7 +259,8 @@ func stats_dict() -> Dictionary:
 		"coins_earned": r.coins_earned, "coins_spent": coins_spent, "coins_left": r.coins,
 		"card_plays": card_plays, "card_impact": r.card_impact, "damage_by": r.stats.damage_by, "outs_by": r.stats.outs_by,
 		"runs_by_inning": runs_by_inning, "runs_by_type": runs_by_type, "spawned_by_type": spawned_by_type,
-		"bosses": bosses, "max_combo": int(r.stats.get("max_combo", 0)), "shield_saves": int(r.stats.get("shield_saves", 0)),
+		"bosses": bosses, "upgrades_bought": upgrades_bought, "team": r.team, "assist_by": r.stats.get("assist_by", {}),
+		"max_combo": int(r.stats.get("max_combo", 0)), "shield_saves": int(r.stats.get("shield_saves", 0)),
 		"reward_coins": int(res.get("coins", 0)), "reward_xp": int(res.get("xp", 0)), "reward_rp": int(res.get("rp", 0)),
 		"reward_packs": res.get("packs", []).map(func(pk: Dictionary) -> String: return str(pk.type)),
 		"perf": perf_summary(),
@@ -209,7 +286,7 @@ func _process(delta: float) -> void:
 	card_timer -= delta
 	if card_timer > 0.0:
 		return
-	card_timer = randf_range(1.0, 2.5)
+	card_timer = randf_range(cast_gap.x, cast_gap.y)
 	var cs := battle.cards
 	for i in cs.hand.size():
 		if cs.check(i) != "":
@@ -330,6 +407,22 @@ func _target_for(id: String) -> Dictionary:
 						n += 1
 				if n > best_n and battle.effects.active_item("golden_glove", df).is_empty():
 					best_n = n
+					pick = df
+			if pick == null:
+				return {}
+			return {"defender": pick, "point": pick.global_position, "valid": true}
+		"diamond_aura":
+			# The defender whose aura covers the most throwing power (was a random defender).
+			var pick: Defender = null
+			var best := -1.0
+			var rad := DB.card_param(id, "radius", battle.run.card_level(id))
+			for df: Defender in battle.defenders:
+				var sum := 0.0
+				for o: Defender in battle.defenders:
+					if Field.v2(o.global_position).distance_to(Field.v2(df.global_position)) <= rad:
+						sum += o.s_damage / maxf(o.s_interval, 0.1)
+				if sum > best:
+					best = sum
 					pick = df
 			if pick == null:
 				return {}

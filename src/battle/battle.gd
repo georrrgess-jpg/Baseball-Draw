@@ -1103,8 +1103,11 @@ func _update_buffs(delta: float) -> void:
 		if df.is_captain:
 			cap = df
 	var cap_lvl := run.upgrade_level("captains_rally")
-	var cap_radius := 6.0 + 1.5 * cap_lvl
-	var cap_bonus := 0.08 + 0.08 * cap_lvl
+	# Update 8: per-level values come from data/upgrades.json (they were hard-coded as +8 % / +1.5 m
+	# while the dugout text promised the data's +10 % / +2 m).
+	var cap_fx: Dictionary = DB.upgrades.get("captains_rally", {}).get("effect", {})
+	var cap_radius := 6.0 + float(cap_fx.get("captain_radius", 1.5)) * cap_lvl
+	var cap_bonus := 0.08 + float(cap_fx.get("captain_damage", 0.08)) * cap_lvl
 	for df in defenders:
 		df.dyn_damage = 0.0
 		df.dyn_speed = 0.0
