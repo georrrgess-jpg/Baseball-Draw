@@ -127,13 +127,15 @@ func ground_glow(pos: Vector3, radius: float, ramp: String, dur := 1.5, rim := 0
 	mi.global_position = Vector3(pos.x, 0.075, pos.z)
 	mi.scale = Vector3(radius, 1, radius)
 	var seed := randf() * 10.0
+	# Big pools stay lighter so they never cover the field (runners, bars and paths read through).
+	strength *= clampf(3.5 / maxf(radius, 0.1), 0.45, 1.0)
 	mi.set_instance_shader_parameter("row", row_v(ramp))
 	mi.set_instance_shader_parameter("anim", Vector4(0, 0, seed, rim))
 	var an := vfx.animate(mi, dur, func(n: Node3D, k: float) -> void:
 		var tt := k * dur
 		var grow := 1.0 - pow(1.0 - clampf(tt / 0.14, 0.0, 1.0), 3.0)
 		n.scale = Vector3.ONE * radius * (0.55 + 0.45 * grow)
-		var vis := grow * (1.0 - smoothstep(0.35, 1.0, k)) * strength
+		var vis := grow * (1.0 - smoothstep(0.25, 1.0, k)) * strength
 		(n as MeshInstance3D).set_instance_shader_parameter("anim", Vector4(k, vis, seed, rim * (1.0 - k))), delay)
 	an.free_node = true
 	return mi

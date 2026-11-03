@@ -964,7 +964,7 @@ func changeup() -> void:
 	vv.ground_glow(c, 4.5, "indigo", 1.6, 0.9)
 	vfx.emit_one("v_flare", c + Vector3(0, 1.0, 0), Vector3.ZERO, rc("indigo"), 1.6, 1.0)
 	for i in 3:
-		vfx.shockwave(c, 30.0, Color(body("indigo", 1.1), 0.9 - i * 0.2), 1.4, 0.045 - i * 0.01, i * 0.32)
+		vfx.shockwave(c, 30.0, Color(body("indigo", 1.1), 0.72 - i * 0.16), 1.4, 0.04 - i * 0.01, i * 0.32)
 		vfx.after(i * 0.32, func() -> void:
 			vfx.emit_one("ring", c + Vector3(0, 0.6, 0), Vector3.ZERO, pal("indigo", 1), 3.5, 1.2)
 			vfx.ring_emit("v_mote", c + Vector3(0, 0.3, 0), 2.0, 14, rc("indigo"), 1.0, 1.0, 1.0, 1.0))
@@ -1187,7 +1187,7 @@ func diamond_aura(df: Node3D, radius: float, dur: float) -> void:
 	vfx.shockwave(_flat(df.global_position), radius, body("gold", 1.2), 0.55, 0.05)
 	impact_flash(top, col, 1.0, 5.0, 6)
 	punch(top, "gold", 1.4, 14, 0.0, false)
-	vv.ground_glow(_flat(df.global_position), radius, "gold", 1.6, 0.9)
+	vv.ground_glow(_flat(df.global_position), radius, "gold", 1.4, 0.9, 0.0, 0.75)
 	vfx.every_frame(dur, func(_k: float) -> void:
 		if is_instance_valid(df) and _rate(10.0):
 			var a := randf() * TAU
