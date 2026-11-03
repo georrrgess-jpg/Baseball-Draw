@@ -248,6 +248,19 @@ func _build_ui() -> void:
 		if t[0] == "UPGRADE CARDS" and ready == 0 and _new_player():
 			_deemphasise(b, "Upgrade cards with copies from packs. Open some packs first.")
 
+	# Scouting Book (Update 8): one full-width tile under the collection grid.
+	var book := _wide_button("SCOUTING BOOK", "enemy", Color("#FF6B3D"), 52, 26)
+	book.name = "ScoutingBookTile"
+	book.tooltip_text = "Every runner, boss and elite: what it does and which cards stop it"
+	book.pressed.connect(func() -> void: Router.goto("scouting_book"))
+	_add_subline(book, "%d / %d scouted" % [Scouting.met_count(), Scouting.all_keys().size()], Color(1, 0.85, 0.78, 0.8))
+	if Scouting.new_count() > 0:
+		_add_badge(book, "%d NEW" % Scouting.new_count(), UITheme.SCARLET)
+	left.add_child(book)
+	_buttons.append(book)
+	if _new_player() and Scouting.met_count() == 0:
+		_deemphasise(book, "Runners you meet in games are added here, with tips on how to stop them.")
+
 	left.add_child(_group_label("MORE"))
 	var more := GridContainer.new()
 	more.columns = 2

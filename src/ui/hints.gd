@@ -40,6 +40,11 @@ const HINTS := {
 	"play_practice": ["PRACTICE FIELD", "A sandbox: spawn any runner and try any card. No rewards and no risk."],
 	# Battle dugout (between innings).
 	"dugout_intro": ["THE DUGOUT", "Between innings, spend the coins earned in this game on upgrades for the rest of this game. Then press NEXT INNING."],
+	# Scouting Book (Update 8).
+	"scouting_intro": ["SCOUTING BOOK", "Every runner, boss and elite you have met. Pick one to see its numbers, what it does, how to stop it and which cards counter it. New ones unlock the first time you meet them in a game."],
+	# Battle (Update 8): shown once, never during the battle tutorial.
+	"battle_combo": ["COMBO IN YOUR HAND", "These two cards work together: the green link joins them. Hover a card to read the combo, then play them one after the other."],
+	"battle_scout": ["SCOUTING REPORT", "A new kind of runner! Click its picture in the threat panel for a quick report: what it does and how to stop it. The game pauses while you read."],
 	# Settings.
 	"settings_intro": ["SETTINGS", "Search for any option at the top. Graphics has a benchmark that recommends a quality preset for your computer."],
 }
@@ -55,12 +60,14 @@ const SCREENS := {
 	"play_menu": ["play_modes", "play_daily", "play_ranked", "play_endless", "play_practice"],
 	"dugout": ["dugout_intro"],
 	"settings": ["settings_intro"],
+	"scouting_book": ["scouting_intro"],
+	"battle": ["battle_combo", "battle_scout"],
 }
 
 ## Feature hints: part of a screen's "?" replay, but shown automatically only when the screen
 ## passes them in `extra` (the player has actually met the feature).
 const FEATURE_ONLY := ["menu_promotion", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
-	"play_daily", "play_ranked", "play_endless", "play_practice"]
+	"play_daily", "play_ranked", "play_endless", "play_practice", "battle_combo", "battle_scout"]
 
 const ACCENT := UITheme.GOLD
 const CARD_W := 440.0

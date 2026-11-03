@@ -50,6 +50,7 @@ func _run() -> void:
 	await test_menus()
 	test_update5_content()
 	test_update7_content()
+	await test_scouting()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -931,6 +932,111 @@ func test_menus() -> void:
 		texts.append((l as Label).text)
 	ok("TRIPLE PLAY" in texts and "BEST CARD PLAY" in texts and "MVP" in texts, "results shows the three highlights")
 	res.queue_free()
+	await get_tree().process_frame
+
+
+# ---------------------------------------------------------------- Update 8: scouting book, combo hints
+
+func test_scouting() -> void:
+	section("scouting book")
+	var keys := Scouting.all_keys()
+	ok(keys.size() == DB.enemies.size() + DB.elite_affixes.size(), "the book has one entry per runner type, boss and affix (%d)" % keys.size())
+	for id in DB.enemies.keys():
+		ok(str(id) in keys, "book lists %s" % id)
+	for a in DB.elite_affixes:
+		ok(Scouting.AFFIX_PREFIX + str(a.id) in keys, "book lists the %s affix" % a.id)
+	for b in DB.enemies.keys().filter(func(id: String) -> bool: return bool(DB.enemy(id).get("boss", false))):
+		ok(Scouting.group_of(b) == "bosses" and b in Scouting.keys_in_group("bosses"), "%s is listed under bosses" % b)
+	for k in keys:
+		ok(Scouting.entry_name(k) != "" and not "{" in Scouting.what_it_does(k) and Scouting.what_it_does(k).length() > 20, "%s: plain-language 'what it does'" % k)
+		ok(not "{" in Scouting.how_to_stop(k) and Scouting.how_to_stop(k).length() > 20, "%s: 'how to stop it' tips" % k)
+		ok(Scouting.ability_name(k) != "", "%s: special ability named" % k)
+		var rows := Scouting.stat_rows(k)
+		ok(not rows.is_empty() and rows.all(func(r: Array) -> bool: return float(r[3]) >= 0.0 and float(r[3]) <= 1.0), "%s: stat bars within 0..1" % k)
+		var counters := Scouting.counters(k)
+		ok(not counters.is_empty(), "%s: at least one good card against it" % k)
+		var good := Scouting.good_cards(k)
+		ok(good.size() >= 1 and good.size() <= Scouting.GOOD_CARDS, "%s: 1-%d good cards shown (%d)" % [k, Scouting.GOOD_CARDS, good.size()])
+		var seen_unowned := false
+		var order_ok := true
+		for cid in good:
+			ok(DB.cards.has(cid), "%s: good card %s exists" % [k, cid])
+			if not Profile.is_card_owned(cid):
+				seen_unowned = true
+			elif seen_unowned:
+				order_ok = false
+		ok(order_ok, "%s: owned good cards are listed first" % k)
+		ok(Scouting.reason(good[0], k) != "", "%s: the best card says why" % k)
+	# The mapping follows the data: armor calls for armor piercing, speed for slows, bosses for boss cards.
+	ok(Scouting.counters("armored").any(func(c: String) -> bool: return "pierce" in Scouting.card_tags(c)), "armored runners are countered by armor-piercing cards")
+	ok(Scouting.counters("sprinter").any(func(c: String) -> bool: return "slow" in Scouting.card_tags(c) or "fast_bonus" in Scouting.card_tags(c)), "sprinters are countered by slows or fast-runner cards")
+	for b in Scouting.keys_in_group("bosses"):
+		ok(Scouting.counters(b).slice(0, 4).all(func(c: String) -> bool: return not "no_boss" in Scouting.card_tags(c)), "%s: no boss-immune card is suggested" % b)
+		ok("boss" in Scouting.card_tags(Scouting.counters(b)[0]), "%s: the best counter is a boss card" % b)
+	ok("armored" in Scouting.good_against("hot_corner"), "Hot Corner is good against Armored Runners")
+	ok(Scouting.good_against("called_shot").any(func(k: String) -> bool: return Scouting.group_of(k) == "bosses"), "Called Shot is good against bosses")
+	# Seen tracking.
+	var saved: Variant = Profile.data.get("scouting")
+	ok(Profile.default_profile().has("scouting"), "new profiles have scouting flags")
+	Profile.data.scouting = Scouting.default_state()
+	ok(Scouting.met_count() == 0 and not Scouting.is_met("sprinter"), "nothing is scouted on a new profile")
+	var fresh := Scouting.mark_enemy("sprinter", "swift")
+	ok(fresh.size() == 2 and Scouting.is_met("sprinter") and Scouting.is_met("affix:swift"), "a spawned elite sprinter scouts the sprinter and the Swift affix")
+	ok(Scouting.mark_enemy("sprinter", "swift").is_empty(), "a second sighting is not new")
+	ok(Scouting.is_new("sprinter") and Scouting.new_count() == 2, "met but not opened: NEW")
+	Scouting.mark_viewed("sprinter")
+	ok(not Scouting.is_new("sprinter") and Scouting.new_count() == 1, "opening it in the book clears NEW")
+	Scouting.mark_viewed("jumper")
+	ok(not Scouting.is_viewed("jumper"), "an entry not met yet can't be marked viewed")
+	ok(not Scouting.mark_met("not_a_runner"), "unknown runners are ignored")
+	Profile.data.scouting.met["bogus"] = "x"
+	Scouting.sanitize()
+	ok(not Profile.data.scouting.met.has("bogus"), "sanitize drops unknown entries")
+	# Migration from saves before Update 8.
+	ok(Scouting.migrate({}).met.is_empty(), "a save with no games starts with an empty book")
+	var old := {"version": 1, "stats": {"runs_played": 4, "boss_phantom_captain": 1},
+		"history": [{"won": true, "mode": "standard", "difficulty": "standard", "inning": 4}]}
+	var mig := Scouting.migrate(old)
+	ok(mig.met.has("runner") and mig.met.has("jumper") and mig.met.has("iron_slugger"), "migration scouts what the history reached (inning 4)")
+	ok(not mig.met.has("captain") and not mig.met.has("grand_slammer"), "migration does not scout what was never reached")
+	ok(mig.met.has("phantom_captain") and mig.met.has("decoy"), "a beaten boss (and its decoys) is scouted")
+	ok(mig.viewed.has("runner") and not mig.met.has("affix:swift"), "migrated entries are not NEW; no elites without hard games")
+	old.history.append({"difficulty": "veteran", "inning": 2})
+	ok(Scouting.migrate(old).met.has("affix:plated"), "Veteran games scout the elite affixes")
+	var keep := Profile.data
+	Profile.data = Profile.default_profile()
+	Profile._merge(Profile.data, old.duplicate(true))
+	Profile._migrate(old)
+	ok(Scouting.is_met("jumper") and not Scouting.is_new("jumper"), "Profile migration fills the book for old saves")
+	Profile.data = keep
+	Profile.data.scouting = saved if typeof(saved) == TYPE_DICTIONARY else Scouting.default_state()
+	# Combo pairs in the hand.
+	var hud_script: Script = load("res://src/ui/battle_hud.gd")
+	var pairs: Array = hud_script.combo_pairs(["curveball", "heat_wave", "", "power_throw", "lockdown"])
+	ok(pairs.size() == 2, "two combo pairs found in the hand (%d)" % pairs.size())
+	ok(pairs.size() == 2 and pairs[0][0] == 0 and pairs[0][1] == 1 and pairs[1][0] == 1 and pairs[1][1] == 4, "combo pairs name the right slots")
+	ok(pairs.size() > 0 and str(pairs[0][2]) != "", "combo pairs carry the combo text")
+	ok((hud_script.combo_pairs(["power_throw", "rally_cry", "", "", ""]) as Array).is_empty(), "no combo, no link")
+	var all_found := true
+	for c in DB.combos:
+		if (hud_script.combo_pairs([c.cards[1], "", c.cards[0]]) as Array).size() != 1:
+			all_found = false
+	ok(all_found, "every combo in combos.json is detected in either order")
+	# Wiring.
+	ok(Router.SCENES.has("scouting_book") and ResourceLoader.exists(Router.SCENES.scouting_book), "the Scouting Book scene is registered")
+	ok(Hints.HINTS.has("scouting_intro") and Hints.HINTS.has("battle_combo") and "scouting_intro" in Hints.ids_for("scouting_book"), "Scouting Book and combo hints exist")
+	var book: Control = load("res://src/ui/scouting_book.gd").new()
+	Profile.data.scouting.met["armored"] = "x"
+	Scouting.open_on = "armored"
+	add_child(book)
+	await get_tree().process_frame
+	ok(book.get("selected") == "armored", "the book opens on the requested entry")
+	var rows: Node = book.find_child("ScoutList", true, false)
+	ok(rows != null and rows.get_child_count() >= keys.size(), "the book lists every entry")
+	ok(book.find_child("GoodCards", true, false) != null and book.find_child("StatBars", true, false) != null, "the report shows stats and good cards")
+	ok(Scouting.is_viewed("armored"), "opening an entry marks it viewed")
+	book.queue_free()
+	Profile.data.scouting = saved if typeof(saved) == TYPE_DICTIONARY else Scouting.default_state()
 	await get_tree().process_frame
 
 

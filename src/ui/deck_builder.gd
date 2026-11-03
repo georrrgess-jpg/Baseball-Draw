@@ -1403,6 +1403,7 @@ func _refresh_detail() -> void:
 	var desc := UITheme.label(DB.card_text(selected, lvl), 22, UITheme.OFFWHITE)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail.add_child(desc)
+	_detail.add_child(_good_against_block(selected))
 	var why: Array = _auto_result.get("reasons", {}).get(selected, []) if selected in deck else []
 	if not why.is_empty():
 		_detail.add_child(_why_block(why))
@@ -1476,6 +1477,54 @@ func _refresh_detail() -> void:
 	if Profile.can_upgrade_card(selected):
 		var up := UITheme.label("▲  Ready to upgrade: open UPGRADE CARDS", 18, UITheme.GOLD, UITheme.font_body_bold())
 		_detail.add_child(up)
+
+
+## "Good against": the runner types, bosses and elites this card counters (the Scouting Book's
+## mapping), each a link that opens the book on that entry.
+func _good_against_block(cid: String) -> Control:
+	var vb := VBoxContainer.new()
+	vb.name = "GoodAgainst"
+	vb.set_meta("good_against", cid)   # the name may be taken by the old block (freed at frame end)
+	vb.add_theme_constant_override("separation", 4)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	h.add_child(UITheme.icon_rect("enemy", 20, Color("#FF6B3D")))
+	var hl := UITheme.header("GOOD AGAINST", UITheme.FS_LEAD, Color("#FF6B3D"))
+	hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(hl)
+	var keys := Scouting.good_against(cid)
+	var book := UITheme.button("SCOUTING BOOK  ▶", "ghost", UITheme.FS_MIN, "", Color("#FF6B3D"))
+	book.custom_minimum_size = Vector2(0, 32)
+	book.name = "ScoutingBookLink"
+	book.tooltip_text = "Open the Scouting Book: what every runner does and which cards stop it"
+	var first: String = keys[0] if not keys.is_empty() else ""
+	book.pressed.connect(func() -> void: _open_book(first))
+	h.add_child(book)
+	vb.add_child(h)
+	if keys.is_empty():
+		var l := UITheme.label("No special matchup: a support card that helps against every runner.", UITheme.FS_SMALL, UITheme.MUTED)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vb.add_child(l)
+		return vb
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 6)
+	flow.add_theme_constant_override("v_separation", 6)
+	vb.add_child(flow)
+	for key in keys.slice(0, 6):
+		var b := UITheme.small_button(Scouting.entry_name(key), Scouting.threat_color(key), UITheme.FS_MIN + 1)
+		b.custom_minimum_size = Vector2(0, 34)
+		var why := Scouting.reason(cid, key)
+		b.tooltip_text = "%s%s. Open its Scouting Book page." % [why.capitalize(), "" if why == "" else " against " + Scouting.entry_name(key)]
+		var k: String = key
+		b.pressed.connect(func() -> void: _open_book(k))
+		flow.add_child(b)
+	return vb
+
+
+func _open_book(key: String) -> void:
+	_save_before_leaving()
+	Scouting.open_on = key
+	Router.open("scouting_book")   # BACK returns here
 
 
 ## "Why Auto Build picked it": one line per reason, each with its chip.

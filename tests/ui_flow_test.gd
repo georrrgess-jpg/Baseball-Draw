@@ -123,6 +123,10 @@ func _run() -> void:
 		await _test_navigation()
 		_finish()
 		return
+	if "--ui-test-section=scouting" in OS.get_cmdline_user_args():
+		await _test_scouting()
+		_finish()
+		return
 	if "--ui-test-section=packs" in OS.get_cmdline_user_args():
 		await _test_packs()
 		await _test_multi_packs()
@@ -348,6 +352,7 @@ func _run() -> void:
 	await _test_daily()
 	await _test_missions()
 	await _test_navigation()
+	await _test_scouting()
 	await _test_title()
 	await _test_tutorial()
 	_finish()
@@ -1085,6 +1090,174 @@ func _test_navigation() -> void:
 	_check(str(get_tree().current_scene.get("mode_id")) == "daily", "Play opens on the Daily Challenge from a shortcut")
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+## Scouting Book (Update 8): the main-menu tile opens the book, an entry can be selected, the
+## card inspector links to it; in battle a combo pair in hand is linked, the selected card's
+## partner glows, the hand tooltip names the combo, and a threat icon opens the scouting card
+## (pausing the game) which Esc closes without leaving the battle.
+func _test_scouting() -> void:
+	Profile.data.flags["tutorial_done"] = true
+	if (Profile.data.history as Array).is_empty():
+		Profile.add_history({"won": true, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "inning": 3, "score": 100, "outs": 30, "runs": 0, "date": Time.get_datetime_string_from_system()})
+	Scouting.mark_met("sprinter")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(0.8)
+	var tile := _find_button(get_tree().current_scene, "SCOUTING BOOK")
+	_check(tile != null, "the main menu has a SCOUTING BOOK tile")
+	if tile:
+		await _click(_button_center(tile))
+	_check(await _wait_scene("scouting_book"), "the tile opens the Scouting Book")
+	await _wait(0.8)
+	var book: Node = get_tree().current_scene
+	var list: Node = book.find_child("ScoutList", true, false)
+	var row_count := 0
+	if list:
+		for c in list.get_children():
+			if c is Button:
+				row_count += 1
+	_check(row_count == Scouting.all_keys().size(), "the book lists every runner, boss and affix (%d)" % row_count)
+	var row: Button = book.find_child("Row_sprinter", true, false)
+	_check(row != null, "the Sprinter has a row")
+	if row:
+		await _click(_button_center(row))
+		await _wait(0.5)
+	_check(str(book.get("selected")) == "sprinter", "clicking a row selects it (%s)" % book.get("selected"))
+	_check(Scouting.is_viewed("sprinter"), "the selected entry is no longer NEW")
+	var report: Node = book.find_child("ScoutReport", true, false)
+	_check(report != null and report.find_child("GoodCards", true, false) != null and report.find_child("HowToStop", true, false) != null,
+		"the report shows how to stop it and good cards")
+	var tt: Node = book.find_child("Turntable", true, false)
+	_check(tt is SubViewportContainer and tt.get("_model") != null, "the turntable shows the model")
+	var locked_key := ""
+	for k in Scouting.all_keys():
+		if not Scouting.is_met(k):
+			locked_key = k
+			break
+	if locked_key != "":
+		var lrow: Button = book.find_child("Row_" + locked_key.replace(":", "_"), true, false)
+		if lrow:
+			await _click(_button_center(lrow))
+			await _wait(0.4)
+		_check(not Scouting.is_met(locked_key) and _find_label(book, "NOT SCOUTED YET"), "an entry not met yet stays locked")
+	await _key("pause")
+	_check(await _wait_scene("main_menu"), "Esc leaves the Scouting Book")
+	# Cards & Deck inspector: "Good against" links to the book, and BACK returns.
+	Profile.grant_card("hot_corner")
+	Session.menu_tab = "deck"
+	Router.goto("deck_builder")
+	await _wait_scene("deck_builder")
+	await _wait(0.8)
+	var db: Node = get_tree().current_scene
+	db.set("selected", "hot_corner")
+	db.call("_refresh_detail")
+	await _wait(0.3)
+	var ga: Node = null
+	for n in db.find_children("*", "VBoxContainer", true, false):
+		if str(n.get_meta("good_against", "")) == "hot_corner" and not n.is_queued_for_deletion():
+			ga = n
+	var ga_btns: Array = ga.find_children("*", "Button", true, false).map(func(b: Node) -> String: return "%s:%s" % [(b as Button).text, (b as Button).is_visible_in_tree()]) if ga else []
+	_check(ga != null and _find_button(ga, "Armored Runner") != null, "the inspector lists what Hot Corner is good against %s" % [ga_btns])
+	var link := _find_button(ga, "Armored Runner") if ga else null
+	if link:
+		var sc: Node = link.get_parent()
+		while sc and not sc is ScrollContainer:
+			sc = sc.get_parent()
+		if sc:
+			(sc as ScrollContainer).ensure_control_visible(link)
+			await _wait(0.4)
+		await _click(_button_center(link))
+		_check(await _wait_scene("scouting_book"), "a Good-against link opens the Scouting Book")
+		await _wait(0.6)
+		_check(str(get_tree().current_scene.get("selected")) == "armored", "the book opens on that runner")
+		await _key("pause")
+		_check(await _wait_scene("deck_builder"), "Esc returns to Cards & Deck")
+	# In battle.
+	Profile.data.flags["battle_help"] = true
+	Profile.data.flags["battle_tutorial_done"] = true
+	var cfg := Session.new_run_config("quick")
+	cfg.difficulty = "rookie"
+	Session.start(cfg)
+	battle = null
+	for i in 200:
+		await _wait(0.1)
+		var scene := get_tree().current_scene
+		if scene is Battle and (scene as Battle).state == "setup":
+			battle = scene
+			break
+	_check(battle != null, "battle loaded")
+	if battle == null:
+		return
+	await _wait(0.8)
+	var hud: Node = battle.hud
+	battle.cards.draw_interval = 999.0
+	battle.cards.hand = ["curveball", "power_throw", "heat_wave", "field_vision", "rally_cry"]
+	battle.cards.hand_changed.emit()
+	await _wait(0.4)
+	var pairs: Array = hud.get("_combo_pairs")
+	_check(pairs.size() == 1 and pairs[0][0] == 0 and pairs[0][1] == 2, "the combo pair in hand is found (%s)" % [pairs])
+	var links: Control = hud.find_child("ComboLinks", true, false)
+	_check(links != null and links.visible and links.mouse_filter == Control.MOUSE_FILTER_IGNORE, "the combo link is drawn (and takes no clicks)")
+	var views: Array = hud.get("_card_views")
+	_check((views[0] as CardView).combo_glow > 0.5 and (views[2] as CardView).combo_glow > 0.5 and (views[1] as CardView).combo_glow == 0.0,
+		"both combo cards glow, the others don't")
+	var xf := get_viewport().get_final_transform()
+	_mouse_move(xf * (views[2] as CardView).get_global_rect().get_center())
+	await _wait(0.3)
+	var tip: RichTextLabel = hud.get("_card_tip_label")
+	_check(tip != null and "COMBO with Curveball" in tip.text, "the hand tooltip names the combo")
+	_mouse_move(Vector2(20, 450))
+	await _key("start_wave")
+	for i in 80:
+		await _wait(0.1)
+		if battle.state == "wave" and battle.enemies.size() > 0:
+			break
+	battle.cards.infinite_energy = true
+	battle.cards.energy = CardSystem.MAX_ENERGY
+	battle.cards.draw_interval = 999.0
+	battle.cards.hand = ["curveball", "power_throw", "heat_wave", "field_vision", "rally_cry"]
+	battle.cards.hand_changed.emit()
+	await _wait(0.5)
+	_check(Scouting.is_met("runner"), "runners met in the game are scouted")
+	battle.select_card(0)
+	await _wait(0.3)
+	views = hud.get("_card_views")
+	_check(battle.targeting_index == 0 and (views[2] as CardView).combo_partner and not (views[1] as CardView).combo_partner,
+		"selecting a combo card highlights its partner")
+	await _key("pause")   # cancels targeting
+	await _wait(0.3)
+	var icon: Control = null
+	var icons: Control = hud.get("_threat_icons")
+	for i in 30:
+		await _wait(0.1)
+		if icons:
+			for c in icons.find_children("Threat_*", "TextureRect", true, false):
+				icon = c
+				break
+		if icon:
+			break
+	_check(icon != null, "the threat panel shows runner icons")
+	if icon:
+		await _click(xf * icon.get_global_rect().get_center())
+		await _wait(0.5)
+		var pop: Node = hud.find_child("ScoutPopup", true, false)
+		_check(pop != null and get_tree().paused, "clicking a threat icon opens the scouting card and pauses")
+		_check(pop != null and pop.find_child("GoodCards", true, false) != null, "the scouting card shows good cards")
+		await _key("pause")
+		await _wait(0.4)
+		_check(hud.find_child("ScoutPopup", true, false) == null and not get_tree().paused, "Esc closes the scouting card and resumes")
+		_check(Router.current == "battle" and (hud.get("_pause") == null or not is_instance_valid(hud.get("_pause"))), "the game goes on (no pause menu, still in battle)")
+	get_tree().paused = false
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+func _find_label(root: Node, text: String) -> bool:
+	for l in root.find_children("*", "Label", true, false):
+		if (l as Label).text == text and (l as Label).is_visible_in_tree():
+			return true
+	return false
 
 
 ## Title screen: the logo and prompt appear, input during the intro skips it, a key opens the menu.

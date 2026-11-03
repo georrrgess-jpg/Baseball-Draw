@@ -101,6 +101,20 @@ func _ready() -> void:
 	_diff_info.add_theme_constant_override("h_separation", 26)
 	_diff_info.add_theme_constant_override("v_separation", 2)
 	dv.add_child(_diff_info)
+	# Who you will face: a link to the Scouting Book (BACK returns here).
+	var scout := UITheme.button("SCOUTING BOOK  ▶", "ghost", UITheme.FS_SMALL, "enemy", Color("#FF6B3D"))
+	scout.name = "ScoutingBookLink"
+	scout.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	scout.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	scout.tooltip_text = "Runners, bosses and elites: what they do and which cards stop them"
+	scout.pressed.connect(func() -> void: Router.open("scouting_book"))
+	var srow := HBoxContainer.new()
+	srow.add_theme_constant_override("separation", 6)
+	var sl := UITheme.label("Know who you will face:", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	srow.add_child(sl)
+	srow.add_child(scout)
+	dv.add_child(srow)
 
 	var ap := panel()
 	ap.size_flags_vertical = Control.SIZE_EXPAND_FILL
