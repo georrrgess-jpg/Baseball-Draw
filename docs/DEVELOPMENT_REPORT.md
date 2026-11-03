@@ -717,3 +717,11 @@ Plan: `docs/plans/UPDATE_8_PLAN.md`. Reviews: `docs/plans/review/card_vibrancy.m
 * **Combo hints in the hand:** a green arc with sparks links two cards that combo, both glow, the selected
   card's partner pulses, and the tooltip names the combo.
 * **Good against:** the card inspector lists the opponents a card counters, with links into the book.
+
+**Verification**
+* Script check: 88 scripts, 0 failed.
+* System suite: 2,047 checks, 0 failed.
+* Full UI flow test: 232 checks, 0 failed, including the new scouting sections.
+* Card hit map: 0 of 175 dead points; 12 of 12 fast clicks cast.
+
+![Scouting Book](screenshots/scouting_book.jpg)
