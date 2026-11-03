@@ -128,6 +128,9 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	if is_boss:
 		# Bosses have hand-tuned health; they only take part of the inning scaling.
 		hp_mult = 1.0 + (hp_mult - 1.0) * 0.45
+		# Tuning hook (Update 8): per-mode / per-difficulty boss health from data/modes.json "boss_hp".
+		if battle and battle.run:
+			hp_mult *= WaveGenerator.boss_hp_tuning(battle.run, enemy_id)
 	var speed_mult: float = opts.get("speed_mult", 1.0)
 	max_hp = float(data.hp) * hp_mult
 	armor = clampf(float(data.armor) + float(opts.get("armor_add", 0.0)), 0.0, 0.9)
@@ -403,6 +406,11 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 		arm = 0.0
 	arm *= 1.0 - float(info.get("pierce", 0.0))
 	var dmg := amount * mult * (1.0 - arm) * (1.0 - aura_dr)
+	if home_guard and battle.run and dmg > 0.0:
+		# Stats hook (Update 8 balance): credit the part of this hit that Rico's Home Guard aura added,
+		# so the catcher's support shows up in the results and the balance tools. No gameplay effect.
+		var ab: Dictionary = battle.run.stats.get_or_add("assist_by", {})
+		ab["home_guard"] = float(ab.get("home_guard", 0.0)) + minf(dmg, dmg + hp) * 0.10 / mult
 	var before := clampf(hp / max_hp, 0.0, 1.0)
 	hp -= dmg
 	_last_hit_info = info

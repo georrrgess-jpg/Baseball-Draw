@@ -9,6 +9,15 @@ profile (level-1 cards and defenders, the starter team). The autopilot prints on
 at the end (see src/battle/autopilot.gd); `run` appends it to <out>/games.jsonl, so several runs can share a
 folder and an interrupted run can be resumed (games already in the file are skipped by seed).
 
+Extra game arguments go through --extra (write it as --extra=... because the values start with dashes):
+  --extra=--team=nova,rico,dex,jax,hana,bruno     a fixed team (first id is the captain)
+  --extra=--shop=scouting_report,stronger_arm     dugout purchase order (or --shop=none)
+  --extra=--cast-gap=3,6                          seconds between autopilot casts (a slower player)
+  --extra=--no-cards                              defenders only
+The report adds per-card damage / outs per energy, the card's win rate and runs per inning against its
+mode/difficulty group (random decks), per-defender shares (also when on the team), Rico's Home Guard
+assist and the dugout upgrades bought.
+
 The numbers measure the autopilot, not a human: it casts the first affordable card in its hand every
 1-2.5 s at a simple target (lead runner, densest cluster), never saves cards for bosses and buys dugout
 upgrades in a fixed order. Treat win rates as a relative difficulty curve, not as what players will see.
@@ -50,6 +59,8 @@ def play(mode, diff, seed, deck, speed, extra, timeout):
 			d["script_errors"] = len(errors)
 			if deck:
 				d["deck_tag"] = deck
+			if extra:
+				d["extra_tag"] = " ".join(extra)
 			return d, "", time.time() - t0
 	return None, (errors[0] if errors else "no STATS line"), time.time() - t0
 
@@ -170,16 +181,48 @@ def summarize(games):
 			lost_here = sum(1 for b, g in lst if not g["won"] and g["inning"] == b["inning"])
 			out.append("| %s | %s | %s | %d | %d | %d | %.1f | %d |" % (k[0], k[1], bid, len(lst), len(kills), scored, mean(kills), lost_here))
 
-	out.append("\n### Cards (all games)\n")
+	out += card_table(games)
+	out += defender_table(games)
+	out += upgrade_table(games)
+	return "\n".join(out) + "\n"
+
+
+def residuals(games, key=lambda g: int(g["won"])):
+	"""key(game) minus its average over the game's (mode, difficulty, extra) group: compares cards across
+	mixed samples (default key: won)."""
+	groups = collections.defaultdict(list)
+	for g in games:
+		groups[(g["mode"], g["difficulty"], g.get("extra_tag", ""))].append(g)
+	res = {}
+	for gs in groups.values():
+		wr = mean([key(g) for g in gs])
+		for g in gs:
+			res[id(g)] = key(g) - wr
+	return res
+
+
+def card_table(games):
+	"""Per card: decks, plays, damage / outs per play and per energy, win rate with the card and its
+	difference to the game's group (only meaningful for random decks)."""
+	cost = {c["id"]: max(1, int(c["cost"])) for c in json.load(open(os.path.join(ROOT, "data", "cards.json")))["cards"]}
+	res = residuals(games)
+	# Runs allowed per inning played, so a game lost early doesn't look like a good one.
+	rres = residuals(games, lambda g: g["runs"] / max(len(g["runs_by_inning"]), 1))
+	rdelta = collections.defaultdict(list)
 	plays = collections.Counter()
 	dmg = collections.Counter()
 	outs = collections.Counter()
 	in_decks = collections.Counter()
 	wins_with = collections.Counter()
+	delta = collections.defaultdict(list)
+	waves = collections.Counter()
 	for g in games:
 		for c in set(g["deck"]):
 			in_decks[c] += 1
 			wins_with[c] += int(g["won"])
+			delta[c].append(res[id(g)])
+			rdelta[c].append(rres[id(g)])
+			waves[c] += max(g["wave_time"], 1.0) / 60.0
 		for c, n in g["card_plays"].items():
 			plays[c] += n
 		for c, v in g["card_impact"].items():
@@ -187,29 +230,71 @@ def summarize(games):
 			outs[c] += v["outs"]
 	total_plays = sum(plays.values()) or 1
 	base_wr = sum(int(g["won"]) for g in games) / len(games)
-	out.append("Win rate over all games: %s. 'Win rate with card' only means something for random decks.\n" % pct(base_wr))
-	out.append("| Card | In decks | Win rate with card | Plays / game | Play share | Damage / play | Outs / play |")
-	out.append("|---|---|---|---|---|---|---|")
-	for c, _ in sorted(in_decks.items(), key=lambda kv: -plays[kv[0]] / max(kv[1], 1)):
+	out = ["\n### Cards (all games)\n"]
+	out.append("Win rate over all games: %s. 'Win rate with card' and 'vs group' only mean something for random decks "
+		"('vs group' = average of won minus the win rate of the game's mode/difficulty group; +-1/(2 sqrt n) is one standard error).\n" % pct(base_wr))
+	out.append("| Card | Cost | In decks | Win rate with card | vs group | Runs / inning vs group | Plays / wave-min | Play share | Damage / play | Damage / energy | Outs / play | Outs / energy |")
+	out.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+	for c, _ in sorted(in_decks.items(), key=lambda kv: -mean(delta[kv[0]])):
 		n = plays[c]
-		out.append("| %s | %d | %s | %.1f | %s | %s | %s |" % (c, in_decks[c], pct(wins_with[c] / in_decks[c]), n / max(in_decks[c], 1), pct(n / total_plays),
-			"%.0f" % (dmg[c] / n) if n and dmg[c] else "-", "%.2f" % (outs[c] / n) if n and outs[c] else "-"))
+		e = n * cost.get(c, 1)
+		out.append("| %s | %d | %d | %s | %+.0f | %+.2f | %.2f | %s | %s | %s | %s | %s |" % (c, cost.get(c, 0), in_decks[c], pct(wins_with[c] / in_decks[c]),
+			100.0 * mean(delta[c]), mean(rdelta[c]), n / max(waves[c], 0.01), pct(n / total_plays),
+			"%.0f" % (dmg[c] / n) if n and dmg[c] else "-", "%.0f" % (dmg[c] / e) if e and dmg[c] else "-",
+			"%.2f" % (outs[c] / n) if n and outs[c] else "-", "%.2f" % (outs[c] / e) if e and outs[c] else "-"))
+	return out
 
-	out.append("\n### Defenders (share of team damage and outs)\n")
+
+def defender_table(games):
+	"""Share of team damage and outs over all games, and per game the defender was on the team."""
 	dd = collections.Counter()
 	do = collections.Counter()
+	share_d = collections.defaultdict(list)
+	share_o = collections.defaultdict(list)
+	present = collections.Counter()
+	assist = collections.Counter()
 	for g in games:
+		team = g.get("team") or list(g["damage_by"].keys())
+		gd = sum(g["damage_by"].values()) or 1.0
+		go = sum(g["outs_by"].values()) or 1
+		for d in team:
+			present[d] += 1
+			share_d[d].append(g["damage_by"].get(d, 0.0) / gd)
+			share_o[d].append(g["outs_by"].get(d, 0) / go)
 		for d, v in g["damage_by"].items():
 			dd[d] += v
 		for d, v in g["outs_by"].items():
 			do[d] += v
+		assist["rico"] += g.get("assist_by", {}).get("home_guard", 0.0)
 	td = sum(dd.values()) or 1
 	to = sum(do.values()) or 1
-	out.append("| Defender | Damage share | Outs share |")
-	out.append("|---|---|---|")
-	for d in sorted(set(dd) | set(do), key=lambda x: -dd[x]):
-		out.append("| %s | %s | %s |" % (d, pct(dd[d] / td), pct(do[d] / to)))
-	return "\n".join(out) + "\n"
+	out = ["\n### Defenders (share of team damage and outs)\n"]
+	out.append("'Aura assist' = extra damage other throws and cards dealt because of Rico's Home Guard (+10 %), as a share of team damage.\n")
+	out.append("| Defender | Games | Damage share | Outs share | Damage share when on team | Outs share when on team | Aura assist |")
+	out.append("|---|---|---|---|---|---|---|")
+	for d in sorted(present, key=lambda x: -mean(share_d[x])):
+		out.append("| %s | %d | %s | %s | %s | %s | %s |" % (d, present[d], pct(dd[d] / td), pct(do[d] / to), pct(mean(share_d[d])), pct(mean(share_o[d])),
+			pct(assist[d] / td) if assist[d] else "-"))
+	return out
+
+
+def upgrade_table(games):
+	"""Dugout purchases (autopilot shopping order, see --shop in autopilot.gd)."""
+	bought = collections.Counter()
+	games_with = collections.Counter()
+	res = residuals(games)
+	delta = collections.defaultdict(list)
+	for g in games:
+		for u, n in g.get("upgrades_bought", {}).items():
+			bought[u] += n
+			games_with[u] += 1
+			delta[u].append(res[id(g)])
+	if not bought:
+		return []
+	out = ["\n### Dugout upgrades bought\n", "| Upgrade | Levels bought / game | Games with it | vs group |", "|---|---|---|---|"]
+	for u in sorted(bought, key=lambda x: -bought[x]):
+		out.append("| %s | %.2f | %d | %+.0f |" % (u, bought[u] / len(games), games_with[u], 100.0 * mean(delta[u])))
+	return out
 
 
 def write_csv(games, folder):
