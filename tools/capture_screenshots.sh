@@ -29,6 +29,7 @@ shot play_menu 5 --scene=play_menu --profile=shots
 shot play_daily 6 --scene=play_menu --profile=shots --play-mode=daily
 shot deck_builder 6 --scene=deck_builder --profile=shots_upg --fresh-profile --grant-demo-cards --demo-remove=2 --auto-build --no-hints
 shot card_compare 7 --scene=deck_builder --profile=shots_upg --grant-demo-cards --no-hints --compare=heat_wave,splitter
+shot scouting_book 7 --scene=scouting_book --profile=shots --no-hints --scout-demo --scout-entry=armored
 shot card_upgrades 6 --scene=card_upgrades --profile=shots_upg --grant-demo-cards
 shot roster 7 --scene=roster --profile=shots
 shot progression 5 --scene=progression --profile=shots
