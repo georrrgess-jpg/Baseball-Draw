@@ -1679,7 +1679,7 @@ func status_frozen(pos: Vector3, h: float, delta: float) -> void:
 		status_emit("magic", pos + Vector3(randf_range(-0.35, 0.35), randf_range(0.2, h), randf_range(-0.35, 0.35)),
 			Vector3.ZERO, Color(0.85, 0.98, 1.0), 0.9, 0.6)
 	if randf() < delta * 2.0:
-		status_emit("mist", Vector3(pos.x, 0.15, pos.z), Vector3(randf_range(-0.3, 0.3), 0.05, randf_range(-0.3, 0.3)), Color(0.7, 0.92, 1.0, 0.35), 0.7, 0.6)
+		status_emit("mist", Vector3(pos.x, 0.15, pos.z), Vector3(randf_range(-0.3, 0.3), 0.05, randf_range(-0.3, 0.3)), Color(0.7, 0.92, 1.0, 0.2), 0.45, 0.6)
 
 
 ## The moment a runner freezes solid: ice shards, a cyan ring and a frost bloom.

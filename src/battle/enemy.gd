@@ -886,7 +886,7 @@ func _update_status_fx(delta: float) -> void:
 				var to_cam := vfx.camera_pos() - global_position
 				to_cam.y = 0.0
 				to_cam = to_cam.normalized() if to_cam.length_squared() > 0.0001 else Vector3.BACK
-				_fx_flame.global_position = global_position + to_cam * 0.55 * height / 1.8 + Vector3(0, 0.05, 0)
+				_fx_flame.global_position = global_position + to_cam * 0.55 * height / 1.8 + Vector3(0, height * 0.12, 0)
 				var fl := 0.92 + 0.08 * sin(Time.get_ticks_msec() * 0.023 + spawn_order)
 				_fx_flame.scale = Vector3(height * 0.62, height * 1.05 * fl, 1.0)
 				# progress 0.3 holds the full flame; 0.0..0.1 grows it, 0.85..1.0 fades it.

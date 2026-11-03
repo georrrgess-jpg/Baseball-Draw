@@ -232,6 +232,19 @@ func _start() -> void:
 			battle.spawn_enemy("runner", r1, d1 - i * 1.8, {"lateral": 0.0, "speed_mult": 0.08, "hp_mult": 1000.0, "affix": affs[i]})
 		for df in battle.defenders:
 			df.s_crit = 0.45
+		# Two guaranteed outs (by two different defenders) at --fx-outs=a,b seconds.
+		var outs_at := [1.5, 2.1]
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--fx-outs="):
+				outs_at = Array(a.split("=")[1].split(",")).map(func(v: String) -> float: return float(v))
+		for j in outs_at.size():
+			get_tree().create_timer(float(outs_at[j]), false).timeout.connect(func() -> void:
+				var df: Defender = battle.defenders[(j * 2) % battle.defenders.size()]
+				for e in battle.enemies:
+					if e.alive and e.route == route:
+						battle.deal_damage(e, e.hp + 10.0, {"source": df, "dir": e.global_position - df.global_position,
+							"at": e.center(), "color": Color(df.data.accent)})
+						break)
 		get_tree().create_timer(_arg_f("--fx-cast", 1.0), false).timeout.connect(func() -> void:
 			for i in mini(2, battle.defenders.size()):
 				# Same calls as CardEffects._cast for a linked card, minus the card's effect.
@@ -247,6 +260,7 @@ func _start() -> void:
 		var ids := ["iron_slugger", "grand_slammer", "phantom_captain"]
 		var at := _arg_f("--fx-attack", 1.0)
 		for i in ids.size():
+			battle._intro_seen[ids[i]] = true   # no entrance cinematic: keep the battle camera
 			var r: Route = battle.routes[i % battle.routes.size()]
 			var b := battle.spawn_enemy(ids[i], r, r.length * 0.62, {"lateral": 0.0, "hp_mult": 50.0, "speed_mult": 0.05})
 			b.ability_t = 1.0e9
