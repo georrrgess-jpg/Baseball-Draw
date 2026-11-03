@@ -1403,6 +1403,7 @@ func _refresh_detail() -> void:
 	var desc := UITheme.label(DB.card_text(selected, lvl), 22, UITheme.OFFWHITE)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail.add_child(desc)
+	_detail.add_child(_good_against_block(selected))
 	var why: Array = _auto_result.get("reasons", {}).get(selected, []) if selected in deck else []
 	if not why.is_empty():
 		_detail.add_child(_why_block(why))
@@ -1442,8 +1443,6 @@ func _refresh_detail() -> void:
 			t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			row.add_child(t)
 			_detail.add_child(row)
-
-	_detail.add_child(_good_against_block(selected))
 
 	_detail.add_child(UITheme.hsep())
 	if not owned:
@@ -1486,16 +1485,16 @@ func _good_against_block(cid: String) -> Control:
 	var vb := VBoxContainer.new()
 	vb.name = "GoodAgainst"
 	vb.set_meta("good_against", cid)   # the name may be taken by the old block (freed at frame end)
-	vb.add_theme_constant_override("separation", 6)
-	vb.add_child(UITheme.hsep())
+	vb.add_theme_constant_override("separation", 4)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 8)
-	h.add_child(UITheme.icon_rect("enemy", 24, Color("#FF6B3D")))
-	var hl := UITheme.header("GOOD AGAINST", 26, Color("#FF6B3D"))
+	h.add_child(UITheme.icon_rect("enemy", 20, Color("#FF6B3D")))
+	var hl := UITheme.header("GOOD AGAINST", UITheme.FS_LEAD, Color("#FF6B3D"))
 	hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(hl)
 	var keys := Scouting.good_against(cid)
 	var book := UITheme.button("SCOUTING BOOK  ▶", "ghost", UITheme.FS_MIN, "", Color("#FF6B3D"))
+	book.custom_minimum_size = Vector2(0, 32)
 	book.name = "ScoutingBookLink"
 	book.tooltip_text = "Open the Scouting Book: what every runner does and which cards stop it"
 	var first: String = keys[0] if not keys.is_empty() else ""

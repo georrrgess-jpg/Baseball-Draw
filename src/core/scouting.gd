@@ -421,13 +421,13 @@ static func good_cards(key: String, owned_first := true) -> Array[String]:
 
 
 ## The entries a card is good against (the inverse of `counters`): the card is among the best
-## eight answers to the entry.
+## ten answers to the entry.
 static func good_against(card_id: String) -> Array[String]:
 	var out: Array[String] = []
 	for key in all_keys():
 		var list := counters(key)
 		var i := list.find(card_id)
-		if i >= 0 and i < 8:
+		if i >= 0 and i < 10:
 			out.append(key)
 	return out
 

@@ -357,7 +357,7 @@ static func build_report(key: String, compact: bool) -> Control:
 	var cards := HBoxContainer.new()
 	cards.name = "GoodCards"
 	cards.add_theme_constant_override("separation", 12)
-	var csize := Vector2(104, 146) if compact else Vector2(118, 165)
+	var csize := Vector2(96, 134) if compact else Vector2(118, 165)
 	var any_locked := false
 	for cid in Scouting.good_cards(key):
 		var cell := VBoxContainer.new()
@@ -470,11 +470,11 @@ class ScoutPopup extends Control:
 		body.add_theme_constant_override("separation", 18)
 		outer.add_child(body)
 		var tt := Turntable.new()
-		tt.custom_minimum_size = Vector2(320, 610)
+		tt.custom_minimum_size = Vector2(320, 690)
 		body.add_child(tt)
 		tt.show_key.call_deferred(key, false)
 		var sc := ScrollContainer.new()
-		sc.custom_minimum_size = Vector2(620, 610)
+		sc.custom_minimum_size = Vector2(620, 690)
 		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		body.add_child(sc)
 		var rep := ScoutingBook.build_report(key, true)

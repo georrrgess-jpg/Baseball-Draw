@@ -108,7 +108,13 @@ func _ready() -> void:
 	scout.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	scout.tooltip_text = "Runners, bosses and elites: what they do and which cards stop them"
 	scout.pressed.connect(func() -> void: Router.open("scouting_book"))
-	dv.add_child(scout)
+	var srow := HBoxContainer.new()
+	srow.add_theme_constant_override("separation", 6)
+	var sl := UITheme.label("Know who you will face:", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	srow.add_child(sl)
+	srow.add_child(scout)
+	dv.add_child(srow)
 
 	var ap := panel()
 	ap.size_flags_vertical = Control.SIZE_EXPAND_FILL
