@@ -494,6 +494,8 @@ func cast_special(on_impact: Callable, face_point := Vector3.INF) -> void:
 	var speed := 1.3
 	model.play_action("special", speed)
 	_special_t = RELEASE.special / speed
+	# Accent-coloured wind-up at the defender, so a linked card reads as "they did it".
+	battle.vfx.defender_windup(self, _special_t)
 	_special_cb = on_impact
 	attack_cd = maxf(attack_cd, 0.6)
 

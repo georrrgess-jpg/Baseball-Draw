@@ -11,6 +11,22 @@ extends Node3D
 const MAX_TRAIL := 12
 const TRAIL_M := {"comet": 5.0, "fire": 4.5, "spiral": 6.0, "wobble": 6.0, "hook": 9.0, "heavy": 5.0}
 const TRAIL_LEN := {"comet": 18, "fire": 16, "spiral": 24, "wobble": 22, "hook": 44, "heavy": 18}
+## Defender throws (no card trail): trail length in metres, width multiplier and a sparkle
+## [system, chance per 30 fps frame, size, life] per thrower trait, so every defender's
+## throw reads in their own accent colour and flavour.
+const STYLE_M := {"precision": 6.5, "cannon_arm": 4.8, "heavy_hitter": 4.6, "fastball": 4.6}
+const STYLE_W := {"precision": 0.85, "cannon_arm": 1.45, "heavy_hitter": 1.2, "quick_hands": 0.95}
+const STYLE_FX := {
+	"fastball": ["ember", 0.6, 1.0, 0.7],
+	"home_guard": ["glow", 0.35, 0.45, 0.45],
+	"quick_hands": ["streak", 0.45, 0.6, 0.5],
+	"cannon_arm": ["spark", 0.5, 0.75, 0.5],
+	"precision": ["glow", 0.4, 0.35, 0.5],
+	"heavy_hitter": ["magic", 0.55, 0.75, 0.6],
+	"static_charge": ["spark", 0.8, 0.7, 0.35],
+	"pickoff_artist": ["streak", 0.5, 0.6, 0.5],
+	"gap_shooter": ["magic", 0.55, 0.7, 0.6],
+}
 
 class Ball:
 	var node: Node3D
@@ -36,6 +52,8 @@ class Ball:
 	var max_trail := MAX_TRAIL
 	var side := Vector3.RIGHT
 	var bounce_t := 0.0          # > 0 while the ball glances off a runner (cosmetic)
+	var style := ""              # defender throw style (the thrower's trait), cosmetic
+	var hot := false             # draw a bright inner core along the trail
 	var bounce_v := Vector3.ZERO
 
 var battle: Battle
@@ -43,6 +61,7 @@ var balls: Array[Ball] = []
 var _ball_mesh: Mesh
 var _ball_mat: StandardMaterial3D
 var _trail_mat: ShaderMaterial
+var _trail_mat_acc: ShaderMaterial   # defender throws: narrower white core, wider accent glow
 var _glow_tex: Texture2D
 var _camera: Camera3D
 
@@ -72,6 +91,9 @@ func _ready() -> void:
 	_trail_mat.shader = load("res://assets/shaders/vfx/fx_bolt.gdshader")
 	_trail_mat.set_shader_parameter("core_width", 0.24)
 	_trail_mat.render_priority = 4
+	_trail_mat_acc = _trail_mat.duplicate() as ShaderMaterial
+	_trail_mat_acc.set_shader_parameter("core_width", 0.13)
+	_trail_mat_acc.set_shader_parameter("energy", 1.5)
 	_glow_tex = load("res://assets/textures/vfx/glow.png")
 	for i in 48:
 		balls.append(_make_ball())
@@ -156,10 +178,23 @@ func _prepare(b: Ball, from: Vector3, to: Vector3, speed: float, payload: Dictio
 		b.width *= 2.6
 	var flat := Vector3(to.x - from.x, 0, to.z - from.z)
 	b.side = flat.cross(Vector3.UP).normalized() if flat.length() > 0.01 else Vector3.RIGHT
+	# Defender throws: the trail takes the thrower's accent, saturated, with a hot core.
+	var src = payload.get("source")
+	b.style = ""
+	if b.trail_kind == "" and is_instance_valid(src) and src is Defender:
+		b.style = String(src.trait_id) if payload.get("fire", false) or src.trait_id != "fastball" else "ace"
+		if b.color.s > 0.12:
+			b.color = Color.from_hsv(b.color.h, clampf(b.color.s * 1.15, 0.7, 1.0), 1.0)
+		b.width *= 1.6 * float(STYLE_W.get(b.style, 1.0))
+	b.trail.material_override = _trail_mat_acc if b.style != "" else _trail_mat
 	var special: bool = b.trail_kind != "" or payload.has("color") or bool(payload.get("fire", false))
+	b.hot = special
+	b.trail.set_instance_shader_parameter("intensity", 1.0)
 	b.glow.visible = special
 	if special:
-		var gs := 2.4 if b.trail_kind == "fire" else (1.3 if b.trail_kind in ["comet", "hook", "heavy"] else 0.8)
+		var gs := 2.4 if b.trail_kind == "fire" else (1.3 if b.trail_kind in ["comet", "hook", "heavy"] else (1.05 if b.style != "" else 0.8))
+		if b.style == "fastball":
+			gs = 1.6
 		b.glow.scale = Vector3.ONE * gs
 		var gc := b.color.lerp(Color.WHITE, 0.25)
 		gc.a = 0.9
@@ -218,6 +253,8 @@ func _step(b: Ball, delta: float) -> void:
 	if b.trail_kind != "":
 		pos += _visual_offset(b, k)
 		_trail_particles(b, pos, delta)
+	elif b.style != "":
+		_style_particles(b, pos, delta)
 	b.node.global_position = pos
 	b.mesh.rotate_x(delta * 30.0)
 	b.points.push_front(pos)
@@ -299,10 +336,39 @@ func _trail_particles(b: Ball, pos: Vector3, delta: float) -> void:
 				vfx.emit_one("magic", pos, Vector3(0, -0.3, 0), Color(0.6, 0.95, 1.0), 0.8, 1.0)
 
 
+## Defender throws: a little sparkle in the thrower's colour and flavour (embers for Ace's
+## fastball, crackles for Nova, chevron streaks for Dex...). Rates are per 30 fps frame.
+func _style_particles(b: Ball, pos: Vector3, delta: float) -> void:
+	var vfx = battle.vfx
+	var r: float = delta * 30.0 * float(vfx._scale)
+	if b.style == "fastball":
+		# Ace's fastball: a burning ball.
+		for i in 2:
+			if randf() < r:
+				vfx.emit_one("fire", pos + Vector3(randf_range(-0.12, 0.12), randf_range(-0.12, 0.12), randf_range(-0.12, 0.12)),
+					Vector3(randf_range(-0.4, 0.4), 1.2, randf_range(-0.4, 0.4)), Color(1.0, 0.42, 0.08), randf_range(0.6, 0.9), 0.55)
+	var fx: Array = STYLE_FX.get(b.style, [])
+	if fx.is_empty() or randf() >= float(fx[1]) * r:
+		return
+	var back := (b.start - b.end)
+	back.y = 0.0
+	back = back.normalized() if back.length_squared() > 0.0001 else Vector3.BACK
+	var c := b.color.lerp(Color.WHITE, 0.3)
+	var v := Vector3(randf_range(-0.6, 0.6), randf_range(-0.2, 0.8), randf_range(-0.6, 0.6))
+	match String(fx[0]):
+		"streak":
+			v = back * 5.0
+		"spark":
+			v = Vector3(randf_range(-3, 3), randf_range(-1.5, 3), randf_range(-3, 3))
+			if b.style == "static_charge":
+				c = Color(1.0, 0.97, 0.6)
+	vfx.emit_one(String(fx[0]), pos, v, c, float(fx[2]), float(fx[3]))
+
+
 ## Trails are capped by length in metres rather than by point count, so they look the same
 ## at any frame rate (a 30 fps frame used to stretch a plain throw's trail to ~10 m).
 func _trim_trail(b: Ball) -> void:
-	var max_len: float = TRAIL_M.get(b.trail_kind, 3.6)
+	var max_len: float = TRAIL_M.get(b.trail_kind, 3.6) if b.style == "" else float(STYLE_M.get(b.style, 4.2))
 	var total := 0.0
 	for i in range(1, b.points.size()):
 		total += b.points[i].distance_to(b.points[i - 1])
@@ -329,6 +395,30 @@ func _draw_trail(b: Ball) -> void:
 		var f := 1.0 - float(i) / float(n)
 		var w := b.width * (0.25 + 0.75 * f)
 		var c := Color(b.color.r, b.color.g, b.color.b, f * f * 0.95)
+		b.imesh.surface_set_color(c)
+		b.imesh.surface_set_uv(Vector2(0, f))
+		b.imesh.surface_add_vertex(p + side * w)
+		b.imesh.surface_set_color(c)
+		b.imesh.surface_set_uv(Vector2(1, f))
+		b.imesh.surface_add_vertex(p - side * w)
+	b.imesh.surface_end()
+	if not b.hot or n < 3:
+		return
+	# Hot core: a thin, near-white strip down the middle of the front half of the trail.
+	var m := maxi(3, int(n * 0.6))
+	var hc := b.color.lerp(Color(1.0, 0.98, 0.9), 0.45)
+	b.imesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	for i in m:
+		var p: Vector3 = b.points[i]
+		var nxt: Vector3 = b.points[mini(i + 1, n - 1)]
+		var prv: Vector3 = b.points[maxi(i - 1, 0)]
+		var dir := (prv - nxt)
+		if dir.length_squared() < 0.000001:
+			dir = Vector3.FORWARD
+		var side := dir.cross(cam - p).normalized()
+		var f := 1.0 - float(i) / float(m)
+		var w := b.width * 0.3 * (0.3 + 0.7 * f)
+		var c := Color(hc.r, hc.g, hc.b, f * 0.9)
 		b.imesh.surface_set_color(c)
 		b.imesh.surface_set_uv(Vector2(0, f))
 		b.imesh.surface_add_vertex(p + side * w)

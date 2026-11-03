@@ -49,13 +49,21 @@ void fragment() {
 		a = max(a, max(m, sp * 0.7));
 	}
 	if (st.x > 0.01) {
-		for (int i = 0; i < 3; i++) {
-			float ph = t * 4.0 + float(i) * 2.0943951;
-			vec2 c = vec2(cos(ph) * 0.62, sin(ph) * 0.16 + 0.05);
+		// Dizzy: a faint golden orbit with four spinning stars (white-hot centres) racing round it.
+		vec2 e = (p - vec2(0.0, 0.05)) / vec2(0.66, 0.17);
+		float orbit = exp(-sq((length(e) - 1.0) / 0.12)) * 0.45 * st.x;
+		col += vec3(1.0, 0.8, 0.25) * 1.4 * orbit;
+		a = max(a, orbit * 0.6);
+		for (int i = 0; i < 4; i++) {
+			float ph = t * 5.0 + float(i) * 1.5707963;
+			vec2 c = vec2(cos(ph) * 0.66, sin(ph) * 0.17 + 0.05);
 			float depth = 0.6 + 0.4 * sin(ph);
-			float m = icon(p, c, 0.26 * (0.75 + 0.25 * depth), 0.0, t * 3.0) * st.x;
-			col += vec3(1.0, 0.88, 0.3) * (1.4 + depth) * m;
-			a = max(a, m * (0.55 + 0.45 * depth));
+			float sz = 0.34 * (0.7 + 0.3 * depth);
+			float m = icon(p, c, sz, 0.0, t * 6.0 + float(i)) * st.x;
+			float core = icon(p, c, sz * 0.55, 0.0, t * 6.0 + float(i)) * st.x;
+			vec3 sc = (i % 2 == 0) ? vec3(1.0, 0.82, 0.18) : vec3(1.0, 0.95, 0.45);
+			col += sc * (1.6 + depth) * m + vec3(1.0, 1.0, 0.9) * core * 1.2;
+			a = max(a, m * (0.6 + 0.4 * depth));
 		}
 	}
 	a = clamp(a, 0.0, 1.0);
