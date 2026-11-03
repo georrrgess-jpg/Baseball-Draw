@@ -1727,7 +1727,7 @@ func boss_impact(pos: Vector3, radius: float, color: Color, kind := "slam") -> v
 	var mid := toward_camera(g + Vector3(0, 0.8, 0), 0.5)
 	if kind == "phase":
 		shockwave(g, radius * 1.3, Color(color, 0.95), 0.45, 0.07, 0.0, true)
-		sphere_pulse(g + Vector3(0, 0.3, 0), radius * 0.7, Color(color, 0.5), 0.45)
+		sphere_pulse(g + Vector3(0, 0.3, 0), radius * 0.7, Color(color, 0.32), 0.4)
 		emit("mist", g + Vector3(0, 0.3, 0), 10, Color(0.45, 0.25, 0.7, 0.55), 2.5, 0.1, 1.4, 1.0)
 		ring_emit("magic", g + Vector3(0, 0.6, 0), radius * 0.9, 16, color.lerp(Color.WHITE, 0.3), -4.0, 1.5, 1.0, 0.9)
 		emit_one("flash", mid, Vector3.ZERO, Color(color, 0.7), 2.0, 1.0)
