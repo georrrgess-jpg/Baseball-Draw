@@ -624,11 +624,7 @@ func burst(kind: String, pos: Vector3, color: Color = Color.WHITE) -> void:
 			spray("spark", pos, 6, color.lerp(Color.WHITE, 0.5), 6.0, (camera_pos() - pos).normalized(), 0.9, 0.9, 0.7)
 			emit_one("glow", pos, Vector3.ZERO, Color(color.lerp(Color.WHITE, 0.4), 0.8), 0.9, 0.5)
 		"crit":
-			spray("spark", pos, 16, Color(1.0, 0.9, 0.5), 9.0, Vector3.UP, 1.2, 1.1)
-			emit_one("flash", pos, Vector3.ZERO, Color(1.0, 0.85, 0.5, 0.9), 0.8, 1.0)
-			emit_one("ring", pos, Vector3.ZERO, Color(1.0, 0.85, 0.4), 1.2, 1.0)
-			emit("magic", pos, 6, Color(1.0, 0.9, 0.5), 4.0, 0.6)
-			shockwave(pos, 1.4, Color(1.0, 0.85, 0.4), 0.3)
+			_crit_burst(pos, color)
 		"explosion":
 			emit_one("flash", pos, Vector3.ZERO, Color(1.0, 0.7, 0.35), 1.2, 1.2)
 			emit("fire", pos, 10, Color(1.0, 0.45, 0.1), 5.0, 0.8, 1.0, 0.9)
@@ -653,16 +649,8 @@ func burst(kind: String, pos: Vector3, color: Color = Color.WHITE) -> void:
 			emit("magic", pos, 14, Color(1.0, 0.85, 0.3), 4.5, 1.0)
 			emit_one("glow", pos, Vector3.ZERO, Color(1.0, 0.8, 0.3, 0.9), 1.6, 0.7)
 		"out":
-			# A clear "out" pop (the runner itself tumbles and shrinks away, see Enemy).
-			var front := toward_camera(pos, 0.6)
-			emit_one("impact", front, Vector3.ZERO, Color(1.0, 0.97, 0.9, 1.0), 2.2, 1.35)
-			emit_one("impact", front, Vector3.ZERO, Color(1.0, 0.75, 0.3, 0.8), 3.0, 1.1)
-			emit_one("flash", front, Vector3.ZERO, Color(1.0, 0.95, 0.85, 0.85), 1.2, 1.0)
-			emit_one("ring", front, Vector3.ZERO, Color(1.0, 0.95, 0.85, 0.9), 1.5, 1.0)
-			spray("spark", front, 14, Color(1.0, 0.95, 0.8), 9.0, Vector3.UP, 1.1)
-			emit("magic", pos, 6, Color(1.0, 0.9, 0.55), 4.0, 0.8)
-			shockwave(Vector3(pos.x, 0.0, pos.z), 1.9, Color(1.0, 0.95, 0.85, 0.9), 0.35, 0.06)
-			emit("dust", Vector3(pos.x, 0.2, pos.z), 5, Color(0.6, 0.45, 0.32, 0.6), 2.0, 0.2)
+			# A clear, colourful "out" pop (the runner itself tumbles and shrinks away, see Enemy).
+			_out_burst(pos)
 		"confetti":
 			var cols := [UITheme.SCARLET, UITheme.GOLD, UITheme.OFFWHITE, UITheme.BLUE, UITheme.GREEN]
 			for i in 3:
@@ -1484,3 +1472,281 @@ func _shield_hit(broken: bool) -> void:
 	shockwave(home, SHIELD_RING_R * 1.4, c, 0.45, 0.05)
 	if broken:
 		ring_emit("shard", home + Vector3(0, 1.0, 0), 1.8, 12, Color.WHITE, 4.0, 3.5, 0.6, 0.9)
+
+
+# ---------------------------------------------------------------- Update 8: abilities and hits
+
+## Bright "team" colours for the out pop's confetti sparks.
+const OUT_COLS := [Color(1.0, 0.2, 0.24), Color(1.0, 0.78, 0.2), Color(0.25, 0.6, 1.0), Color(0.3, 0.95, 0.55), Color(1.0, 0.97, 0.9), Color(0.7, 0.45, 1.0)]
+## Elite affix colours (rim, ground aura, particles).
+const AFFIX_COLORS := {"swift": Color(1.0, 0.9, 0.25), "tough": Color(1.0, 0.2, 0.55), "plated": Color(0.72, 0.84, 1.0),
+	"slippery": Color(0.25, 1.0, 0.6), "shielded": Color(1.0, 0.62, 0.22)}
+const ICE_CYAN := Color(0.42, 0.9, 1.0)
+
+var _out_tint := Color(0, 0, 0, 0)
+var _out_tint_frame := -1
+
+
+## The next "out" burst this frame is tinted with `c` (the accent of the defender who got it).
+func set_out_tint(c: Color) -> void:
+	_out_tint = c
+	_out_tint_frame = Engine.get_process_frames()
+
+
+func _cam_axes() -> Array:
+	if _camera == null or not is_instance_valid(_camera):
+		_camera = get_viewport().get_camera_3d()
+	if _camera:
+		var b := _camera.global_transform.basis
+		return [b.x.normalized(), b.y.normalized()]
+	return [Vector3.RIGHT, Vector3.UP]
+
+
+## Streaks flying straight out from `pos` in the screen plane (a comic speed burst).
+func radial_streaks(pos: Vector3, n: int, color: Color, speed: float, size := 1.0, life := 1.0) -> void:
+	var ax := _cam_axes()
+	var c := _count(n)
+	var off := randf() * TAU
+	for i in c:
+		var a := off + TAU * (float(i) + randf_range(-0.25, 0.25)) / c
+		var d: Vector3 = ax[0] * cos(a) + ax[1] * sin(a)
+		_emit_raw("streak", pos + d * 0.3, d * speed * randf_range(0.75, 1.15), color, size * randf_range(0.8, 1.2), life * randf_range(0.8, 1.1))
+
+
+## Critical hit: a layered gold starburst (orange rim, gold body, white-hot core) with
+## streaks shooting out in the screen plane, a gold ring and a ground shock.
+func _crit_burst(pos: Vector3, color: Color) -> void:
+	var to_cam := (camera_pos() - pos).normalized()
+	var front := pos + to_cam * 0.7
+	var gold := Color(1.0, 0.8, 0.22)
+	emit_one("impact", front, Vector3.ZERO, Color(1.0, 0.5, 0.08, 0.95), 3.3, 1.5)
+	emit_one("impact", front + to_cam * 0.04, Vector3.ZERO, Color(1.0, 0.86, 0.3, 1.0), 2.3, 1.3)
+	emit_one("impact", front + to_cam * 0.08, Vector3.ZERO, Color(1.0, 1.0, 0.94, 1.0), 1.2, 1.0)
+	radial_streaks(front, 12, Color(1.0, 0.84, 0.36), 17.0, 1.15, 0.85)
+	radial_streaks(front, 6, Color(color.lerp(Color.WHITE, 0.35), 1.0), 11.0, 0.8, 0.7)
+	if not reduce_flashes:
+		emit_one("flash", front, Vector3.ZERO, Color(1.0, 0.85, 0.5, 0.85), 1.0, 1.0)
+	emit_one("ring", front, Vector3.ZERO, Color(gold, 1.0), 1.7, 1.0)
+	spray("spark", front, 14, gold.lerp(Color.WHITE, 0.3), 10.0, Vector3.UP, 1.2, 1.0)
+	emit("magic", front, 6, gold, 4.5, 0.6)
+	shockwave(Vector3(pos.x, 0.0, pos.z), 1.8, Color(1.0, 0.8, 0.3), 0.32)
+
+
+## Out: a big pop tinted by the thrower over a white core, short confetti-ish sparks in
+## team colours, streaks, a ring and a ground shock. Everything is gone in about a second.
+func _out_burst(pos: Vector3) -> void:
+	var tint := Color(1.0, 0.75, 0.3)
+	if _out_tint_frame == Engine.get_process_frames() and _out_tint.a > 0.0:
+		tint = _out_tint
+	_out_tint_frame = -1
+	if tint.s > 0.15:
+		tint = Color.from_hsv(tint.h, clampf(tint.s * 1.15, 0.6, 1.0), 1.0)
+	var to_cam := (camera_pos() - pos).normalized()
+	var front := pos + to_cam * 0.6
+	emit_one("impact", front, Vector3.ZERO, Color(tint, 0.95), 3.1, 1.35)
+	emit_one("impact", front + to_cam * 0.05, Vector3.ZERO, Color(1.0, 0.97, 0.9, 1.0), 1.9, 1.15)
+	if not reduce_flashes:
+		emit_one("flash", front, Vector3.ZERO, Color(1.0, 0.95, 0.85, 0.8), 1.2, 1.0)
+	emit_one("ring", front, Vector3.ZERO, Color(tint.lerp(Color.WHITE, 0.3), 0.95), 1.7, 1.0)
+	radial_streaks(front, 8, tint.lerp(Color.WHITE, 0.4), 13.0, 0.95, 0.6)
+	for c: Color in OUT_COLS:
+		spray("spark", front, 3, c, 10.0, Vector3.UP, 1.25, 1.0, 0.8)
+	for i in 4:
+		emit("confetti", front + Vector3(0, 0.3, 0), 2, OUT_COLS[randi() % OUT_COLS.size()], 6.5, 1.2, 1.0, 0.8, 0.4)
+	emit("magic", pos, 5, tint.lerp(Color.WHITE, 0.3), 4.0, 0.8)
+	shockwave(Vector3(pos.x, 0.0, pos.z), 2.0, Color(tint.lerp(Color.WHITE, 0.4), 0.9), 0.35, 0.06)
+	emit("dust", Vector3(pos.x, 0.2, pos.z), 5, Color(0.6, 0.45, 0.32, 0.6), 2.0, 0.2)
+
+
+# ---- defender signature casts
+
+## The defender winds up a signature (linked-card) cast: their accent colour floods a
+## ring and a light column at their feet, energy streams into the throwing hand and their
+## body glows in the accent, so the cast reads as "that defender did it". At `windup`
+## seconds the colour bursts out from the hand.
+func defender_windup(df: Node3D, windup: float) -> void:
+	if df == null or not is_instance_valid(df) or not ("model" in df) or df.model == null:
+		return
+	var col := Color(df.data.accent) if "data" in df else Color.WHITE
+	col = Color.from_hsv(col.h, clampf(col.s * 1.1, 0.55, 1.0), 1.0)
+	var model: Node3D = df.model
+	var feet := Vector3(df.global_position.x, 0.0, df.global_position.z)
+	var h: float = model.height
+	var total := windup + 0.35
+	zone_ring(feet, 1.25, Color(col, 0.95), total, 0.3, 2.5, 12.0)
+	shockwave(feet, 1.6, Color(col, 0.9), 0.3, 0.06, 0.0, true)
+	beam(feet, 0.7, h * 1.8, Color(col, 0.95), windup + 0.25)
+	ring_emit("streak", feet + Vector3(0, 0.1, 0), 1.1, 10, col.lerp(Color.WHITE, 0.25), -2.0, 6.0, 0.8, 0.8)
+	emit_one("glow", model.chest_position(), Vector3.ZERO, Color(col, 0.8), 2.4, windup * 2.0)
+	every_frame(total, func(k: float) -> void:
+		if not is_instance_valid(model):
+			return
+		var tt := k * total
+		if tt < windup:
+			var w := tt / maxf(windup, 0.01)
+			model.set_rim(Color(col.lerp(Color.WHITE, 0.15), 0.4 + 0.6 * w))
+			var hand: Vector3 = model.hand_position()
+			if randf() < 0.55 * _scale:
+				var dir := Vector3(randf_range(-1, 1), randf_range(-0.2, 1), randf_range(-1, 1)).normalized()
+				var st := hand + dir * randf_range(0.9, 1.6)
+				_emit_raw("streak", st, (hand - st) / 0.25, col.lerp(Color.WHITE, 0.3), 0.7, 0.7)
+			if randf() < 0.5:
+				_emit_raw("glow", hand, Vector3.ZERO, Color(col, 0.75), 0.5 + 0.9 * w, 0.35)
+		else:
+			var f := (tt - windup) / 0.35
+			model.set_rim(Color(col.lerp(Color.WHITE, 0.15), 1.0 - f) if k < 1.0 else Color(0, 0, 0, 0)))
+	after(windup, func() -> void:
+		if not is_instance_valid(model):
+			return
+		var hand: Vector3 = model.hand_position()
+		var front := toward_camera(hand, 0.3)
+		emit_one("impact", front, Vector3.ZERO, Color(col, 0.9), 1.6, 1.1)
+		emit_one("ring", front, Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.3), 1.0), 1.4, 0.9)
+		radial_streaks(front, 8, col.lerp(Color.WHITE, 0.35), 9.0, 0.8, 0.6)
+		spray("spark", front, 10, col.lerp(Color.WHITE, 0.4), 8.0, Vector3.UP, 1.2, 0.8)
+		flash_light(hand + Vector3(0, 0.5, 0), col, 3.5, 6.0, 0.3))
+
+
+# ---- statuses (per-frame, from Enemy._update_status_fx)
+
+## A flame sheet that clings to a burning runner (Enemy positions it every frame).
+func make_status_flame() -> MeshInstance3D:
+	var mi := make_owned("flame")
+	mi.set_instance_shader_parameter("seed", randf() * 10.0)
+	mi.set_instance_shader_parameter("tint", Color(1.0, 0.36, 0.05, 0.92))
+	mi.set_instance_shader_parameter("progress", 0.0)
+	return mi
+
+
+## Ground aura of an elite (owned; the Enemy keeps it under its feet).
+func make_affix_ring(affix: String) -> MeshInstance3D:
+	var mi := make_owned("ring")
+	var c: Color = AFFIX_COLORS.get(affix, Color(1.0, 0.3, 0.2))
+	mi.set_instance_shader_parameter("color", Color(c, 0.95))
+	mi.set_instance_shader_parameter("mode", 1.0)
+	var p := Vector4(0.06, 0.12, 0.0, 0.0)
+	match affix:
+		"swift": p = Vector4(0.07, 0.08, 3.5, 10.0)
+		"tough": p = Vector4(0.12, 0.22, 0.0, 0.0)
+		"plated": p = Vector4(0.09, 0.1, 0.6, 6.0)
+		"slippery": p = Vector4(0.06, 0.16, -1.8, 16.0)
+		"shielded": p = Vector4(0.07, 0.1, 1.0, 3.0)
+	mi.set_instance_shader_parameter("params", p)
+	mi.set_instance_shader_parameter("progress", 1.0)
+	return mi
+
+
+func affix_color(affix: String) -> Color:
+	return AFFIX_COLORS.get(affix, Color(1.0, 0.2, 0.1))
+
+
+## Per-frame elite particles: swift wind streaks, tough red embers, plated steel glints,
+## slippery green drips (shielded has its bubble).
+func status_affix(affix: String, pos: Vector3, dir: Vector3, h: float, delta: float) -> void:
+	var c: Color = AFFIX_COLORS.get(affix, Color.WHITE)
+	match affix:
+		"swift":
+			if randf() < delta * 14.0:
+				status_emit("streak", pos + Vector3(randf_range(-0.35, 0.35), randf_range(0.3, h), randf_range(-0.35, 0.35)) - dir * 0.3,
+					-dir * 7.0 + Vector3(0, 0.3, 0), c, 0.8, 0.6)
+		"tough":
+			if randf() < delta * 5.0:
+				status_emit("ember", pos + Vector3(randf_range(-0.35, 0.35), randf_range(0.2, h * 0.9), randf_range(-0.35, 0.35)),
+					Vector3(0, 1.4, 0), Color(1.0, 0.3, 0.6), 1.2, 0.8)
+		"plated":
+			if randf() < delta * 5.0:
+				status_emit("magic", pos + Vector3(randf_range(-0.3, 0.3), randf_range(0.4, h), randf_range(-0.3, 0.3)),
+					Vector3(0, 0.2, 0), Color(0.85, 0.92, 1.0), 0.7, 0.5)
+		"slippery":
+			if randf() < delta * 7.0:
+				status_emit("snow", pos + Vector3(randf_range(-0.3, 0.3), randf_range(0.3, h * 0.8), randf_range(-0.3, 0.3)),
+					Vector3(0, -1.2, 0), c, 1.3, 0.6)
+
+
+## Slowed: blue drag streaks peeling off the back of the runner.
+func status_slow(pos: Vector3, dir: Vector3, h: float, delta: float, col: Color) -> void:
+	if randf() < delta * 9.0:
+		var side := Vector3(-dir.z, 0, dir.x) * randf_range(-0.35, 0.35)
+		status_emit("streak", pos + side + Vector3(0, randf_range(0.2, h * 0.9), 0) - dir * 0.25,
+			-dir * 2.6 + Vector3(0, -0.2, 0), col.lerp(Color.WHITE, 0.15), 1.0, 1.1)
+	if randf() < delta * 2.5:
+		status_emit("glow", Vector3(pos.x, 0.25, pos.z) - dir * 0.4, -dir * 0.6, Color(col, 0.5), 0.9, 0.9)
+
+
+## Frozen: crisp glints on the ice and cold mist at the feet.
+func status_frozen(pos: Vector3, h: float, delta: float) -> void:
+	if randf() < delta * 6.0:
+		status_emit("magic", pos + Vector3(randf_range(-0.35, 0.35), randf_range(0.2, h), randf_range(-0.35, 0.35)),
+			Vector3.ZERO, Color(0.85, 0.98, 1.0), 0.9, 0.6)
+	if randf() < delta * 2.0:
+		status_emit("mist", Vector3(pos.x, 0.15, pos.z), Vector3(randf_range(-0.3, 0.3), 0.05, randf_range(-0.3, 0.3)), Color(0.7, 0.92, 1.0, 0.35), 0.7, 0.6)
+
+
+## The moment a runner freezes solid: ice shards, a cyan ring and a frost bloom.
+func freeze_crack(e: Node3D) -> void:
+	var c: Vector3 = e.center()
+	var g := Vector3(c.x, 0.0, c.z)
+	emit_one("flash", toward_camera(c, 0.5), Vector3.ZERO, Color(0.7, 0.95, 1.0, 0.8), 1.3, 0.7)
+	emit_one("ring", toward_camera(c, 0.5), Vector3.ZERO, ICE_CYAN, 1.6, 0.8)
+	spray("shard", c, 7, Color.WHITE, 5.0, Vector3.UP, 1.1, 0.5, 0.8)
+	emit("snow", c, 10, Color(0.8, 0.97, 1.0), 3.0, 0.5)
+	shockwave(g, 1.6, Color(ICE_CYAN, 0.95), 0.3, 0.06)
+	decal("frost", g, 1.1, Color(0.7, 0.95, 1.0, 0.85), Color.WHITE, 1.2, func(n: Node3D, k: float) -> void:
+		(n as MeshInstance3D).set_instance_shader_parameter("anim", Vector4(k, 1.0 - smoothstep(0.6, 1.0, k), 0.0, minf(k * 4.0, 1.0))))
+
+
+# ---- boss / slugger attacks
+
+## A boss danger zone: a hazard ring with stripes crawling inward and a fill that reaches
+## the rim exactly when the attack lands (the rim pulses faster as it gets close). Warning
+## sparks rise from the rim. The caller frees the node (like telegraph()).
+func danger_zone(pos: Vector3, radius: float, color: Color, time: float) -> Node3D:
+	var mi := make_owned("ring")
+	add_child(mi)
+	var g := Vector3(pos.x, 0.075, pos.z)
+	mi.global_position = g
+	mi.scale = Vector3(radius, 1, radius)
+	mi.set_instance_shader_parameter("color", color)
+	mi.set_instance_shader_parameter("mode", 5.0)
+	mi.set_instance_shader_parameter("params", Vector4(0.045, 0.3, 1.0 if reduce_flashes else 0.0, 0.0))
+	mi.set_instance_shader_parameter("progress", 0.0)
+	var an := animate(mi, time, func(n: Node3D, k: float) -> void:
+		(n as MeshInstance3D).set_instance_shader_parameter("progress", k)
+		if randf() < (0.25 + 0.75 * k) * _scale:
+			var a := randf() * TAU
+			_emit_raw("spark", g + Vector3(cos(a), 0.05, sin(a)) * radius * 0.98, Vector3(0, randf_range(2.0, 4.5), 0),
+				color.lerp(Color.WHITE, 0.3), 0.8, 0.6))
+	an.kind = ""
+	return mi
+
+
+## A boss / slugger attack landing: shockwaves, a crater, flying debris, a dust ring,
+## sparks and a flash. kind: "swing", "slam", "homerun", "phase".
+func boss_impact(pos: Vector3, radius: float, color: Color, kind := "slam") -> void:
+	var g := Vector3(pos.x, 0.0, pos.z)
+	var mid := toward_camera(g + Vector3(0, 0.8, 0), 0.5)
+	if kind == "phase":
+		shockwave(g, radius * 1.3, Color(color, 0.95), 0.45, 0.07, 0.0, true)
+		sphere_pulse(g + Vector3(0, 0.3, 0), radius * 0.7, Color(color, 0.5), 0.45)
+		emit("mist", g + Vector3(0, 0.3, 0), 10, Color(0.45, 0.25, 0.7, 0.55), 2.5, 0.1, 1.4, 1.0)
+		ring_emit("magic", g + Vector3(0, 0.6, 0), radius * 0.9, 16, color.lerp(Color.WHITE, 0.3), -4.0, 1.5, 1.0, 0.9)
+		emit_one("flash", mid, Vector3.ZERO, Color(color, 0.7), 2.0, 1.0)
+		flash_light(g + Vector3(0, 2.0, 0), color, 4.0, radius * 3.0, 0.4)
+		return
+	var big := kind != "swing"
+	var hot := color.lerp(Color.WHITE, 0.45)
+	shockwave(g, radius * 1.15, Color(color, 0.98), 0.5, 0.09)
+	shockwave(g, radius * 0.65, Color(1.0, 0.95, 0.85, 0.95), 0.3, 0.07, 0.05)
+	if big:
+		shockwave(g, radius * 1.7, Color(color, 0.6), 0.8, 0.05, 0.12)
+	decal("crater", g, radius * (0.55 if big else 0.4), Color(0.2, 0.13, 0.08, 0.8), Color(color, 1.0), 2.4)
+	spray("debris", g + Vector3(0, 0.3, 0), 18 if big else 8, Color(0.45, 0.34, 0.26), 11.0 if big else 8.0, Vector3.UP, 1.0, 1.0, 1.0)
+	ring_emit("dust", g + Vector3(0, 0.25, 0), radius * 0.35, 18 if big else 10, Color(0.62, 0.47, 0.34, 0.7), radius * 1.4, 0.8, 1.5, 1.1)
+	spray("spark", g + Vector3(0, 0.5, 0), 22 if big else 12, hot, 12.0, Vector3.UP, 1.1, 1.0)
+	radial_streaks(mid, 10 if big else 6, hot, 14.0, 1.0, 0.7)
+	if not reduce_flashes:
+		emit_one("flash", mid, Vector3.ZERO, Color(hot, 0.9), radius * 0.55, 1.0)
+	emit_one("impact", toward_camera(mid, 0.1), Vector3.ZERO, Color(color, 0.9), radius * 0.6, 1.4)
+	if big:
+		ground_fx("rays", g, radius * 0.9, Color(color, 0.8), Color.WHITE, 0.7)
+	flash_light(g + Vector3(0, 2.0, 0), color, 5.0 if big else 3.0, radius * 3.0, 0.4)

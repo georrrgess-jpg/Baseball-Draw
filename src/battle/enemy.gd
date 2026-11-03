@@ -90,6 +90,10 @@ var _fx_cage: MeshInstance3D
 var _fx_key := 0
 var _ice_k := 0.0
 var _cage_k := 0.0
+var _fx_flame: MeshInstance3D       # flames clinging to a burning runner
+var _burn_k := 0.0
+var _fx_affix: MeshInstance3D       # elite aura ring in the affix colour
+var _affix_t := 0.0
 # Hit feedback (cosmetic): squash / flinch, health bar chip trail and pulse, death tumble.
 var _hit_k := 0.0
 var _hit_dir := Vector3.ZERO        # local space, direction the last hit pushed toward
@@ -160,7 +164,7 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	if enemy_id == "decoy":
 		model.set_ghost(0.55)
 	if affix != "":
-		model.set_rim(Color(1.0, 0.2, 0.1, 0.6))
+		model.set_rim(Color(battle.vfx.affix_color(affix), 0.65))
 
 	_shadow = _make_blob_shadow(0.45 * height / 1.8 * 1.1)
 	add_child(_shadow)
@@ -171,6 +175,12 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 			mcol = Color(1.0, 0.85, 0.1, 0.95) if not is_boss else Color(0.2, 0.65, 1.0, 1.0)
 		_marker = FieldBuilder.make_ring(0.62 * height / 1.8 * 1.15, mcol, 0.16, 0.18)
 		add_child(_marker)
+		if affix != "":
+			# Elites: an aura ring in the affix colour just outside the red marker.
+			_fx_affix = battle.vfx.make_affix_ring(affix)
+			add_child(_fx_affix)
+			var ar := 0.62 * height / 1.8 * 1.15 * 1.45
+			_fx_affix.scale = Vector3(ar, 1, ar)
 	_model_scale = model.scale
 	# Health bar: shared material per style, drawn on top, screen-size aware (see shader).
 	var style := "boss" if is_boss else ("elite" if affix != "" or id in ["captain", "slugger"] else "runner")
@@ -537,7 +547,15 @@ func die(info: Dictionary = {}) -> void:
 	model.flash(0.6 if battle.vfx.reduce_flashes else 1.0)
 	if _marker:
 		_marker.visible = false
+	if _fx_affix:
+		_fx_affix.visible = false
 	model.set_rim(Color(0, 0, 0, 0))
+	# The out pop takes the colour of whoever got the out.
+	var src = info.get("source")
+	if is_instance_valid(src) and src is Defender:
+		battle.vfx.set_out_tint(Color(src.data.accent))
+	elif info.has("color"):
+		battle.vfx.set_out_tint(info.color)
 	model.freeze_animation(false)
 	_clear_status_fx()
 	model.play_action("defeat", 1.0)
@@ -711,6 +729,8 @@ func _update_transform(delta: float) -> void:
 		_shadow.global_position = Vector3(pos.x, 0.03, pos.z)
 	if _marker:
 		_marker.global_position = Vector3(pos.x, 0.05, pos.z)
+	if _fx_affix:
+		_fx_affix.global_position = Vector3(pos.x, 0.058, pos.z)
 
 
 func _move_anim() -> String:
@@ -743,7 +763,7 @@ func _update_visuals() -> void:
 		_rim_dirty = false
 		var rim := Color(0, 0, 0, 0)
 		if affix != "":
-			rim = Color(1.0, 0.2, 0.1, 0.5)
+			rim = Color(battle.vfx.affix_color(affix), 0.65)
 		if mark_t > 0.0:
 			rim = Color(0.65, 0.4, 1.0, 0.9)
 		if chill_t > 0.0:
@@ -776,13 +796,15 @@ func _update_status_fx(delta: float) -> void:
 	var stunned := stun_t > 0.0
 	var confused := confuse_t > 0.0
 	var marked := mark_t > 0.0
-	var broken := armor_break_t > 0.0
+	var broken := armor_break_t > 0.0 or vulnerable_t > 0.0
 	var frozen := freeze_t > 0.0
 	var key := int(rooted) | int(slowed) << 1 | int(chilled) << 2 | int(magnet) << 3 | int(stunned) << 4 \
 		| int(confused) << 5 | int(marked) << 6 | int(broken) << 7 | int(frozen) << 8
 	if key != _fx_key:
+		if frozen and not (_fx_key & (1 << 8)):
+			vfx.freeze_crack(self)
 		_fx_key = key
-		var ground := rooted or slowed or chilled or magnet
+		var ground := rooted or slowed or chilled or magnet or frozen
 		if ground and _fx_ground == null:
 			_fx_ground = vfx.make_status_ground()
 			add_child(_fx_ground)
@@ -790,7 +812,7 @@ func _update_status_fx(delta: float) -> void:
 			_fx_ground.scale = Vector3(r, 1, r)
 		if _fx_ground:
 			_fx_ground.visible = ground
-			_fx_ground.set_instance_shader_parameter("st", Vector4(float(rooted), float(slowed), float(chilled), float(magnet)))
+			_fx_ground.set_instance_shader_parameter("st", Vector4(float(rooted), float(slowed), float(chilled or frozen), float(magnet)))
 			if slowed:
 				var sc := Color(0.5, 0.7, 1.0)
 				for k in slows.keys():
@@ -803,7 +825,7 @@ func _update_status_fx(delta: float) -> void:
 			var hs := clampf(height / 2.6, 0.8, 2.2)
 			# Above the health bar, which grows upward when the camera is far away.
 			_fx_head.position = Vector3(0, height + 1.0 * hs + 0.2, 0)
-			_fx_head.scale = Vector3(1.5 * hs, 0.75 * hs, 1.0)
+			_fx_head.scale = Vector3(1.85 * hs, 0.92 * hs, 1.0)
 		if _fx_head:
 			_fx_head.visible = head
 			_fx_head.set_instance_shader_parameter("st", Vector4(float(stunned), float(confused), float(marked), float(broken)))
@@ -818,6 +840,7 @@ func _update_status_fx(delta: float) -> void:
 			add_child(_fx_ice)
 			_fx_ice.scale = Vector3(height * 0.44, height * 1.02, height * 0.44)
 			_fx_ice.rotation.y = randf() * TAU
+			_fx_ice.set_instance_shader_parameter("tint", Color(0.5, 0.9, 1.0, 1.0))
 		if _fx_ice:
 			_fx_ice.visible = _ice_k > 0.0
 			_fx_ice.set_instance_shader_parameter("fade", _ice_k)
@@ -849,23 +872,55 @@ func _update_status_fx(delta: float) -> void:
 		if _fx_bubble:
 			_fx_bubble.visible = _bubble_k > 0.0
 			_fx_bubble.set_instance_shader_parameter("build", _bubble_k)
+	# Flames clinging to the body while burning (a camera-facing fire sheet just in front).
+	var burn_target := 1.0 if burn_t > 0.0 else 0.0
+	if _burn_k != burn_target or burn_t > 0.0:
+		_burn_k = move_toward(_burn_k, burn_target, delta * (6.0 if burn_t > 0.0 else 3.0))
+		if _fx_flame == null and _burn_k > 0.0:
+			_fx_flame = vfx.make_status_flame()
+			add_child(_fx_flame)
+			_fx_flame.top_level = true
+		if _fx_flame:
+			_fx_flame.visible = _burn_k > 0.0
+			if _fx_flame.visible:
+				var to_cam := vfx.camera_pos() - global_position
+				to_cam.y = 0.0
+				to_cam = to_cam.normalized() if to_cam.length_squared() > 0.0001 else Vector3.BACK
+				_fx_flame.global_position = global_position + to_cam * 0.55 * height / 1.8 + Vector3(0, 0.05, 0)
+				var fl := 0.92 + 0.08 * sin(Time.get_ticks_msec() * 0.023 + spawn_order)
+				_fx_flame.scale = Vector3(height * 0.62, height * 1.05 * fl, 1.0)
+				# progress 0.3 holds the full flame; 0.0..0.1 grows it, 0.85..1.0 fades it.
+				_fx_flame.set_instance_shader_parameter("progress", 0.3 if _burn_k >= 1.0 else (0.1 * _burn_k if burn_t > 0.0 else 1.0 - 0.15 * _burn_k))
 	if steal_t > 0.0:
 		vfx.status_steal(global_position, route.direction_at(d), height, delta)
 	if burn_t > 0.0:
 		vfx.status_burn(global_position, height, delta)
 	if chilled and not frozen:
 		vfx.status_chill(global_position, height, delta)
+	if frozen:
+		vfx.status_frozen(global_position, height, delta)
+	if slowed and not frozen and not rooted:
+		var sc := Color(0.5, 0.7, 1.0)
+		for k in slows.keys():
+			sc = SLOW_COLORS.get(k, sc)
+		vfx.status_slow(global_position, route.direction_at(d), height, delta, sc)
+	if affix != "" and not frozen:
+		vfx.status_affix(affix, global_position, route.direction_at(d), height, delta)
+		if affix == "tough" and _fx_affix:
+			_affix_t += delta
+			_fx_affix.set_instance_shader_parameter("progress", 0.7 + 0.3 * sin(_affix_t * 5.0))
 	if magnet:
 		vfx.status_magnet(global_position, magnet_center - global_position, height, delta)
 
 
 func _clear_status_fx() -> void:
-	for n in [_fx_ground, _fx_head, _fx_ice, _fx_cage, _fx_bubble]:
+	for n in [_fx_ground, _fx_head, _fx_ice, _fx_cage, _fx_bubble, _fx_flame, _fx_affix]:
 		if n:
 			n.visible = false
 	_fx_key = 0
 	_ice_k = 0.0
 	_cage_k = 0.0
+	_burn_k = 0.0
 
 
 # ---------------------------------------------------------------- behaviours
@@ -989,7 +1044,12 @@ func _start_telegraph(kind: String, pos: Vector3, radius: float, time: float) ->
 	telegraph_pos = pos
 	telegraph_t = time
 	var col := Color(1.0, 0.15, 0.1, 0.9) if kind != "phase" else Color(0.7, 0.4, 1.0, 0.9)
-	telegraph_node = battle.vfx.telegraph(pos, radius, col, time)
+	if kind == "homerun":
+		col = Color(1.0, 0.45, 0.08, 0.92)
+	telegraph_node = battle.vfx.danger_zone(pos, radius, col, time)
+	if is_boss:
+		# The boss itself glows in the warning colour while it winds up.
+		model.flash(0.35 if battle.vfx.reduce_flashes else 0.6)
 	match kind:
 		"swing", "homerun":
 			model.play_action("swing", model.anim_length("swing") / maxf(time + 0.4, 0.1))
@@ -1023,19 +1083,19 @@ func _resolve_telegraph() -> void:
 		"swing":
 			Audio.play("swing_whoosh")
 			_stun_defenders(telegraph_pos, 3.6, 2.0)
-			battle.vfx.shockwave(telegraph_pos, 3.6, Color(1.0, 0.4, 0.2))
+			battle.vfx.boss_impact(telegraph_pos, 3.6, Color(1.0, 0.4, 0.2), "swing")
 		"slam":
 			Audio.play("boss_slam")
 			battle.shake(0.6)
 			_stun_defenders(telegraph_pos, 5.0, 2.5)
-			battle.vfx.shockwave(telegraph_pos, 5.0, Color(1.0, 0.5, 0.1))
-			battle.vfx.dust(telegraph_pos, 3.0)
+			battle.vfx.boss_impact(telegraph_pos, 5.0, Color(1.0, 0.5, 0.1), "slam")
 			vulnerable_t = 4.0
 			_rim_dirty = true
 			battle.notify("ARMOR CRACKED — ATTACK NOW!", Color(1.0, 0.8, 0.2))
 		"phase":
 			untargetable_t = 1.6
 			model.set_ghost(0.3)
+			battle.vfx.boss_impact(telegraph_pos, 3.0, Color(0.7, 0.4, 1.0), "phase")
 			for i in 3:
 				battle.spawn_enemy("decoy", route, minf(d + randf_range(-2.0, 2.0), route.length - 2.0),
 					{"lateral": randf_range(-1.6, 1.6), "hp_mult": 1.0})
@@ -1048,7 +1108,7 @@ func _resolve_telegraph() -> void:
 			Audio.play("boss_slam", -3.0)
 			battle.shake(0.8)
 			_stun_defenders(telegraph_pos, 3.6, 3.0)
-			battle.vfx.shockwave(telegraph_pos, 3.6, Color(1.0, 0.75, 0.2))
+			battle.vfx.boss_impact(telegraph_pos, 3.6, Color(1.0, 0.6, 0.15), "homerun")
 			battle.vfx.burst("explosion", telegraph_pos + Vector3(0, 0.5, 0), Color(1.0, 0.7, 0.2))
 
 

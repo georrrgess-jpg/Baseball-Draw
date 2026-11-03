@@ -5,6 +5,8 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 //   mode 0 shockwave (progress = age), 1 zone ring (progress = visibility),
 //   mode 2 telegraph (progress = fill), 3 thin pulse ring (progress = age),
 //   mode 4 imploding ring (progress = age)
+//   mode 5 danger zone (progress = time to impact 0..1): hazard band with stripes crawling
+//          inward, a fill that reaches the rim exactly on impact, a rim that pulses faster
 //   params: x thickness, y fill, z spin, w dashes
 #include "res://assets/shaders/vfx/fx_common.gdshaderinc"
 
@@ -23,7 +25,24 @@ void fragment() {
 	vec3 col = color.rgb;
 	float a = 0.0;
 	float glow = 0.0;
-	if (mode < 0.5 || mode > 2.5) {
+	if (mode > 4.5) {
+		float k = progress;
+		float inside = 1.0 - smoothstep(1.0 - aa, 1.0, r);
+		float rate = mix(5.0, params.z > 0.5 ? 9.0 : 22.0, k * k);   // params.z = 1: reduce flashes
+		float pulse = 0.6 + 0.4 * sin(TIME * rate);
+		float rim = smoothstep(1.0 - params.x - aa, 1.0 - params.x, r) * (1.0 - smoothstep(1.0 - aa, 1.0, r));
+		float band = smoothstep(0.8 - aa, 0.8, r) * inside;
+		float stripes = step(0.5, fract(ang * 18.0 / 6.2831853 + r * 3.0 + TIME * 1.6)) * band;
+		float fill = step(r, k) * inside;
+		float front = exp(-sq((r - k) / 0.04)) * inside;
+		float ticks = 0.0;
+		// Arrows on the rim pointing inward, every 45 degrees.
+		float sa = fract(ang * 8.0 / 6.2831853) - 0.5;
+		ticks = (1.0 - smoothstep(0.0, 0.06, abs(sa) - (0.93 - r) * 0.9)) * smoothstep(0.82, 0.86, r) * (1.0 - smoothstep(0.93, 0.95, r));
+		a = clamp(rim * pulse + stripes * (0.35 + 0.35 * k) + ticks * 0.6 + fill * (params.y + 0.3 * k) + front + inside * 0.1, 0.0, 1.0);
+		glow = rim * pulse * (1.0 + k) + front * 1.5 + fill * k * k * 0.8;
+		col = mix(col, vec3(1.0, 0.95, 0.85), front * 0.6 + smoothstep(0.92, 1.0, k) * 0.5);
+	} else if (mode < 0.5 || mode > 2.5) {
 		// Expanding shockwave: bright leading edge, soft wake, fades out.
 		float k = progress;
 		float front = 1.0 - pow(max(1.0 - k, 0.0), 3.0);

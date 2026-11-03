@@ -11,6 +11,10 @@ extends Node
 ##   stealer     Base Stealers take off while nobody aims at them, a Shielded elite's bubble
 ##               pops, and a slow catches a stealer stealing (--fx-hold, --fx-slow).
 ##   tag         Maya dash-tags a runner next to her post (catch + glove pop).
+##   status      a row of standing runners, one per status (burn, freeze, stun, slow, root,
+##               mark, confuse, vulnerable); defenders hold their throws.
+##   elites      one runner per elite affix (plain, swift, tough, plated, slippery, shielded).
+##   throws      every defender throws at a pack of sturdy runners (trails, hits, crits).
 ##   cast:<card> after --fx-cast=<s> (default 1.0) the card in hand slot 1 is "played" with the
 ##               HUD visible: the hand's cast flourish flies to the card's target (runners in
 ##               front of the infield; home plate or the caster for cards without a target).
@@ -81,6 +85,29 @@ func _view(focus: Vector3, yaw: float, pitch: float, dist: float) -> void:
 	if _has_cam_arg():
 		return
 	battle.cam.set_view(focus, yaw, pitch, dist, true)
+
+
+func _apply_status(e: Enemy, nm: String) -> void:
+	if not is_instance_valid(e):
+		return
+	match nm:
+		"burn":
+			e.apply_burn(1.0, 60.0, null)
+		"freeze":
+			e.apply_freeze(60.0)
+		"stun":
+			e.apply_stun(60.0)
+		"slow":
+			e.apply_slow("curveball", 0.4, 60.0)
+		"root":
+			e.apply_root(60.0)
+		"mark":
+			e.apply_mark(60.0, 0.3)
+		"confuse":
+			e.apply_confuse(60.0)
+		"vulnerable":
+			e.vulnerable_t = 60.0
+			e._rim_dirty = true
 
 
 func _start() -> void:
@@ -162,6 +189,73 @@ func _start() -> void:
 			battle.effects.execute(id, 1, {"point": point, "enemy": lead[0] if not lead.is_empty() else null, "defender": df, "valid": true})
 			if hud.has_method("on_card_played"):
 				hud.on_card_played(id))
+	elif scenario == "status":
+		# One runner per status, standing still in a row in front of the infield (no throws).
+		var d0 := route.length * 0.55
+		var names := ["burn", "freeze", "stun", "slow", "root", "mark", "confuse", "vulnerable"]
+		for i in names.size():
+			var e := battle.spawn_enemy("runner", route, d0 - i * 1.5, {"lateral": 0.0, "speed_mult": 0.02, "hp_mult": 1000.0})
+			var nm: String = names[i]
+			get_tree().create_timer(0.3, false).timeout.connect(func() -> void: _apply_status(e, nm))
+		for df in battle.defenders:
+			df.attack_cd = 1.0e9
+		_view(route.position_at(d0 - 5.0), 70.0, -30.0, 19.0)
+	elif scenario == "elites":
+		# One elite per affix (and a plain runner) walking slowly in front of the infield.
+		var d0 := route.length * 0.55
+		var affs := ["", "swift", "tough", "plated", "slippery", "shielded"]
+		for i in affs.size():
+			battle.spawn_enemy("runner", route, d0 - i * 1.8, {"lateral": 0.0, "speed_mult": 0.08, "hp_mult": 1000.0, "affix": affs[i]})
+		for df in battle.defenders:
+			df.attack_cd = 1.0e9
+		_view(route.position_at(d0 - 4.5), 70.0, -28.0, 18.0)
+	elif scenario == "throws":
+		# Every defender throws at a pack of sturdy runners in front of the infield.
+		var d0 := route.length * 0.55
+		for i in 10:
+			battle.spawn_enemy("runner", route, d0 - i * 0.8, {"lateral": randf_range(-1.2, 1.2), "speed_mult": 0.1, "hp_mult": 200.0})
+		for df in battle.defenders:
+			df.s_range = 60.0
+			df.s_crit = 0.3
+	elif scenario == "u8":
+		# Abilities and hits in one take (for the battle camera): a pack of runners being
+		# thrown at (trails, hits, crits, outs) on one path, one elite per affix on another,
+		# and two defenders winding up signature casts at --fx-cast (default 1.0 s).
+		var r1: Route = battle.routes[mini(1, battle.routes.size() - 1)]
+		var d0 := route.length * 0.62
+		var kinds := ["runner", "runner", "swarmer", "runner", "sprinter", "runner", "armored", "runner"]
+		for i in kinds.size():
+			battle.spawn_enemy(kinds[i], route, d0 - i * 0.9, {"lateral": randf_range(-1.0, 1.0), "speed_mult": 0.35})
+		var affs := ["swift", "tough", "plated", "slippery", "shielded"]
+		var d1 := r1.length * 0.5
+		for i in affs.size():
+			battle.spawn_enemy("runner", r1, d1 - i * 1.8, {"lateral": 0.0, "speed_mult": 0.08, "hp_mult": 1000.0, "affix": affs[i]})
+		for df in battle.defenders:
+			df.s_crit = 0.45
+		get_tree().create_timer(_arg_f("--fx-cast", 1.0), false).timeout.connect(func() -> void:
+			for i in mini(2, battle.defenders.size()):
+				# Same calls as CardEffects._cast for a linked card, minus the card's effect.
+				var df: Defender = battle.defenders[battle.defenders.size() - 1 - i * 3]
+				var card := str(df.data.get("signature", ""))
+				battle.vfx.burst("magic", df.model.chest_position(), Color(df.data.accent))
+				df.cast_special(func() -> void: pass, Field.MOUND)
+				battle.vfx.cards.anticipate(card, df, Field.MOUND, Defender.RELEASE.special / 1.3, "special"))
+	elif scenario == "bosses":
+		# All three bosses near the infield; their attacks are forced on a stagger so one set of
+		# shots catches each telegraph and impact: Iron Slugger and Grand Slammer at
+		# --fx-attack (default 1.0 s), Phantom Captain 0.9 s later.
+		var ids := ["iron_slugger", "grand_slammer", "phantom_captain"]
+		var at := _arg_f("--fx-attack", 1.0)
+		for i in ids.size():
+			var r: Route = battle.routes[i % battle.routes.size()]
+			var b := battle.spawn_enemy(ids[i], r, r.length * 0.62, {"lateral": 0.0, "hp_mult": 50.0, "speed_mult": 0.05})
+			b.ability_t = 1.0e9
+			var delay := at + (0.9 if ids[i] == "phantom_captain" else 0.0)
+			get_tree().create_timer(delay, false).timeout.connect(func() -> void:
+				if is_instance_valid(b) and b.alive:
+					b.ability_t = 0.0)
+		for df in battle.defenders:
+			df.attack_cd = 1.0e9
 	elif scenario == "tag":
 		var maya: Defender = null
 		for df in battle.defenders:
