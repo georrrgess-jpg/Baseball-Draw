@@ -665,3 +665,55 @@ High contrast). Portraits re-rendered.
 * **Test:** UI section `title`, also part of the full run.
 
 ![Title screen](screenshots/title.jpg)
+
+## 15. Update 8: "All-Star Tuning"
+
+Plan: `docs/plans/UPDATE_8_PLAN.md`. Reviews: `docs/plans/review/card_vibrancy.md`, `abilities_vibrancy.md`.
+
+**Mechanics** (simulator evidence: Quick Defense random decks, 75 games, plus 6–8-game rows; win rates are
+±15–20 points)
+
+| Area | Changes |
+|---|---|
+| Cards | Grand Slam Barrage: tighter radius, more and harder balls; it had the worst damage per energy. Bunt Trap: cost 2 → 3, it was an auto-include. Around the Horn: 130 → 120. Shadow Change: cost 5 → 4. Pickoff: cooldown 12 → 8, damage 150 → 170. Diamond Aura: cooldown 15 → 12. Intentional Walk: cooldown 8 → 6, lasts 7 s. |
+| Defenders | Rico: damage 24 → 30, faster throws, range 8.5 → 12 m. Rico went from 1 % to 3 % of team damage and from 1.6 to 4 outs a game; his catcher aura is now measured as an assist. Also Maya +, Nova +, Kai −, Hana −. Damage shares now run from 3 % to 32 % (they were 1 % to 34 %). |
+| Difficulty | Quick Defense Veteran and Legend now really are harder than Standard: their runners had less health than Quick Standard's. Veteran Siege waves are back up a step. Autopilot results: Quick Rookie 8/8, Standard 5/8, Veteran 3/8, Legend 1/8; Siege Standard 5/8, Veteran 4/8. |
+| Dugout | Scouting Report 30 → 50 coins (best value per coin). Card Mastery 40 → 30. Lucky Bat +5 % → +8 % crit. Hot Streak +25 % → +35 %. Captain's Rally's data and text now match what the game does (+8 % / +1.5 m per level). |
+| Auto Build | `ai_weight` in `cards.json` calibrates the power estimate with measured impact: Relief Pitcher, Called Shot, Momentum and Changeup up; Grand Slam Barrage, Instant Replay, Diamond Aura, Time Out and Field Vision down. |
+
+**Card effects, made vivid** (`src/vfx/card_fx.gd`, new `src/vfx/vivid_fx.gd`, three new shaders)
+* All 44 cards were reviewed from the battle camera: 36 scored under 4 of 5 for vibrancy before; after the
+  pass none is under 3, and the average rose from 2.9 to 3.8.
+* **Why effects looked washed out:** the filmic tonemap and a high glow threshold flattened colour, and additive
+  light over daytime grass turned pastel.
+* **Fix:** HDR cores pass the glow threshold, and ground light is mixed over the ground instead of added on top.
+* **Category palette:** 18 colour-over-life ramps in the category families (offense fire/scarlet, control
+  violet/ice, defense teal/emerald, utility gold/amber). Off-family cards moved into their family, for example
+  Power Throw from gold to comet red and Line Drive from white to blaze orange.
+* **Shared impact:** a `punch()` impact (core flare, halo, sparks, flash ring) and a ground glow that lingers
+  1–2 s.
+* **Legendaries:** a brief screen accent: radial streaks, coloured screen edges and a bloom lift, about 0.45 s.
+* **Settings:** particle counts follow the particle setting; reduce-flashes dims the flares and the accent.
+
+**Abilities and hits** (`vfx.gd`, `projectiles.gd`, `defender.gd`, `enemy.gd`, visuals only)
+* **Throws:** trails in each defender's accent colour, with a hot core. Each class ability has its own throw
+  look (Ace's burning fastball, Nova's crackle, Kai's laser line...).
+* **Signature casts:** the defender glows in their colour, with a ring at the feet and a burst at release.
+* **Crits and outs:** crits get a layered gold starburst with streaks; outs pop in the colour of the defender
+  who made them, with team-colour sparks.
+* **Status effects:** flames on burning runners, crisp ice, bigger stun stars, slow streaks.
+* **Elites:** a distinct colour, ground ring and particles for each of the five affixes.
+* **Bosses:** a warning zone that fills exactly to the moment of impact, and big impacts (shockwave, crater,
+  debris, dust, rays). The Phantom Captain's phase now has a violet implosion.
+
+**New features**
+* **Scouting Book** (`src/ui/scouting_book.gd`, `src/core/scouting.gd`):
+  * 18 entries: runner types including the bosses, and the elite affixes.
+  * Each has a 3D turntable, stat bars read from data, "What it does", "How to stop it", and good cards
+    against it (yours first).
+  * Entries unlock when first met in a game, and existing saves are migrated from history.
+  * Reachable from the main menu, the Play screen and the battle threat panel. In battle, clicking a threat
+    icon opens a scouting card and pauses the game.
+* **Combo hints in the hand:** a green arc with sparks links two cards that combo, both glow, the selected
+  card's partner pulses, and the tooltip names the combo.
+* **Good against:** the card inspector lists the opponents a card counters, with links into the book.
