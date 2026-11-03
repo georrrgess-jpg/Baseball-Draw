@@ -112,6 +112,9 @@ static func analyze(cid: String, level := 1) -> Dictionary:
 	var growth := 1.0 + DB.card_growth_rate * float(maxi(level, 1) - 1)
 	var rarity_power := (4.0 + 1.5 * DB.rarity_index(str(c.get("rarity", "common")))) * growth
 	var power := rarity_power if pp <= 0.01 else 0.75 * pp + 0.25 * rarity_power
+	# Measured calibration (simulator, Update 8): `ai_weight` in cards.json corrects cards whose
+	# real impact the parameter estimate misses (summons, replays, wide AoE spread thin...).
+	power *= float(c.get("ai_weight", 1.0))
 	var tags := _tags(c, v)
 	var role := str(c.get("role", ""))
 	if not role in ROLES:
