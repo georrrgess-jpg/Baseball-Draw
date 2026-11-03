@@ -1485,6 +1485,7 @@ func _refresh_detail() -> void:
 func _good_against_block(cid: String) -> Control:
 	var vb := VBoxContainer.new()
 	vb.name = "GoodAgainst"
+	vb.set_meta("good_against", cid)   # the name may be taken by the old block (freed at frame end)
 	vb.add_theme_constant_override("separation", 6)
 	vb.add_child(UITheme.hsep())
 	var h := HBoxContainer.new()
