@@ -1626,8 +1626,10 @@ func _test_card_clicks() -> void:
 			continue   # instant cards cast on the first click
 		var tpos := Field.MOUND
 		var lead := battle.lead_runners(1)
+		var aim: Enemy = null
 		if not lead.is_empty():
-			tpos = lead[0].global_position
+			aim = lead[0]
+			tpos = aim.global_position
 		var sp := _screen_of(tpos + Vector3(0, 1.0, 0))
 		var hand_before := battle.cards.hand.duplicate()
 		_mouse_move(sp)
@@ -1641,8 +1643,15 @@ func _test_card_clicks() -> void:
 			casts += 1
 		else:
 			var hc := get_viewport().gui_get_hovered_control()
-			print("[UITEST] note: no cast of '%s' at %s (targeting %d, over ui %s, preview %s)" % [pick.card_id, sp,
-				battle.targeting_index, hc.get_path() if hc else "none", battle.target_preview.get("valid", "?")])
+			# Why: the aimed runner may have been put out (or moved) between aiming and the click.
+			var aim_state := "no runner (aimed at the mound)"
+			if aim != null:
+				if not is_instance_valid(aim) or not aim.alive:
+					aim_state = "aimed runner was put out before the click"
+				else:
+					aim_state = "aimed runner alive, moved %.0f px" % _screen_of(aim.center()).distance_to(sp)
+			print("[UITEST] note: no cast of '%s' at %s (targeting %d, over ui %s, preview %s; %s)" % [pick.card_id, sp,
+				battle.targeting_index, hc.get_path() if hc else "none", battle.target_preview.get("valid", "?"), aim_state])
 	_check(clicks >= 8, "fast play made %d card clicks" % clicks)
 	_check(misses.is_empty(), "no fast card click was dropped (%d dropped: %s)" % [misses.size(), misses])
 	_check(casts >= 4, "fast play cast %d cards" % casts)
