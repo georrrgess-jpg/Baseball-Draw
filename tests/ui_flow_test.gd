@@ -390,6 +390,19 @@ func _test_u9_hub_play_results() -> void:
 			if (bd as Control).get_global_rect().end.y > label_y + 2.0:
 				covered.append(host.text)
 	_check(covered.is_empty(), "hub badges sit above the tile labels %s" % [covered])
+	# Login calendar: seven days, and CLAIM takes today's reward.
+	var days: Control = hub.find_child("LoginDays", true, false)
+	_check(days != null and days.get_child_count() == 7, "the login calendar shows seven days")
+	var claim: Button = hub.find_child("LoginClaim", true, false)
+	if DailyRewards.can_claim():
+		_check(claim != null, "the login calendar offers CLAIM")
+		if claim:
+			await _click(_button_center(claim))
+			await _wait(0.6)
+			_check(not DailyRewards.can_claim() and hub.find_child("LoginClaim", true, false) == null, "CLAIM takes today's login reward")
+	if Shop.gift_available():
+		_check(hub.find_child("FreeGiftButton", true, false) != null and _find_label(hub.find_child("ShopTile", true, false), "FREE GIFT"),
+			"the free gift shows in TODAY and on the Shop tile")
 	# Quick mode switch: Boss Rush changes what PLAY opens with.
 	var chip: Button = hub.find_child("Mode_boss_rush", true, false)
 	_check(chip != null, "the quick mode switch offers Boss Rush")
@@ -517,8 +530,14 @@ func _test_u9_hub_play_results() -> void:
 	_check(res.find_child("PromotionReward", true, false) != null, "Results show the promotion reward")
 	if not Boons.all().is_empty():
 		_check(res.find_child("BoonsTaken", true, false) != null, "Results list the boons drafted")
-	var coin_l: Label = res.find_child("Counter_COINS", true, false).find_child("Value", true, false) if res.find_child("Counter_COINS", true, false) else null
-	_check(coin_l != null and coin_l.text == "+600", "the coin counter finishes on the coins earned (%s)" % (coin_l.text if coin_l else "none"))
+	var counter: Control = res.find_child("Counter_COINS", true, false)
+	var coin_l: Label = counter.find_child("Value", true, false) if counter else null
+	for i in 50:   # a loaded machine renders slowly: give the count-up time to finish
+		if coin_l == null or coin_l.text == "+600":
+			break
+		await _wait(0.2)
+	_check(coin_l != null and coin_l.text == "+600", "the coin counter finishes on the coins earned (%s, alpha %.2f, in tree %s, paused %s)" % [
+		coin_l.text if coin_l else "none", counter.modulate.a if counter else -1.0, counter.is_inside_tree() if counter else false, get_tree().paused])
 	# Nothing is cut off at 1080p: the panels' content fits without scrolling.
 	var cut: Array = []
 	for sc in res.find_children("*", "ScrollContainer", true, false):
