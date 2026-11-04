@@ -213,7 +213,7 @@ func _deal_tile(o: Dictionary) -> Control:
 		sub = _copies_text(str(o.card), int(o.get("copies", 1)))
 	elif kind == "gift":
 		sub = "Free once a day"
-	elif kind == "pack" and DB.packs.has(str(o.get("pack", ""))):
+	elif kind in ["pack", "stars"] and DB.packs.has(str(o.get("pack", ""))):
 		sub = str(DB.pack(str(o.pack)).get("tagline", sub))
 	if sub != "":
 		var sl := UITheme.label(sub, UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
