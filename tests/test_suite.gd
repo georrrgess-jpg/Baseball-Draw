@@ -1121,6 +1121,8 @@ func test_battle_systems() -> void:
 	_clear()
 	await _test_update8_battle()
 	_clear()
+	await _test_update9_battle()
+	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
 	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
@@ -2025,3 +2027,84 @@ func test_update7_content() -> void:
 	for id in NEW_CARDS_U7:
 		ok(seen.has(id), "packs can contain %s" % id)
 	Profile.reset_profile()
+
+
+# ---------------------------------------------------------------- Update 9 (stream C: modes, boons, hooks)
+
+## Battle hooks for the other streams: runner_out once per out (after it is scored), the out coin
+## bonus and add_energy.
+func _test_update9_battle() -> void:
+	section("update 9 battle hooks (runner_out, coin bonus, energy)")
+	_hold_fire(true)
+	var route := battle.routes[0]
+	var outs_seen: Array = []
+	var cb := func(en: Enemy, info: Dictionary) -> void:
+		outs_seen.append([en, info, battle.run.outs_total])
+	battle.runner_out.connect(cb)
+	var pack: Array = []
+	for i in 3:
+		pack.append(battle.spawn_enemy("runner", route, route.length * 0.4 + i * 0.5, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01}))
+	await _wait(0.1)
+	var outs0 := battle.run.outs_total
+	(pack[0] as Enemy).apply_mark(5.0, 0.2)
+	battle.deal_damage(pack[0], 99999.0, {"source": battle.defenders[0], "kind": "throw", "card": "power_throw"})
+	battle.deal_damage(pack[1], 99999.0, {"kind": "fire"})
+	(pack[2] as Enemy).die({})
+	await _wait(0.1)
+	ok(outs_seen.size() == 3 and battle.run.outs_total == outs0 + 3, "runner_out fires once per out (%d signals, %d outs)" % [outs_seen.size(), battle.run.outs_total - outs0])
+	if outs_seen.size() == 3:
+		var i0: Dictionary = outs_seen[0][1]
+		ok(outs_seen[0][0] == pack[0] and int(outs_seen[0][2]) == outs0 + 1, "runner_out comes after the out is scored")
+		ok(i0.get("defender") == battle.defenders[0] and i0.get("source") == battle.defenders[0] and str(i0.get("card")) == "power_throw" and bool(i0.get("marked")),
+			"runner_out info names the defender, the card and the mark (%s)" % [i0])
+		var i1: Dictionary = outs_seen[1][1]
+		ok(i1.get("defender") == null and str(i1.get("card")) == "" and not bool(i1.get("marked")) and i1.has("source"), "runner_out info for a sourceless out")
+	# A decoy is not a runner: no signal.
+	outs_seen.clear()
+	var dec := battle.spawn_enemy("decoy", route, route.length * 0.4, {"lateral": 0.0})
+	dec.die({})
+	ok(outs_seen.is_empty(), "a vanishing decoy is not an out")
+	# Base Shield out at the plate: one signal, kind "plate".
+	battle.practice_invulnerable = true
+	battle.run.shields = 1
+	outs_seen.clear()
+	battle.spawn_enemy("runner", route, route.length - 0.2, {"lateral": 0.0})
+	await _wait(0.4)
+	ok(outs_seen.size() == 1 and str(outs_seen[0][1].get("kind")) == "plate", "a Base Shield out at the plate fires runner_out (%d)" % outs_seen.size())
+	battle.runner_out.disconnect(cb)
+	# Out coin bonus: (1 + bonuses) per out; fractions carry over; timed bonuses expire.
+	var base_mult := battle.out_coin_mult()
+	battle.add_out_coin_bonus(1.0, 5.0)
+	ok(is_equal_approx(battle.out_coin_mult(), base_mult + 1.0), "add_out_coin_bonus adds to the coin multiplier (%.2f)" % battle.out_coin_mult())
+	var coins0 := battle.run.coins
+	var r1 := battle.spawn_enemy("runner", route, route.length * 0.4, {"lateral": 0.0, "speed_mult": 0.01})
+	var expect := float(r1.coins) * battle.out_coin_mult()
+	battle.combo_timer = 0.0   # no combo bonus coins in these checks
+	r1.die({})
+	ok(absf(float(battle.run.coins - coins0) - expect) <= 1.0, "an out pays coins x the multiplier (%d, expected %.1f)" % [battle.run.coins - coins0, expect])
+	battle._update_buffs(5.5)
+	ok(is_equal_approx(battle.out_coin_mult(), base_mult), "a timed coin bonus expires")
+	battle.add_out_coin_bonus(0.25, 0.0)
+	battle._update_buffs(100.0)
+	ok(is_equal_approx(battle.out_coin_mult(), base_mult + 0.25), "a coin bonus with no time lasts the game")
+	battle._coin_bonuses.clear()
+	# +25 % on 2-coin runners pays over several outs (fractions carry).
+	battle.add_out_coin_bonus(0.25, 0.0)
+	coins0 = battle.run.coins
+	var paid_base := 0.0
+	for i in 8:
+		var rr := battle.spawn_enemy("runner", route, route.length * 0.4, {"lateral": 0.0, "speed_mult": 0.01})
+		paid_base += float(rr.coins) * base_mult
+		battle.combo_timer = 0.0
+		rr.die({})
+	ok(float(battle.run.coins - coins0) >= paid_base * 1.2, "a +25 %% coin bonus pays on small runners too (%d vs %.0f base)" % [battle.run.coins - coins0, paid_base])
+	battle._coin_bonuses.clear()
+	# add_energy: capped at the maximum.
+	battle.cards.infinite_energy = false
+	battle.cards.energy = 2.0
+	battle.add_energy(1.5)
+	ok(is_equal_approx(battle.cards.energy, 3.5), "add_energy adds energy")
+	battle.add_energy(50.0)
+	ok(is_equal_approx(battle.cards.energy, CardSystem.MAX_ENERGY), "add_energy caps at the maximum")
+	battle.cards.infinite_energy = true
+	_hold_fire(false)

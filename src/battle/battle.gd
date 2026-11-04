@@ -20,6 +20,10 @@ signal boss_intro_started(enemy: Enemy)
 signal boss_intro_finished(enemy: Enemy)
 ## A boss was put out (fires with the final hit, before the slow motion and the banner).
 signal boss_defeated(enemy: Enemy)
+## Update 9: a runner was put out, emitted once per out after the out is scored (outs, coins, combo).
+## info: {source (what put it out, may be null), defender (Defender or null), card (id or ""),
+## marked (the runner was marked), kind (hit kind; "plate" for a Base Shield out at the plate)}.
+signal runner_out(enemy: Enemy, info: Dictionary)
 
 const COMBO_WINDOW := 1.35
 const BREAK_TIME := 12.0
@@ -91,6 +95,9 @@ var _intro_seen := {}
 var _slowmo_tw: Tween
 var _slowmo_base := 1.0
 var spawn_hold := 0.0                # Rain Delay: seconds the gates stay closed
+## Update 9: timed in-game coin bonuses for outs ([{mult, t}], t <= 0 = rest of the game), see add_out_coin_bonus.
+var _coin_bonuses: Array = []
+var _coin_frac := 0.0                # fractional out coins carried over, so +25 % pays on 2-coin runners too
 
 
 func _ready() -> void:
@@ -750,7 +757,9 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 	run.add_card_impact(str(info.get("card", "")), 0.0, 1)
 	if src and is_instance_valid(src):
 		src.outs += 1
-	var coin := int(round(e.coins * (1.0 + run.modifier_total("coin_mult"))))
+	var coin_f := float(e.coins) * out_coin_mult() + _coin_frac
+	var coin := int(floor(coin_f + 0.0001))
+	_coin_frac = maxf(0.0, coin_f - float(coin))
 	run.coins += coin
 	run.coins_earned += coin
 	run.score += 10 + e.coins * 2
@@ -775,6 +784,28 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 		Profile.bump_stat("total_outs")
 	score_changed.emit()
 	_update_scoreboard()
+	runner_out.emit(e, {"source": info.get("source"), "defender": src if src and is_instance_valid(src) else null,
+		"card": str(info.get("card", "")), "marked": e.mark_t > 0.0, "kind": str(info.get("kind", ""))})
+
+
+## In-game coins per out are multiplied by this: 1 + run modifiers (Endless Home Cooking, boons)
+## + every active add_out_coin_bonus.
+func out_coin_mult() -> float:
+	var m := 1.0 + run.modifier_total("coin_mult")
+	for b in _coin_bonuses:
+		m += float(b.mult)
+	return maxf(m, 0.0)
+
+
+## Update 9 hook (Money Ball, coin boons): outs pay (1 + mult) more in-game coins for `time` game
+## seconds (time <= 0: for the rest of this game; not saved, re-add it on resume).
+func add_out_coin_bonus(mult: float, time: float) -> void:
+	_coin_bonuses.append({"mult": mult, "t": time if time > 0.0 else -1.0})
+
+
+## Update 9 hook: energy gain (capped at the maximum).
+func add_energy(n: float) -> void:
+	cards.add_energy(n)
 
 
 func _on_combo(n: int) -> void:
@@ -856,6 +887,7 @@ func on_enemy_reached_home(e: Enemy) -> void:
 			if is_instance_valid(e):
 				e.queue_free())
 		score_changed.emit()
+		runner_out.emit(e, {"source": null, "defender": null, "card": "", "marked": e.mark_t > 0.0, "kind": "plate"})
 		return
 	if not (practice and practice_invulnerable):
 		run.runs += runs_scored
@@ -1097,6 +1129,11 @@ func _update_buffs(delta: float) -> void:
 		buffs[i].t -= delta
 		if buffs[i].t <= 0.0:
 			buffs.remove_at(i)
+	for i in range(_coin_bonuses.size() - 1, -1, -1):
+		if float(_coin_bonuses[i].t) > 0.0:
+			_coin_bonuses[i].t = float(_coin_bonuses[i].t) - delta
+			if float(_coin_bonuses[i].t) <= 0.0:
+				_coin_bonuses.remove_at(i)
 	field_vision_active = buff_active("field_vision")
 	var cap: Defender = null
 	for df in defenders:
