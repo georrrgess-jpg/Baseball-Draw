@@ -2054,6 +2054,9 @@ func test_u9_e2_screens() -> void:
 	var full := int(Profile.pack_price("pro", 1).coins)
 	ok(ShopScreen._discount_pct({"kind": "pack", "pack": "pro", "price": {"coins": int(full * 0.75), "stars": 0}}) == 25, "pack deal discount is shown as -25%")
 	ok(ShopScreen._discount_pct({"kind": "card", "card": DB.card_order[0], "price": {"coins": 60, "stars": 0}}) == 0, "card deals show no pack discount")
+	ok(ShopScreen._discount_pct({"kind": "stars", "pack": "champion", "price": {"coins": 0, "stars": 40}, "full_price_stars": 50}) == 20, "star deal discount against its star price")
+	ok(ShopScreen.deal_title({"kind": "gift", "title": "FREE GIFT", "reward": {"coins": 100}}) == "100 coins", "the gift tile names what is inside (%s)" % ShopScreen.deal_title({"kind": "gift", "title": "FREE GIFT", "reward": {"coins": 100}}))
+	ok(ShopScreen.deal_title({"kind": "card", "card": "heat_wave", "title": ""}) == str(DB.card("heat_wave").name), "a card deal is titled with the card")
 	ok(ShopScreen.is_free({"price": {"coins": 0, "stars": 0}}) and not ShopScreen.is_free({"price": {"coins": 10, "stars": 0}}), "free gift detection")
 	Profile.data.coins = 100
 	ok(ShopScreen.shortfall({"coins": 250}) == "Need 150 more coins", "shortfall names the missing coins")
@@ -2069,7 +2072,9 @@ func test_u9_e2_screens() -> void:
 	# Packs: pity counter wording.
 	var packs_script: GDScript = load("res://src/ui/packs_screen.gd")
 	ok(str(packs_script.pity_text("Legendary", 12)) == "Legendary within 12 packs", "pity text counts packs")
-	ok(str(packs_script.pity_text("Legendary", 1)) == "Legendary in your next pack", "pity text for the last pack")
+	ok(str(packs_script.pity_text("Legendary", 1, "Pro or Champion Packs")) == "Legendary guaranteed in your next Pro or Champion Pack", "pity text for the last pack")
+	ok(str(packs_script.pity_text("Legendary", 19, "Pro or Champion Packs")) == "Legendary within 19 Pro or Champion Packs", "pity text names the packs that count")
+	ok(packs_script.pity_list({"pity": "epic"}) == ["epic"] and packs_script.pity_list({"pity": ["", "legendary"]}) == ["legendary"] and packs_script.pity_list({}).is_empty(), "pity results read as a list")
 	# Level road: one short caption per level, no wrapping.
 	for l in range(1, Profile.MAX_ACCOUNT_LEVEL + 1):
 		var cap := LevelRoadView.caption(l)

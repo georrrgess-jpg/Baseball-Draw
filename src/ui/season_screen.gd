@@ -83,11 +83,18 @@ func _fill_header() -> void:
 	nv.add_theme_constant_override("separation", 0)
 	nv.custom_minimum_size = Vector2(330, 0)
 	hb.add_child(nv)
-	var nm := str(cur.get("name", ""))
+	# The theme ("Opening Day") is the headline when the season has one, else its name.
+	var nm := str(cur.get("theme", ""))
+	if nm == "":
+		nm = str(cur.get("name", ""))
 	if nm == "":
 		nm = "Season %d" % int(cur.get("number", 1))
 	var cap := "SEASON %d" % int(cur.get("number", 1))
-	nv.add_child(UITheme.label(cap if nm.to_upper() != cap else "CURRENT SEASON", UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_body_bold()))
+	if nm.to_upper() == cap:
+		cap = "CURRENT SEASON"
+	if int(cur.get("days", 0)) > 0:
+		cap += "  ·  DAY %d OF %d" % [int(cur.get("day", 1)), int(cur.days)]
+	nv.add_child(UITheme.label(cap, UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_body_bold()))
 	var tl := UITheme.title(nm.to_upper(), 50, UITheme.OFFWHITE)
 	tl.name = "SeasonName"
 	nv.add_child(tl)
@@ -98,6 +105,16 @@ func _fill_header() -> void:
 	_countdown = UITheme.label("ENDS IN  " + format_left(int(cur.get("seconds_left", 0))), UITheme.FS_LEAD, UITheme.OFFWHITE, UITheme.font_header())
 	_countdown.name = "SeasonCountdown"
 	cd.add_child(_countdown)
+	# After a rollover: the old season's unclaimed rewards were paid out automatically.
+	var ss: Variant = Profile.data.get("season", {})
+	var ro: Dictionary = (ss as Dictionary).get("last_rollover", {}) if ss is Dictionary else {}
+	if not ro.is_empty() and int(ro.get("to", 0)) == int(cur.get("id", 0)) and not (ro.get("tiers", []) as Array).is_empty():
+		var n := (ro.tiers as Array).size()
+		var rl := UITheme.label("Season %d ended: %d unclaimed reward%s added to your account." % [int(ro.get("season", 0)), n, "" if n == 1 else "s"],
+			UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+		rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rl.custom_minimum_size = Vector2(330, 0)
+		nv.add_child(rl)
 	# Current tier and XP bar.
 	var pr := Season.tier_progress()
 	var tier := int(pr.get("tier", 0))

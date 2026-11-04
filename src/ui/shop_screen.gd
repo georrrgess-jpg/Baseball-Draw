@@ -193,6 +193,8 @@ func _deal_tile(o: Dictionary) -> Control:
 	var off := _discount_pct(o)
 	if off > 0 and not bought:
 		cap.add_child(UITheme.badge("-%d%%" % off, UITheme.SCARLET))
+	if bool(o.get("in_deck", false)) and not bought:
+		cap.add_child(UITheme.badge("IN DECK", UITheme.BLUE.darkened(0.2)))
 	# Picture.
 	var pic := CenterContainer.new()
 	pic.custom_minimum_size = Vector2(0, DEAL_CARD.y + 6)
@@ -201,9 +203,7 @@ func _deal_tile(o: Dictionary) -> Control:
 	if bought:
 		pic.modulate = Color(0.55, 0.55, 0.6)
 	# Title and text.
-	var title := str(o.get("title", ""))
-	if title == "":
-		title = _default_title(o)
+	var title := deal_title(o)
 	var tl := UITheme.label(title, UITheme.FS_H3 if title.length() < 16 else UITheme.FS_LEAD, UITheme.OFFWHITE if not bought else UITheme.MUTED, UITheme.font_header())
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -211,6 +211,10 @@ func _deal_tile(o: Dictionary) -> Control:
 	var sub := str(o.get("text", ""))
 	if kind == "card" and str(o.get("card", "")) != "":
 		sub = _copies_text(str(o.card), int(o.get("copies", 1)))
+	elif kind == "gift":
+		sub = "Free once a day"
+	elif kind == "pack" and DB.packs.has(str(o.get("pack", ""))):
+		sub = str(DB.pack(str(o.pack)).get("tagline", sub))
 	if sub != "":
 		var sl := UITheme.label(sub, UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
 		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -260,11 +264,12 @@ func _deal_picture(o: Dictionary, col: Color) -> Control:
 	return box
 
 
-## "+25" for stars or coins inside a gift / star deal (when the offer says how many).
+## "+25" for stars or coins inside a gift / star deal (the offer's reward, or the offer itself).
 static func _amount_text(o: Dictionary) -> String:
-	for k in ["stars", "coins", "amount"]:
-		if int(o.get(k, 0)) > 0:
-			return "+%s" % UITheme.format_int(int(o[k]))
+	for src in [o.get("reward", {}), o]:
+		for k in ["coins", "stars", "amount"]:
+			if int((src as Dictionary).get(k, 0)) > 0:
+				return "+%s" % UITheme.format_int(int(src[k]))
 	return ""
 
 
@@ -283,15 +288,38 @@ static func _default_title(o: Dictionary) -> String:
 
 ## Percent off a pack deal against the pack shop price (0 when not a pack or not cheaper).
 static func _discount_pct(o: Dictionary) -> int:
-	if str(o.get("kind", "")) != "pack" or not DB.packs.has(str(o.get("pack", ""))):
-		return 0
-	var full := Profile.pack_price(str(o.pack), 1)
+	var full_v := _full_price(o)
 	var pr: Dictionary = o.get("price", {})
-	var full_v := int(full.coins) if int(pr.get("coins", 0)) > 0 else int(full.stars)
 	var now := int(pr.get("coins", 0)) if int(pr.get("coins", 0)) > 0 else int(pr.get("stars", 0))
 	if full_v <= 0 or now >= full_v:
 		return 0
 	return int(round(100.0 * float(full_v - now) / full_v))
+
+
+## The usual price of a discounted pack or star deal, in the deal's currency (0 when there is none):
+## the offer's full_price / full_price_stars, else the pack shop price.
+static func _full_price(o: Dictionary) -> int:
+	var kind := str(o.get("kind", ""))
+	if not kind in ["pack", "stars"] or not DB.packs.has(str(o.get("pack", ""))):
+		return 0
+	var pr: Dictionary = o.get("price", {})
+	var in_coins := int(pr.get("coins", 0)) > 0
+	if in_coins and int(o.get("full_price", 0)) > 0:
+		return int(o.full_price)
+	if not in_coins and int(o.get("full_price_stars", 0)) > 0:
+		return int(o.full_price_stars)
+	var full := Profile.pack_price(str(o.pack), 1)
+	return int(full.coins) if in_coins else int(full.stars)
+
+
+## A deal's headline: the gift's contents, else the offer title (the card or pack name).
+static func deal_title(o: Dictionary) -> String:
+	if str(o.get("kind", "")) == "gift":
+		var r: Dictionary = o.get("reward", {})
+		var t := Rewards.bundle_text(r) if not r.is_empty() else ""
+		return t if t != "" else (str(o.text) if str(o.get("text", "")) != "" else "Free gift")
+	var title := str(o.get("title", ""))
+	return title if title != "" else _default_title(o)
 
 
 ## "3 copies  ·  Lv 3 needs 4 (you have 2)": what the deal does for the card.
@@ -331,8 +359,8 @@ func _deal_button(o: Dictionary, col: Color) -> Control:
 			cap.text = need
 			cap.add_theme_color_override("font_color", Color(1.0, 0.5, 0.45))
 		elif _discount_pct(o) > 0:
-			var full := Profile.pack_price(str(o.pack), 1)
-			cap.text = "Usually %s %s" % [UITheme.format_int(maxi(int(full.coins), int(full.stars))), "coins" if int(full.coins) > 0 else "stars"]
+			var in_coins := int(o.get("price", {}).get("coins", 0)) > 0
+			cap.text = "Usually %s %s" % [UITheme.format_int(_full_price(o)), "coins" if in_coins else "stars"]
 	box.add_child(cap)
 	deal_buttons[id] = b
 	return box
@@ -397,7 +425,7 @@ func _buy_offer(id: String) -> void:
 	var title := str(o.get("title", "")) if str(o.get("title", "")) != "" else _default_title(o)
 	match str(o.get("kind", "")):
 		"gift":
-			Router.toast("Free gift claimed: %s!" % title, "level")
+			Router.toast("Free gift claimed: %s!" % deal_title(o), "level")
 		"card":
 			Router.toast("Bought %d %s cop%s." % [int(o.get("copies", 1)), DB.card(str(o.card)).name, "y" if int(o.get("copies", 1)) == 1 else "ies"], "info")
 		"pack":

@@ -526,20 +526,29 @@ func _fill_info() -> void:
 	_info.add_child(UITheme.section_header("TEAM UNIFORM", "special", UITheme.GOLD, UITheme.FS_H3))
 	var uf := HFlowContainer.new()
 	uf.add_theme_constant_override("h_separation", 6)
+	# Season uniforms are Season Pass rewards (tier 30): only owned ones and this season's (locked) show.
+	var season_uniform := str(Season.current().get("uniform", ""))
 	for uid in DB.uniform_order:
 		var u: Dictionary = DB.uniforms[uid]
 		var owned: bool = uid in Profile.data.uniforms_owned
-		var label: String = u.name if owned else "%s (%d★)" % [u.name, int(u.price_stars)]
+		var for_sale := Profile.uniform_for_sale(uid)
+		if not owned and not for_sale and uid != season_uniform:
+			continue
+		var label: String = u.name
+		if not owned:
+			label = "%s (%d★)" % [u.name, int(u.get("price_stars", 0))] if for_sale else "%s (Season %d reward)" % [u.name, int(u.get("season", 0))]
 		var b := UITheme.small_button(label, Color(u.colors.JerseyTrim), 18)
 		b.toggle_mode = true
 		b.button_pressed = Profile.data.uniform == uid
+		if not owned and not for_sale:
+			b.disabled = true
+			b.tooltip_text = "Reach tier 30 of the Season Pass this season to earn the %s uniform." % u.name
 		b.pressed.connect(func() -> void:
 			if not owned:
-				if Profile.spend_stars(int(u.price_stars)):
-					Profile.data.uniforms_owned.append(uid)
+				if Profile.buy_uniform(uid):
 					Audio.play("purchase")
 				else:
-					Router.toast("Not enough stars. Earn stars from achievements.", "warn")
+					Router.toast("Not enough stars. Earn stars from achievements and the Season Pass.", "warn")
 					_fill_info()
 					return
 			Profile.data.uniform = uid
