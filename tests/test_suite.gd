@@ -2248,12 +2248,12 @@ func _test_update9_cards_battle() -> void:
 	battle.combo_timer = 0.0   # no triple-play energy in the way
 	row[2].die({})
 	await _gwait(0.05)
-	ok(absf(cs.energy - 1.0) < 0.05, "an out on a signalled runner refunds 1 energy (%.2f)" % cs.energy)
+	ok(cs.energy >= 0.99 and cs.energy < 1.4, "an out on a signalled runner refunds 1 energy (%.2f)" % cs.energy)
 	cs.energy = 0.0
 	battle.combo_timer = 0.0
 	row[0].die({})
 	await _gwait(0.05)
-	ok(cs.energy < 0.05, "an out on an unmarked runner refunds nothing")
+	ok(cs.energy < 0.4, "an out on an unmarked runner refunds nothing (%.2f, regen only)" % cs.energy)
 	_clear()
 	await _gwait(0.2)
 

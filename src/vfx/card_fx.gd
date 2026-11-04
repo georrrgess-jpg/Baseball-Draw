@@ -2565,20 +2565,23 @@ func firework_rocket(from: Vector3, to: Vector3, flight: float, i: int) -> void:
 			vfx.emit_one("v_glow", p, Vector3.ZERO, rc(ramp), 0.9, 0.25))
 
 
-## A shell bursts: a sphere of coloured sparks (on a runner it also punches the hit).
+## A shell bursts: a sphere of coloured sparks. On a runner (`hit`) the shell bursts a few
+## metres above it and its core streaks down onto the runner.
 func firework_burst(at: Vector3, i: int, hit: bool) -> void:
 	var ramp: String = FIREWORK_RAMPS[i % FIREWORK_RAMPS.size()]
 	var col := body(ramp, 1.0)
-	vfx.emit_one("flash", at, Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.4), 0.9), 2.4, 1.0)
-	vfx.emit_one("v_glow", at, Vector3.ZERO, rc(ramp), 4.0, 1.0)
-	vfx.emit_one("ring", at, Vector3.ZERO, pal(ramp, 1), 3.4, 1.0)
-	for k in vfx._count(34):
+	var shell := at + (Vector3(0, 3.2, 0) if hit else Vector3.ZERO)
+	vfx.emit_one("flash", shell, Vector3.ZERO, Color(col.lerp(Color.WHITE, 0.4), 0.9), 3.2, 1.0)
+	vfx.emit_one("v_glow", shell, Vector3.ZERO, rc(ramp), 5.0, 1.0)
+	vfx.emit_one("ring", shell, Vector3.ZERO, pal(ramp, 1), 4.2, 1.0)
+	for k in vfx._count(46):
 		var d := Vector3(randf_range(-1, 1), randf_range(-0.6, 1), randf_range(-1, 1)).normalized()
-		vfx.emit_one("v_spark", at, d * randf_range(7.0, 10.0), rc(ramp), 1.3, 1.2)
-	vfx.emit("v_ember", at, 10, rc(ramp), 4.0, 0.8, 1.0, 1.0, 1.4)
-	vfx.flash_light(at, col, 4.0, 12.0, 0.3)
+		vfx.emit_one("v_spark", shell, d * randf_range(8.0, 12.0), rc(ramp), 1.5, 1.3)
+	vfx.emit("v_ember", shell, 12, rc(ramp), 4.0, 0.8, 1.0, 1.1, 1.5)
+	vfx.flash_light(shell, col, 4.0, 14.0, 0.3)
 	if hit:
-		punch(at, ramp, 1.2, 8, 1.2, true)
+		vfx.ribbon(PackedVector3Array([shell, shell.lerp(at, 0.5), at]), body(ramp, 1.3), 0.2, 0.3, 0.0, true)
+		punch(at, ramp, 1.3, 8, 1.2, true)
 
 
 ## The grand finale: three huge shells over the crowd, gold willow embers raining down and a
@@ -2588,7 +2591,7 @@ func fireworks_finale(center: Vector3, r: float) -> void:
 	legend_accent(g + Vector3(0, 4.0, 0), "crimson", 1.2)
 	for j in 3:
 		var ramp: String = ["crimson", "solar", "sky"][j]
-		var top := g + Vector3((j - 1) * 3.0, 7.5 + j * 1.2, 0)
+		var top := g + Vector3((j - 1) * 3.0, 5.0 + j * 1.0, 0)
 		vfx.after(j * 0.12, func() -> void:
 			firework_burst(top, FIREWORK_RAMPS.find(ramp), false)
 			for k in vfx._count(30):
