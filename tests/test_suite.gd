@@ -2090,8 +2090,11 @@ func test_u9_e2_screens() -> void:
 		ok(ShopScreen.agent_info(str(a.id)).get("price", 0) == a.price, "agent_info finds %s" % a.id)
 	# Team: every defender has a readable unlock line; free agents mention the price.
 	var roster_script: GDScript = load("res://src/ui/roster_screen.gd")
-	ok(str(roster_script.unlock_text("moose")) == "Account level 13 or sign for 6,000 coins", "Moose's unlock text (%s)" % roster_script.unlock_text("moose"))
-	ok(str(roster_script.unlock_text("dex")) == "Reach account level 7", "Dex's unlock text")
+	# Read from data/defenders.json: the unlock levels and prices are tuned there.
+	var mu: Dictionary = DB.defender("moose").get("unlock", {})
+	var moose_text := "Account level %d or sign for %s coins" % [int(mu.get("value", 0)), UITheme.format_int(int(mu.get("coins", 0)))]
+	ok(str(roster_script.unlock_text("moose")) == moose_text, "Moose's unlock text (%s)" % roster_script.unlock_text("moose"))
+	ok(str(roster_script.unlock_text("dex")) == "Reach account level %d" % int(DB.defender("dex").get("unlock", {}).get("value", 0)), "Dex's unlock text")
 	# Packs: pity counter wording.
 	var packs_script: GDScript = load("res://src/ui/packs_screen.gd")
 	ok(str(packs_script.pity_text("Legendary", 12)) == "Legendary within 12 packs", "pity text counts packs")
@@ -2102,7 +2105,8 @@ func test_u9_e2_screens() -> void:
 	for l in range(1, Profile.MAX_ACCOUNT_LEVEL + 1):
 		var cap := LevelRoadView.caption(l)
 		ok(cap != "" and cap.length() <= 18, "level %d caption is short (%s)" % [l, cap])
-	ok(LevelRoadView.caption(7).ends_with("joins"), "a defender level says who joins (%s)" % LevelRoadView.caption(7))
+	var dex_level := int(DB.defender("dex").get("unlock", {}).get("value", 7))
+	ok(LevelRoadView.caption(dex_level).ends_with("joins"), "a defender level says who joins (%s)" % LevelRoadView.caption(dex_level))
 	# The screens build from the stubs or the real data.
 	Profile.data.coins = 1000
 	Profile.data.stars = 0
