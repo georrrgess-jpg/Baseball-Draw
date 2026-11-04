@@ -916,6 +916,10 @@ func refresh() -> void:
 		_fill_preview(info.preview)
 
 	var mods: Array[String] = []
+	if run.mode_id == "boss_rush" and run.max_innings > 0:   # Boss Rush: which boss closes this round
+		var boss_id := run.boss_for_inning(run.inning)
+		if boss_id != "":
+			mods.append("BOSS %d OF %d: %s" % [run.inning, run.max_innings, str(DB.enemy(boss_id).get("name", boss_id)).to_upper()])
 	var am: Dictionary = battle.arena.get("modifier", {})
 	if am.size() > 2:
 		mods.append("%s: %s" % [am.name, am.text])
