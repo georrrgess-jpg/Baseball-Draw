@@ -55,7 +55,18 @@ var airborne_t := 0.0
 var airborne_len := 0.0
 var blocked := false
 var vulnerable_t := 0.0
-var shield_hits := 0               # Shielded elites: hits the bubble still blocks
+var scout_t := 0.0                 # Scouting Report: this runner's whole type takes extra damage
+var scout_amt := 0.0
+var signal_t := 0.0                # Signal Caller: marked by the catcher (extra damage; an out refunds energy)
+var signal_amt := 0.0
+var signal_refund := 0.0
+var aura_vuln := 0.0               # defender auras (e.g. a trait): extra damage taken while refreshed
+var aura_vuln_t := 0.0
+var soak_t := 0.0                  # Sprinkler System: wet grass, a chance to slip every second
+var slip_chance := 0.0
+var slip_time := 0.0
+var _slip_roll := 0.0
+var shield_hits := 0              # Shielded elites: hits the bubble still blocks
 var steal_t := 0.0                 # Base Stealer: seconds left in the current steal
 var steal_cd := 0.0
 var _unwatched_t := 0.0
@@ -345,6 +356,57 @@ func apply_mark(time: float, amount: float) -> void:
 	_rim_dirty = true
 
 
+## Scouting Report (type-wide vulnerability; re-applied every frame to every runner of the type).
+func apply_scouted(time: float, amount: float) -> void:
+	if scout_t <= 0.0:
+		_rim_dirty = true
+	scout_t = maxf(scout_t, time)
+	scout_amt = maxf(scout_amt, amount)
+
+
+## Signal Caller: +`amount` damage taken for `time` seconds; an out while signalled refunds
+## `refund` energy (CardEffects pays it).
+func apply_signal(time: float, amount: float, refund := 0.0) -> void:
+	if signal_t <= 0.0:
+		_rim_dirty = true
+	signal_t = maxf(signal_t, time)
+	signal_amt = maxf(signal_amt, amount)
+	signal_refund = maxf(signal_refund, refund)
+
+
+func is_signaled() -> bool:
+	return signal_t > 0.0
+
+
+## A defender's aura: +`amount` damage taken from everyone. Call it every frame the runner is
+## inside the aura; it wears off `time` seconds after the last call.
+func apply_aura_vuln(amount: float, time := 0.2) -> void:
+	aura_vuln = maxf(aura_vuln if aura_vuln_t > 0.0 else 0.0, amount)
+	aura_vuln_t = maxf(aura_vuln_t, time)
+
+
+## Sprinkler System: wet for `time` seconds; every second a `chance` (0..1) to slip and be
+## stunned for `stun`. The first roll comes half a second after the runner gets wet.
+func apply_soak(time: float, chance: float, stun: float) -> void:
+	if is_airborne():
+		return
+	if soak_t <= 0.0:
+		_slip_roll = 0.5
+	soak_t = maxf(soak_t, time)
+	slip_chance = maxf(slip_chance, chance)
+	slip_time = maxf(slip_time, stun)
+
+
+## A wet runner loses its footing.
+func slip() -> void:
+	apply_stun(slip_time)
+	if model.action == "" and not is_boss:
+		model.play_action("hit", 1.6)
+	var fx = battle.vfx.cards if battle and battle.vfx else null
+	if fx and fx.has_method("slip"):
+		fx.slip(self)
+
+
 func apply_burn(dps: float, time: float, source: Node) -> void:
 	burn_dps = maxf(burn_dps, dps)
 	burn_t = maxf(burn_t, time)
@@ -411,6 +473,12 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 		mult += 0.10
 	if vulnerable_t > 0.0:
 		mult += 0.25
+	if scout_t > 0.0:
+		mult += scout_amt
+	if signal_t > 0.0:
+		mult += signal_amt
+	if aura_vuln_t > 0.0:
+		mult += aura_vuln
 	var arm := armor
 	if armor_break_t > 0.0 or vulnerable_t > 0.0:
 		arm = 0.0
@@ -654,6 +722,31 @@ func _tick_status(delta: float) -> void:
 		vulnerable_t -= delta
 		if vulnerable_t <= 0.0:
 			_rim_dirty = true
+	if scout_t > 0.0:
+		scout_t -= delta
+		if scout_t <= 0.0:
+			scout_amt = 0.0
+			_rim_dirty = true
+	if signal_t > 0.0:
+		signal_t -= delta
+		if signal_t <= 0.0:
+			signal_amt = 0.0
+			signal_refund = 0.0
+			_rim_dirty = true
+	if aura_vuln_t > 0.0:
+		aura_vuln_t -= delta
+		if aura_vuln_t <= 0.0:
+			aura_vuln = 0.0
+	if soak_t > 0.0:
+		soak_t -= delta
+		_slip_roll -= delta
+		if _slip_roll <= 0.0:
+			_slip_roll = 1.0
+			if stun_t <= 0.0 and freeze_t <= 0.0 and not is_airborne() and randf() < slip_chance:
+				slip()
+		if soak_t <= 0.0:
+			slip_chance = 0.0
+			slip_time = 0.0
 	if burn_t > 0.0:
 		burn_t -= delta
 		_burn_tick += delta
@@ -774,6 +867,10 @@ func _update_visuals() -> void:
 			rim = Color(battle.vfx.affix_color(affix), 0.65)
 		if mark_t > 0.0:
 			rim = Color(0.65, 0.4, 1.0, 0.9)
+		if scout_t > 0.0:
+			rim = Color(0.95, 0.42, 1.0, 0.95)
+		if signal_t > 0.0:
+			rim = Color(1.0, 0.6, 0.12, 1.0)
 		if chill_t > 0.0:
 			rim = Color(0.45, 0.85, 1.0, 0.9)
 		if burn_t > 0.0:
@@ -789,7 +886,7 @@ func _update_visuals() -> void:
 # ---------------------------------------------------------------- status visuals
 
 const SLOW_COLORS := {"curveball": Color(0.62, 0.45, 1.0), "changeup": Color(0.5, 0.55, 1.0), "shadow": Color(0.72, 0.3, 1.0),
-	"lockdown": Color(0.35, 0.68, 1.0)}
+	"lockdown": Color(0.35, 0.68, 1.0), "sprinkler": Color(0.25, 0.85, 1.0), "slick": Color(1.0, 0.6, 0.25)}
 
 
 ## Readable status markers that outlive the card's impact: a shackle / slow / frost /
@@ -803,7 +900,7 @@ func _update_status_fx(delta: float) -> void:
 	var magnet := magnet_t > 0.0
 	var stunned := stun_t > 0.0
 	var confused := confuse_t > 0.0
-	var marked := mark_t > 0.0
+	var marked := mark_t > 0.0 or scout_t > 0.0 or signal_t > 0.0
 	var broken := armor_break_t > 0.0 or vulnerable_t > 0.0
 	var frozen := freeze_t > 0.0
 	var key := int(rooted) | int(slowed) << 1 | int(chilled) << 2 | int(magnet) << 3 | int(stunned) << 4 \

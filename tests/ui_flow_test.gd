@@ -107,6 +107,10 @@ func _run() -> void:
 		await _test_card_clicks()
 		_finish()
 		return
+	if "--ui-test-section=newcards" in OS.get_cmdline_user_args():
+		await _test_new_card_clicks()
+		_finish()
+		return
 	if "--ui-test-section=daily" in OS.get_cmdline_user_args():
 		await _test_daily()
 		_finish()
@@ -1428,6 +1432,20 @@ func _test_card_clicks() -> void:
 	_check(clicks >= 8, "fast play made %d card clicks" % clicks)
 	_check(misses.is_empty(), "no fast card click was dropped (%d dropped: %s)" % [misses.size(), misses])
 	_check(casts >= 4, "fast play cast %d cards" % casts)
+
+
+## Update 9 cards (Stream B): the hand hit map and fast play with decks made of the twelve new
+## cards (two decks, so every new card is dealt into the hand).
+func _test_new_card_clicks() -> void:
+	var saved: Array = Profile.data.deck.duplicate()
+	var decks := [["scouting_report", "sprinkler_system", "sweet_spot", "rally_monkey", "second_wind", "money_ball", "scoop_and_tag", "signal_caller"],
+		["hidden_ball_trick", "worm_burner", "fireworks_night", "ground_rule_double", "scouting_report", "sprinkler_system", "sweet_spot", "rally_monkey"]]
+	for deck in decks:
+		Profile.data.deck = deck.duplicate()
+		battle = null
+		await _test_card_clicks()
+		_check(battle != null and deck.all(func(id: String) -> bool: return id in battle.cards.deck), "the battle plays the new-card deck %s" % [deck])
+	Profile.data.deck = saved
 
 
 func _finish() -> void:
