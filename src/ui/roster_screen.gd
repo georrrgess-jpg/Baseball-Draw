@@ -112,15 +112,22 @@ func _ready() -> void:
 						if ok:
 							_refresh())
 	_screen.set_help("roster", func() -> Dictionary:
-		return {"team_intro": _grid, "team_road": _road_box, "team_traits": _traits_head}, _hint_features)
+		return {"team_intro": _grid, "team_road": _road_box, "team_traits": _traits_head, "team_free_agents": _grid}, _hint_features)
 
 
-## Traits are explained automatically once a defender has reached a trait level.
+## Traits are explained automatically once a defender has reached a trait level; free agents
+## once one can be signed.
 func _hint_features() -> Array:
+	var out: Array = []
 	for id in DB.defender_order:
 		if Profile.is_defender_unlocked(id) and Profile.pending_traits(id) > 0:
-			return ["team_traits"]
-	return []
+			out.append("team_traits")
+			break
+	for fa in Shop.free_agents():
+		if not bool(fa.get("signed", false)):
+			out.append("team_free_agents")
+			break
+	return out
 
 
 func _build_stage() -> void:

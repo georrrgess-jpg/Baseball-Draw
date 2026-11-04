@@ -24,8 +24,9 @@ shot boss 22 --test-battle=standard --auto --profile=shots --start-inning=9 --st
 shot setup 7 --test-battle=standard --profile=shots --no-help
 shot tutorial 8 --test-battle=quick --profile=shots_tutorial --fresh-profile
 shot dugout 9 --test-battle=standard --profile=shots --start-inning=3 --open-dugout --no-help
-shot results 12 --test-battle=quick --profile=shots --start-inning=3 --show-results --no-help
-shot play_menu 5 --scene=play_menu --profile=shots
+shot results 12 --test-battle=quick --profile=shots --start-inning=3 --show-results --no-help --demo-results --demo-mastery
+shot play_menu 5 --scene=play_menu --profile=shots --no-help
+shot play_boss_rush 5 --scene=play_menu --profile=shots --play-mode=boss_rush --no-help
 shot play_daily 6 --scene=play_menu --profile=shots --play-mode=daily
 shot deck_builder 6 --scene=deck_builder --profile=shots_upg --fresh-profile --grant-demo-cards --demo-remove=2 --auto-build --no-hints
 shot card_compare 7 --scene=deck_builder --profile=shots_upg --grant-demo-cards --no-hints --compare=heat_wave,splitter
@@ -33,6 +34,8 @@ shot scouting_book 7 --scene=scouting_book --profile=shots --no-hints --scout-de
 shot card_upgrades 6 --scene=card_upgrades --profile=shots_upg --grant-demo-cards
 shot roster 7 --scene=roster --profile=shots
 shot progression 5 --scene=progression --profile=shots
+shot shop 6 --scene=shop --profile=shots --no-help
+shot season 6 --scene=season --profile=shots --no-help
 shot missions 5 --scene=progression --profile=shots --tab=1
 shot arena_neon_diamond 16 --test-battle=quick --auto --profile=shots --arena=neon_diamond --cam-view=0,-4,20,-30,62
 shot arena_frostpark 16 --test-battle=quick --auto --profile=shots --arena=frostpark --cam-view=0,-4,20,-30,62
