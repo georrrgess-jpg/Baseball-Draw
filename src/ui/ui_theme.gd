@@ -507,6 +507,144 @@ static func arena_thumbnail(id: String) -> Texture2D:
 	return null
 
 
+## Win streak colour (the flame on the hub, the Play screen and Results).
+const FLAME := Color("#FF8A3D")
+
+
+## Notification bubble on a control's top-right corner, overlapping its edge, so it never covers
+## the control's label (half-width tiles have no room beside the text).
+static func corner_badge(target: Control, text: String, color := SCARLET) -> PanelContainer:
+	var bd := badge(text, color)
+	bd.name = "CornerBadge"
+	bd.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	bd.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	bd.grow_vertical = Control.GROW_DIRECTION_END
+	bd.offset_left = 0
+	bd.offset_right = 8
+	bd.offset_top = -12
+	bd.offset_bottom = -12
+	bd.z_index = 1
+	target.add_child(bd)
+	return bd
+
+
+## The win streak flame: a pill with a fire icon, the streak and the coin bonus it gives.
+## A streak of 0 shows a dim flame with what the next win starts.
+static func flame_chip(streak: int, bonus: float, size := FS_SMALL, compact := false) -> PanelContainer:
+	var hot := streak > 0
+	var col := FLAME if hot else MUTED
+	var p := PanelContainer.new()
+	p.name = "StreakFlame"
+	var s := panel_style(Color(col.darkened(0.72), 0.92), Color(col, 0.75 if hot else 0.3), 1, 16, 0)
+	s.content_margin_left = 8
+	s.content_margin_right = 12
+	s.content_margin_top = 2
+	s.content_margin_bottom = 2
+	p.add_theme_stylebox_override("panel", s)
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 5)
+	p.add_child(hb)
+	var ic := icon_rect("fire", size + 6, col.lightened(0.15))
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(ic)
+	var txt := ""
+	if compact:
+		txt = "%d" % streak
+	elif hot:
+		txt = "%d-WIN STREAK  ·  +%d%% COINS" % [streak, int(round(bonus * 100.0))]
+	else:
+		txt = "NO WIN STREAK"
+	var l := label(txt, size, col.lightened(0.3) if hot else MUTED, font_body_bold())
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(l)
+	p.tooltip_text = ("Win streak: %d wins in a row. Each win in a row adds +10%% coins (up to +50%%); a loss resets it." % streak) if hot \
+		else "Win games in a row for a coin bonus: +10% per win in the streak, up to +50%. A loss resets it."
+	if hot:
+		# A gentle flicker so the streak feels alive.
+		var tw := ic.create_tween().set_loops()
+		tw.tween_property(ic, "scale", Vector2(1.12, 1.12), 0.45).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(ic, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_SINE)
+		ic.resized.connect(func() -> void: ic.pivot_offset = ic.size * 0.5)
+	return p
+
+
+## A reward dictionary as [icon, short text, colour] parts. Understands the shapes the economy
+## code uses: {coins, stars, pack, packs, xp, uniform, card} and {type, amount/id}.
+static func reward_parts(r: Variant) -> Array:
+	var out: Array = []
+	if typeof(r) != TYPE_DICTIONARY:
+		return out
+	var d: Dictionary = r
+	if d.has("type") and not d.has("coins") and not d.has("pack") and not d.has("stars"):
+		var t := str(d.type)
+		var v: Variant = d.get("amount", d.get("value", d.get("id", "")))
+		d = {t: v}
+		if t in ["pack", "card", "uniform"]:
+			d[t] = str(v)
+	if int(d.get("coins", 0)) > 0:
+		out.append(["coin", format_int(int(d.coins)), GOLD])
+	var packs: Array = []
+	if str(d.get("pack", "")) != "":
+		packs.append(str(d.pack))
+	if typeof(d.get("packs", null)) == TYPE_ARRAY:
+		for pk in d.packs:
+			packs.append(str(pk.get("type", "")) if typeof(pk) == TYPE_DICTIONARY else str(pk))
+	for pk in packs:
+		var pd := DB.pack(pk)
+		var pc := Color(str(pd.get("color", "#2F7BE0"))).lightened(0.35)
+		out.append(["gift", str(pd.get("name", pk.capitalize())).replace(" Pack", "").to_upper(), pc])
+	if int(d.get("stars", 0)) > 0:
+		out.append(["star", str(int(d.stars)), STAR])
+	if int(d.get("xp", 0)) > 0:
+		out.append(["upgrade", "%d XP" % int(d.xp), GREEN])
+	if str(d.get("uniform", "")) != "":
+		out.append(["roster", "UNIFORM", PURPLE.lightened(0.3)])
+	if str(d.get("card", "")) != "" and DB.card(str(d.card)).has("name"):
+		out.append(["deck", str(DB.card(str(d.card)).name).to_upper(), BLUE.lightened(0.3)])
+	return out
+
+
+## Reward icons with amounts in one row.
+static func reward_row(r: Variant, size := FS_SMALL) -> HBoxContainer:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for part in reward_parts(r):
+		var c := HBoxContainer.new()
+		c.add_theme_constant_override("separation", 3)
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ic := icon_rect(part[0], size + 2, part[2])
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		c.add_child(ic)
+		c.add_child(label(part[1], size, part[2], font_header()))
+		hb.add_child(c)
+	return hb
+
+
+## "3d 4h", "5h 12m", "12m 05s" for countdowns.
+static func format_duration(secs: int) -> String:
+	secs = maxi(0, secs)
+	var d := secs / 86400
+	var h := (secs % 86400) / 3600
+	var m := (secs % 3600) / 60
+	if d > 0:
+		return "%dd %dh" % [d, h]
+	if h > 0:
+		return "%dh %02dm" % [h, m]
+	return "%dm %02ds" % [m, secs % 60]
+
+
+## A tween bound to `node` that is killed the moment the node leaves the tree, so its callbacks
+## never run against freed controls (e.g. when a screen is closed mid-animation).
+static func bound_tween(node: Node) -> Tween:
+	var tw := node.create_tween()
+	node.tree_exiting.connect(func() -> void:
+		if tw.is_valid():
+			tw.kill(), CONNECT_ONE_SHOT)
+	return tw
+
+
 static func format_int(n: int) -> String:
 	var s := str(absi(n))
 	var out := ""
