@@ -8,6 +8,14 @@ extends Node
 ## tools need (tools/balance/simulate.py): runs per inning and per runner type, energy left
 ## unused, coins earned and spent, card plays and impact, defender shares, boss kill times
 ## and the rewards the run paid out. `--speed=<x>` plays at x times game speed.
+##
+## Dugout Draft (Update 9): the autopilot takes a boon a second after the cards appear, by each
+## boon's "ai_value" with some randomness (so the simulator covers every boon). `--boon-pick=random`
+## picks at random, `--boon-pick=first` takes the first card, and `--boon=<id>` always takes that
+## boon when it is offered.
+##
+## `--card-level=N` / `--defender-level=N` play with the deck's cards and the team at that level
+## (the simulator's "mid profile", e.g. cards 3 and defenders 5) instead of a fresh level-1 profile.
 
 var battle: Battle
 var card_timer := 1.0
@@ -37,6 +45,10 @@ var _boss_watch: Array = []
 var perf := false
 var perf_samples: Dictionary = {}   # phase -> {"process": [], "frame": [], "enemies": []}
 var _last_frame_us := 0
+var boon_pick := "value"            # value | random | first
+var boon_force := ""
+var boons_offered: Dictionary = {}  # boon id -> times offered (simulator coverage)
+var _boon_rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
@@ -59,6 +71,14 @@ func _ready() -> void:
 		if a.begins_with("--shop="):
 			var ids := a.split("=")[1]
 			shop_order = [] if ids == "none" else Array(ids.split(","))
+		if a.begins_with("--boon-pick="):
+			boon_pick = a.split("=")[1]
+		if a.begins_with("--boon="):
+			boon_force = a.split("=")[1]
+	_boon_rng.seed = hash([battle.run.run_seed, "autopilot_boons"])
+	_apply_profile_levels()
+	if battle.has_signal("draft_opened"):
+		battle.draft_opened.connect(_on_draft)
 	print("%s start mode=%s difficulty=%s arena=%s seed=%d team=%s deck=%s" % [log_prefix, battle.run.mode_id,
 		battle.run.difficulty_id, battle.run.arena_id, battle.run.run_seed, battle.run.team, battle.run.deck])
 
@@ -77,6 +97,67 @@ func _on_state(s: String) -> void:
 			runs_by_inning.append(r.runs - _inning_runs_start)
 	if s == "dugout":
 		get_tree().create_timer(2.5, true, false, true).timeout.connect(_shop)
+
+
+## `--card-level=N` / `--defender-level=N`: raise this (throwaway simulation) profile's deck cards and
+## team before the first wave.
+func _apply_profile_levels() -> void:
+	var changed := false
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--card-level="):
+			var lvl := clampi(int(a.split("=")[1]), 1, DB.card_max_level)
+			for cid in battle.run.deck:
+				var c: Dictionary = Profile.data.cards.get(cid, {})
+				c["owned"] = true
+				c["level"] = lvl
+				Profile.data.cards[cid] = c
+			changed = true
+		elif a.begins_with("--defender-level="):
+			var dl := clampi(int(a.split("=")[1]), 1, DB.defender_max_level)
+			for did in battle.run.team:
+				var d: Dictionary = Profile.data.defenders.get(did, {})
+				d["level"] = dl
+				Profile.data.defenders[did] = d
+			changed = true
+	if changed:
+		battle._refresh_team_stats()
+
+
+## Dugout Draft: wait until the cards are up (Battle.DRAFT_DELAY), then pick through the overlay.
+func _on_draft(offers: Array) -> void:
+	for id in offers:
+		boons_offered[id] = int(boons_offered.get(id, 0)) + 1
+	var pick := choose_boon(offers)
+	get_tree().create_timer(Battle.DRAFT_DELAY + 1.0, false).timeout.connect(func() -> void:
+		if battle.state != "draft":
+			return
+		var draft: Node = battle.hud.get("_draft")
+		if draft and is_instance_valid(draft) and draft.has_method("pick"):
+			draft.pick(pick)   # like a click on the card
+		else:
+			battle.choose_boon(pick)
+		print("%s boon %s (offered %s)" % [log_prefix, pick, offers]))
+
+
+## The boon the autopilot takes: --boon=<id> if offered, else the best "ai_value" with +-25 %
+## noise (value), a random one (random) or the first one (first).
+func choose_boon(offers: Array) -> String:
+	if boon_force != "" and boon_force in offers:
+		return boon_force
+	match boon_pick:
+		"random":
+			return str(offers[_boon_rng.randi() % offers.size()])
+		"first":
+			return str(offers[0])
+	var best := str(offers[0])
+	var best_v := -1.0
+	for id in offers:
+		var b := Boons.get_boon(str(id))
+		var v := float(b.get("ai_value", 5.0)) * _boon_rng.randf_range(0.75, 1.25)
+		if v > best_v:
+			best_v = v
+			best = str(id)
+	return best
 
 
 ## Dugout shopping: one level of each upgrade per visit, in priority order. `--shop=a,b,c` (or
@@ -264,6 +345,10 @@ func stats_dict() -> Dictionary:
 		"reward_coins": int(res.get("coins", 0)), "reward_xp": int(res.get("xp", 0)), "reward_rp": int(res.get("rp", 0)),
 		"reward_packs": res.get("packs", []).map(func(pk: Dictionary) -> String: return str(pk.type)),
 		"perf": perf_summary(),
+		# Update 9: Dugout Draft boons, Endless milestones, early calls, game time (setup + waves + breaks).
+		"boons": r.boons, "boons_offered": boons_offered, "milestones": r.milestones,
+		"early_calls": int(r.stats.get("early_calls", 0)), "time": float(r.stats.get("time", 0.0)),
+		"run_limit_final": r.run_limit,
 	}
 
 
@@ -303,6 +388,8 @@ func _process(delta: float) -> void:
 		card_plays[id] = int(card_plays.get(id, 0)) + 1
 		battle.targeting_index = -1
 		battle.effects.execute(id, battle.run.card_level(id), tgt)
+		if battle.has_method("on_card_played"):
+			battle.on_card_played(id)
 		print("%s cast %s" % [log_prefix, id])
 		return
 

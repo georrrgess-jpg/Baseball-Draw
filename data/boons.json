@@ -1,1 +1,46 @@
-{"_comment": "Dugout Draft boons (Update 9, filled by the modes stream).", "boons": []}
+{
+  "_comment": "Dugout Draft boons (Update 9, src/core/boons.gd). After a boss the manager picks 1 of 3; a boon lasts for the rest of the game and is never offered twice. 'effect' keys: damage, attack_speed, range, crit, energy_regen, draw_speed, card_cooldown, coin_mult (summed into RunState.modifier_total); shield and run_limit (applied once when taken, saved with the run); first_card_refund, wave_draw, wave_energy, home_slow + home_radius, boss_damage (read by Battle every wave/frame); card_level + categories (RunState.card_level). 'ai_value' steers the autopilot's pick.",
+  "rarities": {
+    "common": {"name": "Common", "weight": 10},
+    "rare": {"name": "Rare", "weight": 6},
+    "epic": {"name": "Epic", "weight": 3}
+  },
+  "boons": [
+    {"id": "heavy_lumber", "name": "Heavy Lumber", "rarity": "common", "icon": "damage", "text": "+15% damage for the whole team.",
+     "effect": {"damage": 0.15}, "ai_value": 10},
+    {"id": "quick_release", "name": "Quick Release", "rarity": "common", "icon": "attack_speed", "text": "+15% throw rate for the whole team.",
+     "effect": {"attack_speed": 0.15}, "ai_value": 10},
+    {"id": "long_toss", "name": "Long Toss", "rarity": "common", "icon": "range", "text": "+12% throwing range for the whole team.",
+     "effect": {"range": 0.12}, "ai_value": 7},
+    {"id": "sharp_eyes", "name": "Sharp Eyes", "rarity": "common", "icon": "accuracy", "text": "+10% critical hit chance for the whole team.",
+     "effect": {"crit": 0.10}, "ai_value": 8},
+    {"id": "bullpen_coffee", "name": "Bullpen Coffee", "rarity": "common", "icon": "energy", "text": "Energy refills 20% faster.",
+     "effect": {"energy_regen": 0.20}, "ai_value": 8},
+    {"id": "rally_caps", "name": "Rally Caps", "rarity": "common", "icon": "coin", "text": "Outs pay +30% coins for the dugout.",
+     "effect": {"coin_mult": 0.30}, "ai_value": 5},
+    {"id": "batting_helmet", "name": "Batting Helmet", "rarity": "common", "icon": "shield", "text": "+1 Base Shield right now (up to 3).",
+     "effect": {"shield": 1}, "ai_value": 9},
+    {"id": "quick_draw", "name": "Quick Draw", "rarity": "common", "icon": "deck", "text": "New cards arrive 25% faster.",
+     "effect": {"draw_speed": 0.25}, "ai_value": 8},
+    {"id": "leadoff_discount", "name": "Leadoff Discount", "rarity": "rare", "icon": "minus", "text": "The first card you play each wave refunds 2 energy.",
+     "effect": {"first_card_refund": 2}, "ai_value": 8},
+    {"id": "deep_bench", "name": "Deep Bench", "rarity": "rare", "icon": "plus", "text": "Draw an extra card at the start of every wave.",
+     "effect": {"wave_draw": 1}, "ai_value": 8},
+    {"id": "fresh_arms", "name": "Fresh Arms", "rarity": "rare", "icon": "cooldown", "text": "Card cooldowns are 30% shorter, signature cards included.",
+     "effect": {"card_cooldown": -0.30}, "ai_value": 7},
+    {"id": "infield_in", "name": "Infield In", "rarity": "rare", "icon": "defense", "text": "Runners within 9 m of home plate are 25% slower.",
+     "effect": {"home_slow": 0.25, "home_radius": 9.0}, "ai_value": 9},
+    {"id": "giant_killer", "name": "Giant Killer", "rarity": "rare", "icon": "boss", "text": "Bosses take +25% damage from everything.",
+     "effect": {"boss_damage": 0.25}, "ai_value": 9},
+    {"id": "pep_talk", "name": "Pep Talk", "rarity": "rare", "icon": "wave", "text": "+2 energy at the start of every wave.",
+     "effect": {"wave_energy": 2}, "ai_value": 8},
+    {"id": "slugger_clinic", "name": "Slugger's Clinic", "rarity": "epic", "icon": "offense", "text": "Every Offense and Utility card in your deck is 1 level higher.",
+     "effect": {"card_level": 1, "categories": ["offense", "utility"]}, "ai_value": 11},
+    {"id": "glove_clinic", "name": "Gold Glove Clinic", "rarity": "epic", "icon": "control", "text": "Every Defense and Control card in your deck is 1 level higher.",
+     "effect": {"card_level": 1, "categories": ["defense", "control"]}, "ai_value": 11},
+    {"id": "extra_innings", "name": "Extra Innings", "rarity": "epic", "icon": "runs", "text": "Allow 1 more run before the game is over.",
+     "effect": {"run_limit": 1}, "ai_value": 13},
+    {"id": "all_star_break", "name": "All-Star Break", "rarity": "epic", "icon": "star", "text": "+10% damage, throw rate and range for the whole team.",
+     "effect": {"damage": 0.10, "attack_speed": 0.10, "range": 0.10}, "ai_value": 12}
+  ]
+}

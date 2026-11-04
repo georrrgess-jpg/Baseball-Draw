@@ -50,6 +50,7 @@ func _run() -> void:
 	await test_menus()
 	test_update5_content()
 	test_update7_content()
+	test_update9_modes()
 	await test_scouting()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
@@ -2108,3 +2109,292 @@ func _test_update9_battle() -> void:
 	ok(is_equal_approx(battle.cards.energy, CardSystem.MAX_ENERGY), "add_energy caps at the maximum")
 	battle.cards.infinite_energy = true
 	_hold_fire(false)
+	await _test_update9_boons()
+	_clear()
+	await _test_update9_draft()
+
+
+## Dugout Draft data, offers, run state and save/resume; Boss Rush plan; Endless milestones.
+func test_update9_modes() -> void:
+	section("update 9 modes: boons data, offers, save/resume, Boss Rush, milestones")
+	var all := Boons.all()
+	ok(all.size() >= 18, "at least 18 boons (%d)" % all.size())
+	var rar := {}
+	var ids := {}
+	var fields_ok := true
+	for b: Dictionary in all:
+		rar[str(b.rarity)] = int(rar.get(str(b.rarity), 0)) + 1
+		ids[str(b.id)] = true
+		if str(b.get("name", "")) == "" or str(b.get("text", "")) == "" or DB.icon(str(b.get("icon", ""))) == null \
+				or not (b.rarity in Boons.RARITY_ORDER) or (b.get("effect", {}) as Dictionary).is_empty():
+			fields_ok = false
+			print("  bad boon ", b)
+	ok(fields_ok, "every boon has a name, text, an existing icon, a rarity and an effect")
+	ok(ids.size() == all.size(), "boon ids are unique")
+	ok(rar.get("common", 0) > rar.get("rare", 0) and rar.get("rare", 0) > rar.get("epic", 0) and rar.get("epic", 0) >= 2, "three rarities, commons most (%s)" % rar)
+	ok(Boons.rarity_weight("common") > Boons.rarity_weight("rare") and Boons.rarity_weight("rare") > Boons.rarity_weight("epic"), "rarer boons are offered less often")
+	var r := RunState.create(_cfg("standard"))
+	r.deck = Profile.STARTER_DECK.duplicate()
+	var rng := RandomNumberGenerator.new()
+	var three_ok := true
+	var never_taken := true
+	var seen := {}
+	var rare_plus := 0
+	for i in 200:
+		rng.seed = 1000 + i
+		r.boons = [all[i % all.size()].id, all[(i * 7) % all.size()].id]
+		var o := Boons.offer(r, rng)
+		var uniq := {}
+		for id in o:
+			uniq[id] = true
+			seen[id] = true
+			if id in r.boons:
+				never_taken = false
+		if o.size() != 3 or uniq.size() != 3:
+			three_ok = false
+		if o.any(func(id: String) -> bool: return Boons.get_boon(id).rarity != "common"):
+			rare_plus += 1
+	ok(three_ok, "an offer is three different boons")
+	ok(never_taken, "offers never repeat a boon already taken")
+	ok(seen.size() == all.size(), "every boon shows up in offers (%d of %d)" % [seen.size(), all.size()])
+	ok(rare_plus == 200, "every offer has at least one rare or epic boon (%d of 200)" % rare_plus)
+	rng.seed = 42
+	r.boons = []
+	var o1 := Boons.offer(r, rng)
+	rng.seed = 42
+	ok(Boons.offer(r, rng) == o1, "offers are deterministic for a seed (a replayed inning offers the same)")
+	var taken: Array = []
+	for b: Dictionary in all:
+		taken.append(b.id)
+	r.boons = taken.slice(0, taken.size() - 2)
+	ok(Boons.offer(r, rng).size() == 2, "with two boons left the offer has two")
+	r.boons = taken.duplicate()
+	ok(Boons.offer(r, rng).is_empty(), "with every boon taken there is no offer")
+	# Useless boons are not offered.
+	r.boons = []
+	r.shields = 3
+	ok(not Boons.available(r, "batting_helmet"), "no shield boon at 3 shields")
+	r.shields = 1
+	ok(Boons.available(r, "batting_helmet"), "the shield boon is offered below 3 shields")
+	var deck_before := r.deck.duplicate()
+	r.deck = ["power_throw", "heat_wave"]
+	ok(not Boons.available(r, "glove_clinic") and Boons.available(r, "slugger_clinic"), "a card clinic needs a card of its categories in the deck")
+	r.deck = deck_before
+	# Run state: boons feed the run modifiers and card levels, and survive save/resume.
+	var dmg0 := r.modifier_total("damage")
+	var lvl0 := r.card_level("power_throw")
+	var lvl_c0 := r.card_level("curveball")
+	r.boons = ["heavy_lumber", "all_star_break", "slugger_clinic", "rally_caps", "fresh_arms"]
+	ok(is_equal_approx(r.modifier_total("damage") - dmg0, 0.25), "boons add to the team damage modifier (+%.2f)" % (r.modifier_total("damage") - dmg0))
+	ok(r.card_level("power_throw") == lvl0 + 1 and r.card_level("curveball") == lvl_c0, "a card clinic raises its categories only")
+	ok(r.modifier_total("card_cooldown") < -0.2 and r.modifier_total("coin_mult") >= 0.3, "cooldown and coin boons feed the modifiers")
+	r.milestones = [5, 10]
+	var back := RunState.from_dict(JSON.parse_string(JSON.stringify(r.to_dict())))
+	ok(back.boons == r.boons and back.milestones == [5, 10], "boons and milestones survive save/resume (%s %s)" % [back.boons, back.milestones])
+	ok(is_equal_approx(back.modifier_total("damage"), r.modifier_total("damage")) and back.card_level("power_throw") == r.card_level("power_throw"),
+		"boon effects are the same after resume")
+	ok(back.stats.has("time"), "run stats keep the game time")
+	var summ := Boons.summary(["heavy_lumber", "nope", "extra_innings"])
+	ok(summ.size() == 2 and summ[1].rarity == "epic" and summ[0].has("icon") and summ[0].has("text"), "Boons.summary skips unknown ids")
+	# Draft modes.
+	ok(bool(DB.mode("standard").get("draft", false)) and bool(DB.mode("endless").get("draft", false)) and bool(DB.mode("boss_rush").get("draft", false)),
+		"Standard Siege, Endless and Boss Rush hold a draft after bosses")
+	ok(not bool(DB.mode("quick").get("draft", false)) and not bool(DB.mode("daily").get("draft", false)) and not bool(DB.mode("ranked").get("draft", false)),
+		"Quick, Daily and Promotion games have no draft")
+	# Boss Rush: three innings, each ending with a tougher boss.
+	var br := RunState.create(_cfg("boss_rush"))
+	ok(br.max_innings == 3 and br.waves_per_inning >= 2, "Boss Rush is three innings")
+	var bosses := ["iron_slugger", "phantom_captain", "grand_slammer"]
+	var plan_ok := true
+	var last_hp := 0.0
+	var rising := true
+	for i in 3:
+		br.inning = i + 1
+		ok(br.boss_for_inning(i + 1) == bosses[i], "Boss Rush inning %d ends with %s" % [i + 1, bosses[i]])
+		for w in br.waves_per_inning:
+			var wv := WaveGenerator.generate(br, w, 3)
+			var want: String = bosses[i] if w == br.waves_per_inning - 1 else ""
+			if str(wv.boss) != want:
+				plan_ok = false
+		var hp := WaveGenerator.hp_multiplier(br) * WaveGenerator.boss_hp_tuning(br, bosses[i])
+		rising = rising and hp > last_hp
+		last_hp = hp
+	ok(plan_ok, "Boss Rush: only each inning's last wave has the boss")
+	ok(rising, "Boss Rush bosses get tougher every inning")
+	# Endless milestones: every 5th inning cleared.
+	var en := RunState.create(_cfg("endless"))
+	var got: Array = []
+	for i in range(1, 21):
+		en.inning = i
+		if en.note_milestone():
+			got.append(i)
+	ok(got == [5, 10, 15, 20] and en.milestones == [5, 10, 15, 20], "Endless milestones every 5 innings (%s)" % [en.milestones])
+	en.inning = 10
+	en.note_milestone()
+	ok(en.milestones.size() == 4, "a milestone is recorded once")
+	var st := RunState.create(_cfg("standard"))
+	st.inning = 5
+	ok(not st.note_milestone() and st.milestones.is_empty(), "no milestones outside Endless")
+
+
+## Each boon really applies in a battle (practice field, defenders holding their throws).
+func _test_update9_boons() -> void:
+	section("update 9 boons apply in battle")
+	_hold_fire(true)
+	var run := battle.run
+	var keep_shields := run.shields
+	var keep_limit := run.run_limit
+	run.boons.clear()
+	battle._refresh_team_stats()
+	battle.cards.infinite_energy = false
+	var df: Defender = battle.defenders[0]
+	var route := battle.routes[0]
+	var applied := {}
+	for b: Dictionary in Boons.all():
+		var id := str(b.id)
+		run.boons.clear()
+		run.shields = 1
+		run.run_limit = keep_limit
+		battle._refresh_team_stats()
+		var before := {"dmg": df.s_damage, "int": df.s_interval, "rng": df.s_range, "crit": df.s_crit, "regen": battle.cards.regen_mult,
+			"draw": battle.cards.draw_interval, "cd": battle.cards.cooldown_mult, "coin": battle.out_coin_mult(), "shields": run.shields,
+			"limit": run.run_limit, "lvl_pt": run.card_level("power_throw"), "lvl_cb": run.card_level("curveball")}
+		Boons.apply(battle, id)
+		ok(id in run.boons, "%s is recorded in run.boons" % id)
+		var eff: Dictionary = b.effect
+		var good := true
+		if eff.has("damage"):
+			good = good and df.s_damage > before.dmg * 1.05
+		if eff.has("attack_speed"):
+			good = good and df.s_interval < before.int * 0.95
+		if eff.has("range"):
+			good = good and df.s_range > before.rng * 1.05
+		if eff.has("crit"):
+			good = good and df.s_crit > before.crit + 0.05
+		if eff.has("energy_regen"):
+			good = good and battle.cards.regen_mult > before.regen * 1.1
+		if eff.has("draw_speed"):
+			good = good and battle.cards.draw_interval < before.draw * 0.9
+		if eff.has("card_cooldown"):
+			good = good and battle.cards.cooldown_mult < before.cd - 0.2
+		if eff.has("coin_mult"):
+			good = good and battle.out_coin_mult() > before.coin + 0.2
+		if eff.has("shield"):
+			good = good and run.shields == before.shields + 1
+		if eff.has("run_limit"):
+			good = good and run.run_limit == before.limit + 1
+		if eff.has("card_level"):
+			var cats: Array = eff.categories
+			good = good and (run.card_level("power_throw") == before.lvl_pt + 1) == ("offense" in cats) \
+				and (run.card_level("curveball") == before.lvl_cb + 1) == ("control" in cats)
+		if eff.has("wave_energy") or eff.has("wave_draw") or eff.has("first_card_refund"):
+			battle.cards.energy = 2.0
+			battle.cards.hand = ["power_throw", "", "", "", ""]
+			battle.cards.draw_pile = ["curveball", "heat_wave", "lockdown"]
+			battle._wave_start_bonuses(false)
+			var e_after := battle.cards.energy
+			var h_after := battle.cards.hand_count()
+			if eff.has("wave_energy"):
+				good = good and is_equal_approx(e_after, 3.0 + float(eff.wave_energy))
+			if eff.has("wave_draw"):
+				good = good and h_after == 1 + int(eff.wave_draw)
+			if eff.has("first_card_refund"):
+				var st := battle.state
+				battle.state = "wave"
+				battle.cards.energy = 2.0
+				battle.on_card_played("power_throw")
+				var first := battle.cards.energy
+				battle.on_card_played("curveball")
+				good = good and is_equal_approx(first, 2.0 + float(eff.first_card_refund)) and is_equal_approx(battle.cards.energy, first)
+				battle.state = st
+		if eff.has("home_slow"):
+			# A runner a few metres from home (inside the radius) and one at the gate.
+			var nd := route.length - 2.0
+			for k in 60:
+				if Field.v2(route.position_at(route.length - k * 0.25)).distance_to(Field.v2(Field.HOME)) > float(eff.home_radius) - 2.0:
+					nd = route.length - k * 0.25
+					break
+			var near := battle.spawn_enemy("runner", route, nd, {"lateral": 0.0, "speed_mult": 0.01, "hp_mult": 40.0})
+			var far := battle.spawn_enemy("runner", route, 1.0, {"lateral": 0.0, "speed_mult": 0.01, "hp_mult": 40.0})
+			await _wait(0.05)
+			battle._update_buffs(0.0)
+			var with_boon := near.zone_slow
+			run.boons.erase(id)
+			battle._update_buffs(0.0)
+			var without := near.zone_slow
+			run.boons.append(id)
+			battle._update_buffs(0.0)
+			good = good and with_boon >= float(eff.home_slow) - 0.001 and (without < float(eff.home_slow) - 0.001 or near.home_guard) and far.zone_slow < 0.001
+			_clear()
+		if eff.has("boss_damage"):
+			var boss := battle.spawn_enemy("iron_slugger", route, route.length * 0.3, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01})
+			boss.ability_t = 999.0
+			var mook := battle.spawn_enemy("runner", route, route.length * 0.3, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+			await _wait(0.05)
+			battle._update_buffs(0.0)
+			var bd := battle.deal_damage(boss, 100.0, {"kind": "throw", "pierce": 1.0})
+			var md := battle.deal_damage(mook, 100.0, {"kind": "throw", "pierce": 1.0})
+			good = good and bd > md * (1.0 + float(eff.boss_damage)) - 1.0 and boss.aura_dr < 0.0
+			_clear()
+		applied[id] = good
+		ok(good, "boon %s has its effect" % id)
+	run.boons.clear()
+	run.shields = keep_shields
+	run.run_limit = keep_limit
+	battle._refresh_team_stats()
+	battle.cards.infinite_energy = true
+	ok(applied.size() == Boons.all().size(), "every boon was applied (%d)" % applied.size())
+	# A boon is taken once.
+	Boons.apply(battle, "heavy_lumber")
+	Boons.apply(battle, "heavy_lumber")
+	ok(run.boons.count("heavy_lumber") == 1, "a boon is never stacked twice")
+	run.boons.clear()
+	battle._refresh_team_stats()
+	_hold_fire(false)
+
+
+## The draft holds the game, offers three boons, takes one (from the overlay too) and goes on.
+func _test_update9_draft() -> void:
+	section("update 9 Dugout Draft flow (battle)")
+	var run := battle.run
+	run.boons.clear()
+	var st0 := battle.state
+	var opened: Array = []
+	var cb := func(o: Array) -> void: opened.append(o)
+	battle.draft_opened.connect(cb)
+	var continued := [0]
+	battle.open_draft(func() -> void: continued[0] += 1)
+	ok(battle.state == "draft" and battle.draft_offers.size() == 3 and opened.size() == 1, "open_draft holds the game with three offers")
+	ok(not battle.choose_boon("not_a_boon"), "an id that is not on offer is refused")
+	var e0 := battle.cards.energy
+	battle.select_card(0)
+	ok(battle.targeting_index == -1, "no cards can be aimed during the draft")
+	# The overlay appears after the boss finale.
+	await _wait(Battle.DRAFT_DELAY + 0.6)
+	var ov: Node = battle.hud.get("_draft")
+	ok(ov != null and is_instance_valid(ov) and (ov.get("cards") as Array).size() == 3, "the draft overlay shows three cards")
+	var pick: String = battle.draft_offers[1]
+	var stat0 := Profile.stat("boons_drafted")
+	battle.practice = false   # boons_drafted counts outside the Practice Field
+	if ov and is_instance_valid(ov):
+		ov.pick(pick)
+	else:
+		battle.choose_boon(pick)
+	battle.practice = true
+	ok(pick in run.boons and battle.draft_offers.is_empty(), "picking a card takes that boon (%s)" % pick)
+	ok(continued[0] == 1, "the game continues once after the pick")
+	ok(Profile.stat("boons_drafted") == stat0 + 1, "boons_drafted is counted")
+	ok(not battle.choose_boon(pick), "a second pick is ignored")
+	await _wait(1.2)
+	ok(battle.hud.get("_draft") == null or not is_instance_valid(battle.hud.get("_draft")), "the overlay closes after the pick")
+	await _wait(0.1)
+	# The HUD lists the boon as a chip with its text as the tooltip.
+	battle.hud.refresh()
+	var chips: Node = battle.hud.get("_boon_box")
+	var chip: Control = chips.get_node_or_null("Boon_" + pick) if chips else null
+	ok(chip != null and str(chip.tooltip_text).contains(str(Boons.get_boon(pick).text)), "the HUD shows the boon as a chip with a tooltip")
+	battle.draft_opened.disconnect(cb)
+	battle.set_state(st0)
+	run.boons.clear()
+	battle._refresh_team_stats()
+	battle.cards.energy = e0

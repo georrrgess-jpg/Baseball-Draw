@@ -43,6 +43,8 @@ var stats := {
 	"damage_by": {}, "outs_by": {}, "cards_played": 0, "double_plays": 0, "triple_plays": 0,
 	"grand_combos": 0, "max_combo": 0, "clean_innings": 0, "bosses": [], "runs_by_inning": [],
 	"curve_heat": 0, "shield_saves": 0, "early_calls": 0,
+	# Update 9: game seconds spent in setup, waves and breaks (Boss Rush best time), boss drafts held.
+	"time": 0.0, "drafts": 0,
 	# Filled by RunHighlights for the Results screen: per-inning summary and best moments.
 	"timeline": [], "highlights": {},
 }
@@ -122,6 +124,16 @@ func boss_for_inning(i: int) -> String:
 	return ""
 
 
+## Endless milestones (Update 9): call when the current inning is cleared. Every 5th inning is
+## recorded in `milestones` (Rewards pays them out at the end). Returns true for a milestone.
+func note_milestone() -> bool:
+	if not is_endless() or inning % 5 != 0:
+		return false
+	if not inning in milestones:
+		milestones.append(inning)
+	return true
+
+
 func upgrade_level(id: String) -> int:
 	return int(upgrades.get(id, 0))
 
@@ -140,7 +152,8 @@ static func round_price(v: float) -> int:
 	return int(round(v / 50.0)) * 50
 
 
-## Sum of a numeric key across bought upgrades, the arena modifier and active modifiers.
+## Sum of a numeric key across bought upgrades, the arena modifier, active modifiers and the
+## Dugout Draft boons taken (Boons.total).
 func modifier_total(key: String) -> float:
 	var total := 0.0
 	for id in upgrades.keys():
@@ -154,6 +167,8 @@ func modifier_total(key: String) -> float:
 		var md := DailyChallenge.modifier_def(str(mid))
 		if md.has(key):
 			total += float(md[key])
+	if not boons.is_empty():
+		total += Boons.total(boons, key)
 	return total
 
 
@@ -161,7 +176,10 @@ func card_level(card_id: String) -> int:
 	var base := Profile.card_level(card_id) if Profile.is_card_owned(card_id) else 1
 	if config.has("card_level"):   # Daily Challenge: every card at the same level for everyone
 		base = int(config.card_level)
-	return clampi(base + int(card_level_bonus.get(card_id, 0)), 1, DB.card_max_level + 2)
+	var bonus := int(card_level_bonus.get(card_id, 0))
+	if not boons.is_empty():   # Dugout Draft clinics: +1 level for whole card categories
+		bonus += Boons.card_level_bonus(boons, str(DB.card(card_id).get("category", "")))
+	return clampi(base + bonus, 1, DB.card_max_level + 2)
 
 
 func add_stat(key: String, amount: float = 1.0) -> void:
@@ -227,6 +245,8 @@ static func from_dict(d: Dictionary) -> RunState:
 	for k in ["team", "deck", "temp_cards", "modifiers", "boons", "milestones"]:
 		if d.has(k) and typeof(d[k]) == TYPE_ARRAY:
 			r.set(k, d[k].duplicate())
+	r.boons = r.boons.map(func(x: Variant) -> String: return str(x))
+	r.milestones = r.milestones.map(func(x: Variant) -> int: return int(x))   # JSON numbers load as floats
 	for k in ["card_level_bonus", "upgrades", "defender_bonus", "positions", "targeting"]:
 		if d.has(k) and typeof(d[k]) == TYPE_DICTIONARY:
 			r.set(k, d[k].duplicate(true))
