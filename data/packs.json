@@ -1,5 +1,7 @@
 {
- "_comment": "Card packs are the only way to receive new cards. Each slot rolls a rarity from the pack's weights; 'min' raises that slot to at least the given rarity. Duplicates become upgrade copies.",
+ "_comment": "Card packs are the only way to receive new cards. Each slot rolls a rarity from the pack's weights; 'min' raises that slot to at least the given rarity. Duplicates become upgrade copies; copies of a card already at max level turn into 'overflow_coins' per copy (Update 9). Pity (Update 9): 'pity.epic' packs in a row without an Epic or better make the next one's last slot at least Epic, and 'pity.legendary' packs without a Legendary make it Legendary; only the pack types in 'pity.counts' advance the counters (signature packs never do). Counters persist in the profile (Profile.pity_left).",
+ "pity": {"epic": 10, "legendary": 30, "counts": ["rookie", "pro", "champion"]},
+ "overflow_coins": {"common": 20, "uncommon": 40, "rare": 80, "epic": 160, "legendary": 400},
  "packs": [
   {
    "id": "rookie", "name": "Rookie Pack", "tagline": "Three cards to grow your collection.",

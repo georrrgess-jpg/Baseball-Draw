@@ -65,7 +65,7 @@ func default_profile() -> Dictionary:
 		"uniforms_owned": ["home"], "uniform": "home",
 		"arenas_unlocked": ["steel_yard"], "arena": "steel_yard",
 		"difficulty": "standard",
-		"stats": {}, "achievements": {}, "records": {"best_endless_inning": 0, "best_endless_score": 0},
+		"stats": {}, "achievements": {}, "records": {"best_endless_inning": 0, "best_endless_score": 0, "best_time_boss_rush": 0.0},
 		"history": [],
 		"current_run": null,
 		"packs": [],          # unopened packs: {"type", "source", "card" (signature packs)}
@@ -227,6 +227,41 @@ func _sanitize() -> void:
 			data.sets_claimed.erase(sid)
 	Missions.sanitize()
 	Scouting.sanitize()
+	_sanitize_update9()
+
+
+## Update 9 economy state: older saves get every default through _merge; this repairs wrong types and
+## turns JSON floats back into ints.
+func _sanitize_update9() -> void:
+	var defs := {"season": Season.default_state(), "login": DailyRewards.default_state(), "shop": Shop.default_state(),
+		"streak": {"wins": 0, "best": 0}, "pity": {"epic": 0, "legendary": 0}}
+	for k in defs.keys():
+		if typeof(data.get(k)) != TYPE_DICTIONARY:
+			data[k] = defs[k]
+		var d: Dictionary = data[k]
+		for f in defs[k].keys():
+			var want := typeof(defs[k][f])
+			var have := typeof(d.get(f))
+			if have != want and not (want == TYPE_INT and have == TYPE_FLOAT):
+				d[f] = defs[k][f]
+			elif want == TYPE_INT:
+				d[f] = maxi(0, int(d[f]))
+	var claimed: Array = []
+	for t in data.season.claimed:
+		if typeof(t) in [TYPE_INT, TYPE_FLOAT] and int(t) >= 1 and int(t) <= Season.TIERS and not int(t) in claimed:
+			claimed.append(int(t))
+	data.season.claimed = claimed
+	data.shop.offers = (data.shop.offers as Array).filter(func(o: Variant) -> bool: return typeof(o) == TYPE_DICTIONARY and o.has("id"))
+	data.shop.bought = (data.shop.bought as Array).map(func(x: Variant) -> String: return str(x))
+	if typeof(data.get("first_win_day")) != TYPE_STRING:
+		data.first_win_day = ""
+	if typeof(data.records.get("best_time_boss_rush")) not in [TYPE_INT, TYPE_FLOAT]:
+		data.records["best_time_boss_rush"] = 0.0
+	data.uniforms_owned = (data.uniforms_owned as Array).filter(func(u: Variant) -> bool: return DB.uniforms.has(str(u)))
+	if not "home" in data.uniforms_owned:
+		data.uniforms_owned.push_front("home")
+	if not data.uniform in data.uniforms_owned:
+		data.uniform = "home"
 
 
 func save_now() -> void:
@@ -585,17 +620,26 @@ func open_packs(type: String, count: int, card := "") -> Dictionary:
 	if count < 1 or idx.size() < count:
 		return {}
 	var cards: Array = []
+	var overflow := 0
+	var pity: Array = []
 	# Highest index first so earlier indices stay valid as packs are removed.
 	idx.resize(count)
 	idx.reverse()
 	for i in idx:
-		cards.append_array(_open_one(i).get("cards", []))
+		var one := _open_one(i)
+		cards.append_array(one.get("cards", []))
+		overflow += int(one.get("overflow_coins", 0))
+		if str(one.get("pity", "")) != "":
+			pity.append(str(one.pity))
 	packs_changed.emit()
 	changed.emit()
 	save_soon()
-	return {"type": type, "packs": count, "cards": cards}
+	return {"type": type, "packs": count, "cards": cards, "overflow_coins": overflow, "pity": pity}
 
 
+## Opens one pack. Update 9: the pity counters can raise the last slot to Epic or Legendary (the result's
+## "pity" names the guarantee that kicked in), and copies of max-level cards turn into coins: such a card
+## has "copies": 0 and "overflow": coins, and the pack's "overflow_coins" adds them up.
 func _open_one(index: int) -> Dictionary:
 	if index < 0 or index >= data.packs.size():
 		return {}
@@ -603,29 +647,55 @@ func _open_one(index: int) -> Dictionary:
 	data.packs.remove_at(index)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([data.created, int(data.packs_opened), pk.type])
-	var ids := roll_pack(str(pk.type), rng, str(pk.get("card", "")))
+	var counts := pity_counts(str(pk.type)) and str(pk.get("card", "")) == ""
+	var forced := ""
+	if counts:
+		if int(data.pity.get("legendary", 0)) >= pity_limit("legendary") - 1:
+			forced = "legendary"
+		elif int(data.pity.get("epic", 0)) >= pity_limit("epic") - 1:
+			forced = "epic"
+	var ids := roll_pack(str(pk.type), rng, str(pk.get("card", "")), forced)
 	var cards: Array = []
+	var overflow := 0
+	var best := 0
 	for cid in ids:
 		var rarity: String = DB.card(cid).rarity
+		best = maxi(best, DB.rarity_index(rarity))
 		var copies := 2 if rarity == "common" else 1
+		if is_card_owned(cid) and card_level(cid) >= DB.card_max_level:
+			var coins := copies * overflow_rate(rarity)
+			overflow += coins
+			cards.append({"id": cid, "rarity": rarity, "new": false, "copies": 0, "overflow": coins})
+			continue
 		var is_new := grant_card(cid, copies)
 		cards.append({"id": cid, "rarity": rarity, "new": is_new, "copies": 0 if is_new else copies})
+	if counts:
+		data.pity.epic = 0 if best >= DB.rarity_index("epic") else int(data.pity.get("epic", 0)) + 1
+		data.pity.legendary = 0 if best >= DB.rarity_index("legendary") else int(data.pity.get("legendary", 0)) + 1
+	if overflow > 0:
+		data.coins = int(data.coins) + overflow
+		bump_stat("overflow_coins", float(overflow))
 	data.packs_opened = int(data.packs_opened) + 1
 	bump_stat("packs_opened")
-	return {"type": pk.type, "source": pk.get("source", ""), "cards": cards}
+	return {"type": pk.type, "source": pk.get("source", ""), "cards": cards, "overflow_coins": overflow, "pity": forced}
 
 
 ## Card ids for one pack. Each slot rolls a rarity (raised to the slot minimum), then a card
 ## of that rarity, preferring cards not yet owned and avoiding repeats inside the pack.
-func roll_pack(type: String, rng: RandomNumberGenerator, fixed_card := "") -> Array:
+## `forced` (pity) raises the last slot to at least that rarity.
+func roll_pack(type: String, rng: RandomNumberGenerator, fixed_card := "", forced := "") -> Array:
 	var pd := DB.pack(type)
 	if fixed_card != "" and DB.cards.has(fixed_card):
 		return [fixed_card]
 	var out: Array = []
 	var weights: Dictionary = pd.get("weights", {})
-	for slot in pd.get("slots", []):
+	var slots: Array = pd.get("slots", [])
+	for si in slots.size():
+		var slot: Dictionary = slots[si]
 		var rarity := _roll_rarity(weights, rng)
 		var min_r := str(slot.get("min", "common"))
+		if forced != "" and si == slots.size() - 1 and DB.rarity_index(forced) > DB.rarity_index(min_r):
+			min_r = forced
 		if DB.rarity_index(rarity) < DB.rarity_index(min_r):
 			rarity = min_r
 		var pool: Array = []
@@ -863,28 +933,90 @@ func arena_unlock_text(id: String) -> String:
 	return ""
 
 
-# ------------------------------------------------------------------ Update 9 hooks
-# FOUNDATION STUBS: the economy stream (D) owns the rules (docs/plans/UPDATE_9_PLAN.md).
+# ------------------------------------------------------------------ Update 9: streak, first win, pity, uniforms
 
-## Consecutive wins in rewarded modes (a loss resets it).
+const STREAK_STEP := 0.1         # coin bonus per win in the streak
+const STREAK_MAX := 0.5
+
+## Consecutive wins in rewarded modes (a loss resets it; Endless and Practice never count).
 func win_streak() -> int:
 	return int(data.get("streak", {}).get("wins", 0))
 
 
-## Coin bonus the current win streak gives (+10 % per win in the streak, at most +50 %).
+## Coin bonus the current win streak gives the next win (+10 % per win in the streak, at most +50 %).
 func streak_bonus() -> float:
-	return minf(0.5, 0.1 * win_streak())
+	return minf(STREAK_MAX, STREAK_STEP * win_streak())
 
 
-## Packs left until the pity guarantee for `rarity` ("epic" or "legendary") kicks in.
+## Extends the win streak after a win or resets it after a loss (called by Rewards.apply).
+func record_streak(won: bool) -> void:
+	if typeof(data.get("streak")) != TYPE_DICTIONARY:
+		data["streak"] = {"wins": 0, "best": 0}
+	var st: Dictionary = data.streak
+	if won:
+		st.wins = int(st.get("wins", 0)) + 1
+		st.best = maxi(int(st.get("best", 0)), int(st.wins))
+		set_stat_max("best_win_streak", float(st.wins))
+	else:
+		st.wins = 0
+
+
+## Pity rules from data/packs.json: {"epic": 10, "legendary": 30, "counts": [pack types]}.
+var _pack_rules: Dictionary = {}
+
+func pack_rules() -> Dictionary:
+	if _pack_rules.is_empty():
+		var f := FileAccess.open("res://data/packs.json", FileAccess.READ)
+		if f:
+			var parsed: Variant = JSON.parse_string(f.get_as_text())
+			if typeof(parsed) == TYPE_DICTIONARY:
+				_pack_rules = {"pity": parsed.get("pity", {}), "overflow_coins": parsed.get("overflow_coins", {})}
+		if _pack_rules.is_empty():
+			_pack_rules = {"pity": {}, "overflow_coins": {}}
+	return _pack_rules
+
+
+## Packs in a row it takes to guarantee `rarity` ("epic" means Epic or better).
+func pity_limit(rarity: String) -> int:
+	return int(pack_rules().pity.get(rarity, 30 if rarity == "legendary" else 10))
+
+
+## Packs left until the pity guarantee for `rarity` ("epic" or "legendary") kicks in: 1 means the next
+## pack that counts (see pity_counts) is guaranteed one.
 func pity_left(rarity: String) -> int:
-	var limit := 30 if rarity == "legendary" else 10
-	return maxi(0, limit - int(data.get("pity", {}).get(rarity, 0)))
+	return maxi(1, pity_limit(rarity) - int(data.get("pity", {}).get(rarity, 0)))
+
+
+## True when opening a pack of `type` advances the pity counters.
+func pity_counts(type: String) -> bool:
+	return type in (pack_rules().pity.get("counts", ["rookie", "pro", "champion"]) as Array)
+
+
+## Coins one extra copy of a max-level card of `rarity` turns into.
+func overflow_rate(rarity: String) -> int:
+	return int(pack_rules().overflow_coins.get(rarity, 0))
 
 
 ## True until the first win of the current calendar day has been rewarded.
 func is_first_win_today() -> bool:
-	return str(data.get("first_win_day", "")) != Time.get_date_string_from_system()
+	return str(data.get("first_win_day", "")) != DailyChallenge.today()
+
+
+## Season uniforms are earned on the Season Pass only; the others are bought with stars.
+func uniform_for_sale(uid: String) -> bool:
+	return DB.uniforms.has(uid) and bool(DB.uniforms[uid].get("for_sale", true))
+
+
+## Buys a uniform with stars (refused for season uniforms and ones already owned).
+func buy_uniform(uid: String) -> bool:
+	if not uniform_for_sale(uid) or uid in data.uniforms_owned:
+		return false
+	if not spend_stars(int(DB.uniforms[uid].get("price_stars", 0))):
+		return false
+	data.uniforms_owned.append(uid)
+	changed.emit()
+	save_soon()
+	return true
 
 
 func refresh_unlocks() -> void:
@@ -908,12 +1040,29 @@ func promotion_available() -> bool:
 	return not nd.is_empty() and int(data.rp) >= int(nd.rp_required)
 
 
-func promote() -> void:
-	if int(data.division) < DB.divisions.size() - 1:
-		data.division += 1
-		notice.emit("Promoted to %s!" % division().name)
-		_check_unlocks()
-		changed.emit()
+## Promotes to the next division and pays its one-time reward (data/ranks.json "reward": coins and stars
+## per division, a Pro Pack, a Champion Pack from Gold up). Returns what was granted ({} at the top).
+func promote() -> Dictionary:
+	if int(data.division) >= DB.divisions.size() - 1:
+		return {}
+	data.division += 1
+	var r: Dictionary = division().get("reward", {})
+	var got := {}
+	if not r.is_empty():
+		got = Rewards.grant_bundle(r, "Promoted to %s" % division().name)
+		got["division"] = str(division().id)
+		got["text"] = Rewards.bundle_text(r)
+	notice.emit("Promoted to %s!" % division().name + (" " + str(got.text) if got.has("text") else ""))
+	_check_unlocks()
+	changed.emit()
+	return got
+
+
+## The reward reaching division `index` pays (data/ranks.json).
+func promotion_reward(index: int) -> Dictionary:
+	if index < 1 or index >= DB.divisions.size():
+		return {}
+	return DB.divisions[index].get("reward", {})
 
 
 # ------------------------------------------------------------------ run + history

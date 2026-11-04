@@ -1,1 +1,15 @@
-{"_comment": "Daily Shop rules and prices (Update 9, filled by the economy stream).", "card_prices": {"common": 60, "uncommon": 120, "rare": 250, "epic": 500, "legendary": 1000}}
+{
+  "_comment": "Daily Shop (Update 9, src/core/shop.gd). Offers are rolled once per local calendar day (deterministic for a date and profile) and each can be bought once that day; they refresh at local midnight. Slots: a free gift (one of 'gifts', by weight), 'card_deals' card-copy deals (owned cards that still need copies to reach max level, 'deck_weight' times likelier for cards in the current deck; copies = what the next level still needs, at most 'max_copies' for the rarity, at 'card_prices' coins per copy), one pack deal (Pro Pack at 'pack_deal.discount' off, rounded like every price) and one star deal (paid with stars). When no owned card needs copies a card slot becomes 'fallback_deal'. Free agents (new defenders signed early) take their price from data/defenders.json (unlock.coins).",
+  "card_prices": {"common": 60, "uncommon": 120, "rare": 250, "epic": 500, "legendary": 1000},
+  "max_copies": {"common": 4, "uncommon": 3, "rare": 2, "epic": 1, "legendary": 1},
+  "card_deals": 2,
+  "deck_weight": 4,
+  "pack_deal": {"pack": "pro", "discount": 0.25},
+  "star_deal": {"pack": "champion", "price_stars": 40},
+  "fallback_deal": {"pack": "rookie", "discount": 0.25},
+  "gifts": [
+    {"coins": 100, "weight": 3},
+    {"packs": ["rookie"], "weight": 2},
+    {"stars": 5, "weight": 1}
+  ]
+}
