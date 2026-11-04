@@ -1,7 +1,8 @@
 class_name PackSummary
 extends PanelContainer
 ## Results of a ×5 / ×10 pack opening: every card pulled, in one grid, best rarity first with
-## duplicates stacked (×3) and NEW / UPGRADE READY tags. Cards are dealt face down from the
+## duplicates stacked (×3) and NEW / UPGRADE READY tags. Update 9: copies of max-level cards show the
+## coins they turned into, and cards a pity guarantee raised are tagged GUARANTEED. Cards are dealt face down from the
 ## torn pack, then flip in a quick cascade from the commons up so the big pulls land last;
 ## Epic and Legendary cards tremble before turning and keep a turning ray burst behind them.
 ## Clicking a face-down card flips just that one.
@@ -14,7 +15,7 @@ const GAP := Vector2(16, 10)
 const TAG_H := 46.0
 const RARITY_DESC := ["legendary", "epic", "rare", "uncommon", "common"]
 
-var entries: Array = []        # {"id", "rarity", "count", "new", "copies", "upgrade", "slot", "holder", "view", "tag", "rays", "revealed" (flip started), "face_up"}
+var entries: Array = []        # {"id", "rarity", "count", "new", "copies", "overflow", "pity", "upgrade", "slot", "holder", "view", "tag", "rays", "revealed" (flip started), "face_up"}
 var cascading := false
 var dealt := false
 var _done := false
@@ -30,7 +31,8 @@ var _card_w := 140.0
 var _rng := RandomNumberGenerator.new()
 
 
-## `result` is Profile.open_packs(): {"type", "packs", "cards": [{"id", "rarity", "new", "copies"}]}.
+## `result` is Profile.open_packs(): {"type", "packs", "cards": [{"id", "rarity", "new", "copies", "overflow"}],
+## "overflow_coins", "pity": [rarities]}.
 func setup(result: Dictionary, star_tex: Texture2D) -> void:
 	_rng.randomize()
 	_star_tex = star_tex
@@ -41,12 +43,14 @@ func setup(result: Dictionary, star_tex: Texture2D) -> void:
 	var by_id := {}
 	for c in cards:
 		if not by_id.has(c.id):
-			by_id[c.id] = {"id": c.id, "rarity": str(c.rarity), "count": 0, "new": false, "copies": 0, "revealed": false, "face_up": false}
+			by_id[c.id] = {"id": c.id, "rarity": str(c.rarity), "count": 0, "new": false, "copies": 0, "overflow": 0, "pity": "",
+				"revealed": false, "face_up": false}
 			entries.append(by_id[c.id])
 		var e: Dictionary = by_id[c.id]
 		e.count += 1
 		e.new = e.new or bool(c.new)
 		e.copies += int(c.copies)
+		e.overflow += int(c.get("overflow", 0))
 	for e in entries:
 		e["upgrade"] = Profile.can_upgrade_card(e.id)
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -59,6 +63,15 @@ func setup(result: Dictionary, star_tex: Texture2D) -> void:
 		if a.count != b.count:
 			return a.count > b.count
 		return DB.card_order.find(a.id) < DB.card_order.find(b.id))
+	# Pity: each guarantee that kicked in raised one card to at least its rarity; tag the best fits.
+	var pity: Variant = result.get("pity", [])
+	for p in (pity if pity is Array else [pity]):
+		if str(p) == "":
+			continue
+		for e in entries:
+			if e.pity == "" and DB.rarity_index(e.rarity) >= DB.rarity_index(str(p)):
+				e.pity = str(p)
+				break
 	_build()
 
 
@@ -157,6 +170,8 @@ func _build_slot(e: Dictionary) -> void:
 	var sub_text := ""
 	var sub_col := UITheme.MUTED
 	var copies_text := "+%d cop%s" % [int(e.copies), "y" if int(e.copies) == 1 else "ies"]
+	if int(e.copies) == 0 and int(e.overflow) > 0:
+		copies_text = "+%s coins" % UITheme.format_int(int(e.overflow))
 	if e.new:
 		main_text = "NEW!"
 		main_col = UITheme.GOLD
@@ -171,6 +186,11 @@ func _build_slot(e: Dictionary) -> void:
 		sub_text = copies_text
 	else:
 		main_text = copies_text.to_upper()
+		if int(e.copies) == 0 and int(e.overflow) > 0:
+			main_col = UITheme.GOLD
+	if e.pity != "":
+		sub_text = "GUARANTEED"
+		sub_col = DB.rarity_color(e.rarity).lightened(0.3)
 	for pair in [[main_text, main_col, true], [sub_text, sub_col, false]]:
 		if pair[0] == "":
 			continue

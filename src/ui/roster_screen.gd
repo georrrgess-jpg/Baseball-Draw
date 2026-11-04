@@ -1,13 +1,21 @@
 extends Node3D
 ## Roster: inspect defenders on a 3D showcase stage (drag to rotate), level-up traits,
 ## equip gear, choose the team uniform, pick the six-player team and the captain.
+## Update 9: the defenders are a portrait grid (12 fit without scrolling) and free agents can be
+## signed early for coins (Shop.sign_agent, after a confirmation). `Router.open("roster", id)`
+## opens the screen on that defender.
+
+const GRID_COLS := 3
+const PORTRAIT := 88.0
+const TILE_H := 168.0
 
 var selected := "ace"
 var model: CharacterModel
 var stage: Node3D
 var camera: Camera3D
 var ui: Control
-var _list: VBoxContainer
+var _grid: GridContainer
+var _count_label: Label
 var _info: VBoxContainer
 var _team_strip: HBoxContainer
 var _drag := false
@@ -15,6 +23,10 @@ var _yaw := 0.0
 var _screen: MenuScreen
 var _road_box: Control      # the level road of the selected defender (hint target)
 var _traits_head: Control   # the TRAINING TRAITS header (hint target)
+## defender id -> its grid tile (a toggle Button).
+var tiles := {}
+## SIGN button of the selected free agent (null when the selected defender is not one).
+var sign_button: Button
 
 
 func _ready() -> void:
@@ -35,16 +47,33 @@ func _ready() -> void:
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_screen.content.add_child(body)
 	_screen.content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var lp := MenuScreen.panel()
-	lp.custom_minimum_size = Vector2(330, 0)
+	var lp := MenuScreen.panel(UITheme.PANEL_BG, UITheme.BORDER, 14)
+	lp.custom_minimum_size = Vector2(440, 0)
 	body.add_child(lp)
+	var lv := VBoxContainer.new()
+	lv.add_theme_constant_override("separation", 8)
+	lp.add_child(lv)
+	var lh := HBoxContainer.new()
+	lh.add_theme_constant_override("separation", 8)
+	lv.add_child(lh)
+	var sh := UITheme.section_header("DEFENDERS", "roster", UITheme.GOLD, UITheme.FS_H3)
+	sh.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lh.add_child(sh)
+	_count_label = UITheme.label("", UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
+	_count_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	lh.add_child(_count_label)
 	var ls := ScrollContainer.new()
 	ls.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	lp.add_child(ls)
-	_list = VBoxContainer.new()
-	_list.custom_minimum_size = Vector2(300, 0)
-	_list.add_theme_constant_override("separation", 6)
-	ls.add_child(_list)
+	ls.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ls.follow_focus = true
+	lv.add_child(ls)
+	_grid = GridContainer.new()
+	_grid.name = "DefenderGrid"
+	_grid.columns = GRID_COLS
+	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_grid.add_theme_constant_override("h_separation", 8)
+	_grid.add_theme_constant_override("v_separation", 8)
+	ls.add_child(_grid)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -54,6 +83,7 @@ func _ready() -> void:
 	body.add_child(rp)
 	var rs := ScrollContainer.new()
 	rs.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	rs.follow_focus = true
 	rp.add_child(rs)
 	_info = VBoxContainer.new()
 	_info.custom_minimum_size = Vector2(526, 0)
@@ -65,9 +95,24 @@ func _ready() -> void:
 	_team_strip.add_theme_constant_override("separation", 12)
 	bottom.add_child(_team_strip)
 	selected = Profile.data.team[0]
+	if DB.defenders.has(Router.open_arg):   # opened on a defender (e.g. from the Shop)
+		selected = Router.open_arg
 	_refresh()
+	_focus_tile.call_deferred(selected)
+	# Screenshot helper: `--team-demo=<id>` selects a defender, `--team-demo=<id>:sign` also opens
+	# the free agent signing popup.
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--team-demo="):
+			var spec := a.split("=")[1].split(":")
+			if DB.defenders.has(spec[0]):
+				selected = spec[0]
+				_refresh()
+				if spec.size() > 1 and spec[1] == "sign":
+					ShopScreen.confirm_sign(_screen, selected, func(ok: bool) -> void:
+						if ok:
+							_refresh())
 	_screen.set_help("roster", func() -> Dictionary:
-		return {"team_intro": _team_strip, "team_road": _road_box, "team_traits": _traits_head}, _hint_features)
+		return {"team_intro": _grid, "team_road": _road_box, "team_traits": _traits_head}, _hint_features)
 
 
 ## Traits are explained automatically once a defender has reached a trait level.
@@ -141,11 +186,11 @@ func _build_stage() -> void:
 	stage.add_child(floor_mi)
 	camera = Camera3D.new()
 	camera.fov = 30
-	camera.position = Vector3(-0.15, 1.3, 6.8)
+	# The camera looks a little right of the model so it stands between the grid and the
+	# detail panel (the grid is wider than the detail panel's share of the screen).
+	camera.position = Vector3(0.26, 1.3, 6.8)
 	stage.add_child(camera)
-	camera.look_at(Vector3(-0.15, 1.12, 0), Vector3.UP)
-	# Shift the stage so the model sits between the two side panels.
-	stage.position = Vector3(0.35, 0, 0)
+	camera.look_at(Vector3(0.26, 1.12, 0), Vector3.UP)
 
 
 func _show_model(id: String) -> void:
@@ -173,7 +218,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var mp: Vector2 = event.position
 		var vs := get_viewport().get_visible_rect().size
-		_drag = event.pressed and mp.x > vs.x * 0.22 and mp.x < vs.x * 0.66 and mp.y < vs.y * 0.82
+		# Only the stage between the defender grid and the detail panel rotates the model.
+		_drag = event.pressed and mp.x > vs.x * 0.31 and mp.x < vs.x * 0.62 and mp.y < vs.y * 0.82
 	elif event is InputEventMouseMotion and _drag:
 		_yaw += event.relative.x * 0.01
 		if model:
@@ -185,56 +231,156 @@ func _refresh() -> void:
 	_fill_info()
 	_fill_team()
 	_show_model(selected)
+	_screen.refresh_currency()
 
 
 func _fill_list() -> void:
-	for c in _list.get_children():
+	var had_focus := _focused_tile()
+	for c in _grid.get_children():
 		c.queue_free()
-	_list.add_child(UITheme.section_header("DEFENDERS", "roster", UITheme.GOLD, UITheme.FS_H2))
+	tiles.clear()
+	var n := 0
 	for id in DB.defender_order:
-		var d := DB.defender(id)
-		var unlocked := Profile.is_defender_unlocked(id)
-		var accent := Color(d.accent)
-		var b := Button.new()
-		b.toggle_mode = true
-		b.button_pressed = id == selected
-		b.custom_minimum_size = Vector2(0, 66)
-		b.add_theme_stylebox_override("normal", UITheme.panel_style(Color(0.06, 0.09, 0.15, 0.9), Color(accent, 0.3), 1, 8, 6))
-		b.add_theme_stylebox_override("hover", UITheme.panel_style(Color(0.1, 0.14, 0.22, 0.95), accent, 2, 8, 6))
-		b.add_theme_stylebox_override("pressed", UITheme.panel_style(accent.darkened(0.55), accent, 2, 8, 6))
-		var hb := HBoxContainer.new()
-		hb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		hb.offset_left = 6
-		hb.add_theme_constant_override("separation", 10)
-		hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var pr := MenuScreen.portrait_rect(id, 52, accent if unlocked else Color(0.3, 0.3, 0.35))
-		pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if not unlocked:
-			pr.modulate = Color(0.35, 0.35, 0.4)
-		hb.add_child(pr)
-		var vb := VBoxContainer.new()
-		vb.add_theme_constant_override("separation", -4)
-		vb.alignment = BoxContainer.ALIGNMENT_CENTER
-		vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var tag := ""
-		if id in Profile.data.team:
-			tag = "  ★" + (" C" if id == Profile.data.captain else "")
-		var n := UITheme.label(d.name + tag, 24, accent.lightened(0.3) if unlocked else UITheme.MUTED, UITheme.font_header())
-		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(n)
-		var sub_txt := "%s · Lv %d" % [DB.roles[d.role].name, Profile.defender_level(id)] if unlocked else "LOCKED · " + Profile.defender_unlock_text(id)
-		if unlocked and Profile.pending_traits(id) > 0:
-			sub_txt += "  ·  ★ NEW TRAIT"
-		var s := UITheme.label(sub_txt, 16, UITheme.GREEN if unlocked and Profile.pending_traits(id) > 0 else UITheme.MUTED, UITheme.font_body_bold())
-		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(s)
-		hb.add_child(vb)
-		b.add_child(hb)
-		b.pressed.connect(func() -> void:
-			selected = id
-			Audio.ui("ui_tab")
-			_refresh())
-		_list.add_child(b)
+		if Profile.is_defender_unlocked(id):
+			n += 1
+		var t := _tile(id)
+		_grid.add_child(t)
+		tiles[id] = t
+	_count_label.text = "%d / %d" % [n, DB.defender_order.size()]
+	if had_focus != "":
+		_focus_tile.call_deferred(had_focus)
+
+
+## One defender in the grid: portrait with level / captain / team badges (a lock when locked),
+## the name, and the role, NEW TRAIT, or how to unlock.
+func _tile(id: String) -> Button:
+	var d := DB.defender(id)
+	var unlocked := Profile.is_defender_unlocked(id)
+	var accent := Color(d.accent)
+	var in_team: bool = id in Profile.data.team
+	var captain: bool = id == Profile.data.captain
+	var traits := Profile.pending_traits(id) if unlocked else 0
+	var b := Button.new()
+	b.name = "Tile_" + id
+	b.toggle_mode = true
+	b.button_pressed = id == selected
+	b.custom_minimum_size = Vector2(0, TILE_H)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var nb := Color(0.06, 0.09, 0.15, 0.92) if unlocked else Color(0.035, 0.045, 0.075, 0.92)
+	var border := Color(accent, 0.6) if in_team else (Color(accent, 0.22) if unlocked else Color(1, 1, 1, 0.07))
+	b.add_theme_stylebox_override("normal", UITheme.panel_style(nb, border, 2 if in_team else 1, 10, 4))
+	b.add_theme_stylebox_override("hover", UITheme.panel_style(Color(0.1, 0.14, 0.22, 0.96), accent, 2, 10, 4))
+	var sel := UITheme.panel_style(accent.darkened(0.6), accent.lightened(0.25), 3, 10, 4)
+	b.add_theme_stylebox_override("pressed", sel)
+	b.add_theme_stylebox_override("hover_pressed", sel)
+	b.add_theme_stylebox_override("focus", UITheme.panel_style(Color(0, 0, 0, 0), Color(UITheme.GOLD, 0.95), 2, 10, 4))
+	var tip := "%s — %s, %s" % [d.name, d.title, DB.roles[d.role].name]
+	if unlocked:
+		tip += "\nLevel %d%s%s" % [Profile.defender_level(id), "  ·  captain" if captain else ("  ·  in the starting six" if in_team else ""),
+			"\nNew trait to choose!" if traits > 0 else ""]
+	else:
+		tip += "\nLocked: " + unlock_text(id)
+	b.tooltip_text = tip
+	var v := VBoxContainer.new()
+	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	v.offset_top = 6
+	v.offset_bottom = -4
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(v)
+	# Portrait with its badges.
+	var ph := Control.new()
+	ph.custom_minimum_size = Vector2(PORTRAIT + 12, PORTRAIT + 4)
+	ph.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(ph)
+	var pr := MenuScreen.portrait_rect(id, PORTRAIT - 4, accent if unlocked else Color(0.3, 0.3, 0.36))
+	pr.position = Vector2(6, 0)
+	pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ph.add_child(pr)
+	if not unlocked:
+		pr.modulate = Color(0.32, 0.32, 0.4)
+		var lk := UITheme.icon_rect("lock", 34, UITheme.OFFWHITE)
+		lk.position = Vector2(6 + (PORTRAIT - 4 - 34) * 0.5, (PORTRAIT - 4 - 34) * 0.5)
+		ph.add_child(lk)
+	else:
+		var lb := PanelContainer.new()
+		lb.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.07, 0.12, 0.96), UITheme.GOLD, 2, 14, 0))
+		lb.custom_minimum_size = Vector2(30, 30)
+		lb.position = Vector2(PORTRAIT - 14, PORTRAIT - 30)
+		lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ll := UITheme.label(str(Profile.defender_level(id)), 19, UITheme.GOLD, UITheme.font_header())
+		ll.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ll.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lb.add_child(ll)
+		ph.add_child(lb)
+	if captain:
+		var cb := UITheme.badge("C", UITheme.GOLD.darkened(0.25), UITheme.FS_MIN)
+		cb.position = Vector2(0, -4)
+		ph.add_child(cb)
+	elif in_team:
+		var tb := UITheme.badge("★", UITheme.SCARLET, UITheme.FS_MIN)
+		tb.position = Vector2(0, -4)
+		ph.add_child(tb)
+	# Name and the line underneath.
+	var nl := UITheme.label(str(d.name), UITheme.FS_LEAD, accent.lightened(0.3) if unlocked else UITheme.MUTED, UITheme.font_header())
+	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(nl)
+	var u: Dictionary = d.get("unlock", {})
+	if unlocked:
+		var sub := UITheme.label("NEW TRAIT" if traits > 0 else str(DB.roles[d.role].name), UITheme.FS_MIN,
+			UITheme.GREEN if traits > 0 else UITheme.OFFWHITE.darkened(0.15), UITheme.font_body_bold())
+		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(sub)
+	else:
+		var row := HBoxContainer.new()
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", 4)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(row)
+		var lvl_txt := "LV %d" % int(u.get("value", 0)) if str(u.get("type", "")) == "level" else "LOCKED"
+		row.add_child(UITheme.label(lvl_txt + (" or" if int(u.get("coins", 0)) > 0 else ""), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
+		if int(u.get("coins", 0)) > 0:
+			row.add_child(UITheme.icon_rect("coin", 16, UITheme.GOLD))
+			row.add_child(UITheme.label(UITheme.format_int(int(u.coins)), UITheme.FS_MIN, UITheme.GOLD, UITheme.font_body_bold()))
+	b.pressed.connect(func() -> void:
+		if selected == id:
+			b.button_pressed = true
+			return
+		selected = id
+		Audio.ui("ui_tab")
+		_refresh())
+	return b
+
+
+## "Account level 13 or sign for 6,000 coins" (free agents) / "Reach account level 7".
+static func unlock_text(id: String) -> String:
+	var u: Dictionary = DB.defender(id).get("unlock", {})
+	var coins := int(u.get("coins", 0))
+	if str(u.get("type", "")) == "level":
+		if coins > 0:
+			return "Account level %d or sign for %s coins" % [int(u.value), UITheme.format_int(coins)]
+		return "Reach account level %d" % int(u.value)
+	if coins > 0:
+		return "Sign for %s coins" % UITheme.format_int(coins)
+	return Profile.defender_unlock_text(id)
+
+
+func _focused_tile() -> String:
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	for id in tiles:
+		if tiles[id] == f:
+			return id
+	return ""
+
+
+func _focus_tile(id: String) -> void:
+	var t: Button = tiles.get(id)
+	if t and is_instance_valid(t) and t.is_inside_tree():
+		t.grab_focus()
 
 
 func _fill_info() -> void:
@@ -243,13 +389,28 @@ func _fill_info() -> void:
 	var d := DB.defender(selected)
 	var unlocked := Profile.is_defender_unlocked(selected)
 	var accent := Color(d.accent)
+	sign_button = null
+	var free_agent := not unlocked and int(d.get("unlock", {}).get("coins", 0)) > 0
+	if free_agent:
+		var fa := UITheme.badge("FREE AGENT", UITheme.GOLD.darkened(0.3), UITheme.FS_MIN)
+		fa.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		_info.add_child(fa)
 	_info.add_child(UITheme.title(d.name.to_upper(), 72, accent.lightened(0.25)))
 	_info.add_child(UITheme.label("%s — #%d %s" % [d.title, int(d.number), DB.roles[d.role].name], 24, UITheme.OFFWHITE, UITheme.font_header()))
 	var bio := UITheme.label(d.bio, 19, UITheme.MUTED)
 	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_info.add_child(bio)
 	if not unlocked:
-		_info.add_child(UITheme.label("LOCKED — " + Profile.defender_unlock_text(selected), 24, UITheme.SCARLET, UITheme.font_display()))
+		var lr := HBoxContainer.new()
+		lr.add_theme_constant_override("separation", 8)
+		lr.add_child(UITheme.icon_rect("lock", 26, UITheme.SCARLET))
+		var ll := UITheme.label("LOCKED — " + unlock_text(selected), 24, UITheme.SCARLET, UITheme.font_display())
+		ll.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lr.add_child(ll)
+		_info.add_child(lr)
+		if free_agent:
+			_info.add_child(_sign_row(selected))
 	var lvl := Profile.defender_level(selected)
 	_info.add_child(_level_section(selected, lvl, accent, unlocked))
 	# Stats with permanent modifiers.
@@ -365,20 +526,29 @@ func _fill_info() -> void:
 	_info.add_child(UITheme.section_header("TEAM UNIFORM", "special", UITheme.GOLD, UITheme.FS_H3))
 	var uf := HFlowContainer.new()
 	uf.add_theme_constant_override("h_separation", 6)
+	# Season uniforms are Season Pass rewards (tier 30): only owned ones and this season's (locked) show.
+	var season_uniform := str(Season.current().get("uniform", ""))
 	for uid in DB.uniform_order:
 		var u: Dictionary = DB.uniforms[uid]
 		var owned: bool = uid in Profile.data.uniforms_owned
-		var label: String = u.name if owned else "%s (%d★)" % [u.name, int(u.price_stars)]
+		var for_sale := Profile.uniform_for_sale(uid)
+		if not owned and not for_sale and uid != season_uniform:
+			continue
+		var label: String = u.name
+		if not owned:
+			label = "%s (%d★)" % [u.name, int(u.get("price_stars", 0))] if for_sale else "%s (Season %d reward)" % [u.name, int(u.get("season", 0))]
 		var b := UITheme.small_button(label, Color(u.colors.JerseyTrim), 18)
 		b.toggle_mode = true
 		b.button_pressed = Profile.data.uniform == uid
+		if not owned and not for_sale:
+			b.disabled = true
+			b.tooltip_text = "Reach tier 30 of the Season Pass this season to earn the %s uniform." % u.name
 		b.pressed.connect(func() -> void:
 			if not owned:
-				if Profile.spend_stars(int(u.price_stars)):
-					Profile.data.uniforms_owned.append(uid)
+				if Profile.buy_uniform(uid):
 					Audio.play("purchase")
 				else:
-					Router.toast("Not enough stars. Earn stars from achievements.", "warn")
+					Router.toast("Not enough stars. Earn stars from achievements and the Season Pass.", "warn")
 					_fill_info()
 					return
 			Profile.data.uniform = uid
@@ -386,6 +556,32 @@ func _fill_info() -> void:
 			_refresh())
 		uf.add_child(b)
 	_info.add_child(uf)
+
+
+## SIGN for a free agent: the price on the button, the wallet next to it. Opens the Shop's
+## confirmation popup; a signed defender joins at once.
+func _sign_row(id: String) -> Control:
+	var a := ShopScreen.agent_info(id)
+	var price := int(a.get("price", DB.defender(id).get("unlock", {}).get("coins", 0)))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	var b := ShopScreen.price_button("SIGN NOW", {"coins": price}, true, UITheme.GOLD)
+	b.name = "SignButton"
+	b.custom_minimum_size = Vector2(250, UITheme.BTN_H)
+	b.tooltip_text = "Sign %s now instead of waiting for the account level" % DB.defender(id).name
+	b.pressed.connect(func() -> void:
+		ShopScreen.confirm_sign(_screen, id, func(ok: bool) -> void:
+			if ok and is_inside_tree():
+				_refresh()
+				_focus_tile(id)))
+	row.add_child(b)
+	sign_button = b
+	var short := ShopScreen.shortfall({"coins": price})
+	var wl := UITheme.label("You have %s coins" % UITheme.format_int(int(Profile.data.coins)) if short == "" else short,
+		UITheme.FS_SMALL, UITheme.MUTED if short == "" else Color(1.0, 0.5, 0.45), UITheme.font_body_bold())
+	wl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(wl)
+	return row
 
 
 ## Level badge, XP to the next level and the level road (a reward at every level).
@@ -495,7 +691,7 @@ func _fill_team() -> void:
 		vb.add_child(l)
 		_team_strip.add_child(vb)
 	if Profile.data.team.size() < Profile.TEAM_SIZE:
-		_team_strip.add_child(UITheme.label("%d open slot(s) — add defenders from the list." % (Profile.TEAM_SIZE - Profile.data.team.size()), 18, UITheme.SCARLET))
+		_team_strip.add_child(UITheme.label("%d open slot(s) — pick defenders in the grid." % (Profile.TEAM_SIZE - Profile.data.team.size()), 18, UITheme.SCARLET))
 	var roles := {}
 	for id in Profile.data.team:
 		roles[DB.defender(id).role] = int(roles.get(DB.defender(id).role, 0)) + 1

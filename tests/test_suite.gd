@@ -54,6 +54,7 @@ func _run() -> void:
 	test_update9_cards_content()
 	await test_scouting()
 	await test_battle_systems()
+	await test_u9_e2_screens()
 	test_update9_economy()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -2233,6 +2234,85 @@ func _test_update9_defenders() -> void:
 	battle.swap_defender(sid, "ace")
 	battle.apply_formation(battle.run.formation)
 	_hold_fire(false)
+
+
+# ---------------------------------------------------------------- Update 9 (stream E2): Team, Shop, Season, Packs, level road
+
+func test_u9_e2_screens() -> void:
+	section("Update 9 screens: Team, Shop, Season, Packs, level road")
+	# Formatting helpers.
+	ok(ShopScreen.format_countdown(3723) == "01:02:03", "shop countdown formats h:m:s (%s)" % ShopScreen.format_countdown(3723))
+	ok(ShopScreen.format_countdown(-5) == "00:00:00", "shop countdown never goes negative")
+	ok(SeasonScreen.format_left(11 * 86400 + 5 * 3600 + 59) == "11d 05h", "season countdown shows days and hours (%s)" % SeasonScreen.format_left(11 * 86400 + 5 * 3600 + 59))
+	ok(SeasonScreen.format_left(3661) == "01:01:01", "season countdown shows h:m:s on the last day")
+	# Season reward text and pictures for every reward shape.
+	ok(SeasonScreen.reward_label({"coins": 1500}, true) == "1,500 coins", "season reward: coins")
+	ok(SeasonScreen.reward_label({"pack": "pro"}, true) == "Pro Pack", "season reward: a pack")
+	ok(SeasonScreen.reward_label({"pack": "rookie", "count": 2}, true) == "2 Rookie Packs", "season reward: two packs")
+	ok(SeasonScreen.reward_label({"packs": ["champion"], "stars": 10}, true) == "Champion Pack + 10 stars", "season reward: pack list and stars")
+	ok(SeasonScreen.reward_label({}, true) == "—", "season reward: empty")
+	ok(SeasonScreen.reward_label({"uniform": DB.uniform_order[0]}, true).ends_with("uniform"), "season reward: uniform")
+	for r in [{"coins": 100}, {"stars": 5}, {"pack": "champion"}, {"packs": ["rookie", "pro"]}, {"uniform": DB.uniform_order[0]}, {"card": DB.card_order[0], "copies": 2}]:
+		var pic := SeasonScreen.reward_picture(r, 100)
+		ok(pic != null and pic.get_child_count() == 1, "season reward picture for %s" % [r])
+		pic.free()
+	ok(SeasonScreen.is_big_reward({"pack": "champion"}) and not SeasonScreen.is_big_reward({"coins": 100}), "champion packs are the big rewards")
+	# Shop helpers.
+	var full := int(Profile.pack_price("pro", 1).coins)
+	ok(ShopScreen._discount_pct({"kind": "pack", "pack": "pro", "price": {"coins": int(full * 0.75), "stars": 0}}) == 25, "pack deal discount is shown as -25%")
+	ok(ShopScreen._discount_pct({"kind": "card", "card": DB.card_order[0], "price": {"coins": 60, "stars": 0}}) == 0, "card deals show no pack discount")
+	ok(ShopScreen._discount_pct({"kind": "stars", "pack": "champion", "price": {"coins": 0, "stars": 40}, "full_price_stars": 50}) == 20, "star deal discount against its star price")
+	ok(ShopScreen.deal_title({"kind": "gift", "title": "FREE GIFT", "reward": {"coins": 100}}) == "100 coins", "the gift tile names what is inside (%s)" % ShopScreen.deal_title({"kind": "gift", "title": "FREE GIFT", "reward": {"coins": 100}}))
+	ok(ShopScreen.deal_title({"kind": "card", "card": "heat_wave", "title": ""}) == str(DB.card("heat_wave").name), "a card deal is titled with the card")
+	ok(ShopScreen.is_free({"price": {"coins": 0, "stars": 0}}) and not ShopScreen.is_free({"price": {"coins": 10, "stars": 0}}), "free gift detection")
+	Profile.data.coins = 100
+	ok(ShopScreen.shortfall({"coins": 250}) == "Need 150 more coins", "shortfall names the missing coins")
+	ok(ShopScreen.shortfall({"coins": 50}) == "", "no shortfall when affordable")
+	var agents := Shop.free_agents()
+	ok(agents.size() >= 3, "three free agents to sign (%d)" % agents.size())
+	for a in agents:
+		ok(ShopScreen.agent_info(str(a.id)).get("price", 0) == a.price, "agent_info finds %s" % a.id)
+	# Team: every defender has a readable unlock line; free agents mention the price.
+	var roster_script: GDScript = load("res://src/ui/roster_screen.gd")
+	# Read from data/defenders.json: the unlock levels and prices are tuned there.
+	var mu: Dictionary = DB.defender("moose").get("unlock", {})
+	var moose_text := "Account level %d or sign for %s coins" % [int(mu.get("value", 0)), UITheme.format_int(int(mu.get("coins", 0)))]
+	ok(str(roster_script.unlock_text("moose")) == moose_text, "Moose's unlock text (%s)" % roster_script.unlock_text("moose"))
+	ok(str(roster_script.unlock_text("dex")) == "Reach account level %d" % int(DB.defender("dex").get("unlock", {}).get("value", 0)), "Dex's unlock text")
+	# Packs: pity counter wording.
+	var packs_script: GDScript = load("res://src/ui/packs_screen.gd")
+	ok(str(packs_script.pity_text("Legendary", 12)) == "Legendary within 12 packs", "pity text counts packs")
+	ok(str(packs_script.pity_text("Legendary", 1, "Pro or Champion Packs")) == "Legendary guaranteed in your next Pro or Champion Pack", "pity text for the last pack")
+	ok(str(packs_script.pity_text("Legendary", 19, "Pro or Champion Packs")) == "Legendary within 19 Pro or Champion Packs", "pity text names the packs that count")
+	ok(packs_script.pity_list({"pity": "epic"}) == ["epic"] and packs_script.pity_list({"pity": ["", "legendary"]}) == ["legendary"] and packs_script.pity_list({}).is_empty(), "pity results read as a list")
+	# Level road: one short caption per level, no wrapping.
+	for l in range(1, Profile.MAX_ACCOUNT_LEVEL + 1):
+		var cap := LevelRoadView.caption(l)
+		ok(cap != "" and cap.length() <= 18, "level %d caption is short (%s)" % [l, cap])
+	var dex_level := int(DB.defender("dex").get("unlock", {}).get("value", 7))
+	ok(LevelRoadView.caption(dex_level).ends_with("joins"), "a defender level says who joins (%s)" % LevelRoadView.caption(dex_level))
+	# The screens build from the stubs or the real data.
+	Profile.data.coins = 1000
+	Profile.data.stars = 0
+	for scene in ["res://scenes/shop.tscn", "res://scenes/season.tscn"]:
+		var sc: Node = load(scene).instantiate()
+		add_child(sc)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if sc is ShopScreen:
+			var shop := sc as ShopScreen
+			ok(shop.pack_buttons.size() == 6, "Shop has BUY and BUY 10 for three packs (%d)" % shop.pack_buttons.size())
+			ok(not (shop.pack_buttons["rookie:1"] as Button).disabled and (shop.pack_buttons["champion:1"] as Button).disabled, "pack buttons follow the wallet")
+			ok(shop.agent_buttons.size() == agents.size(), "Shop lists every free agent")
+			ok(shop.deal_buttons.size() == Shop.offers().size(), "Shop has one button per daily deal")
+		else:
+			var season := sc as SeasonScreen
+			var tiers := Season.tiers()
+			ok(season.tier_buttons.size() == (tiers.size() + 1 if not tiers.is_empty() else 0), "Season track has every tier and the bonus (%d)" % season.tier_buttons.size())
+			ok((season.find_child("ClaimAll", true, false) as Button).disabled == Season.claimable().is_empty(), "CLAIM ALL is enabled only with rewards to claim")
+		sc.queue_free()
+		await get_tree().process_frame
+	Profile.reset_profile()
 
 
 # ---------------------------------------------------------------- Update 9: economy and return loop (stream D)

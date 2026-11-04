@@ -131,6 +131,10 @@ func _run() -> void:
 		await _test_scouting()
 		_finish()
 		return
+	if "--ui-test-section=u9e2" in OS.get_cmdline_user_args():
+		await _test_u9_e2()
+		_finish()
+		return
 	if "--ui-test-section=packs" in OS.get_cmdline_user_args():
 		await _test_packs()
 		await _test_multi_packs()
@@ -357,6 +361,7 @@ func _run() -> void:
 	await _test_missions()
 	await _test_navigation()
 	await _test_scouting()
+	await _test_u9_e2()
 	await _test_title()
 	await _test_tutorial()
 	_finish()
@@ -1448,3 +1453,329 @@ func _finish() -> void:
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+# ---------------------------------------------------------------- Update 9 (stream E2): Team, Shop, Season, Packs, level road
+# Run alone: godot --path . -- --ui-test --profile=uitest --fresh-profile --ui-test-section=u9e2
+# Written against the Season / Shop contracts (docs/plans/UPDATE_9_PLAN.md): with the foundation
+# stubs (no deals, no tiers) the empty states are checked; with the real data the buy, claim and
+# sign paths run too.
+
+func _test_u9_e2() -> void:
+	Profile.data.flags["tutorial_done"] = true
+	await _test_u9_team()
+	await _test_u9_shop()
+	await _test_u9_season()
+	await _test_u9_packs()
+	await _test_u9_level_road()
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+## A key press through the GUI (arrow keys, Enter) as a real keyboard sends it.
+func _press(keycode: Key) -> void:
+	var k := InputEventKey.new()
+	k.keycode = keycode
+	k.physical_keycode = keycode
+	k.pressed = true
+	Input.parse_input_event(k)
+	await _wait(0.05)
+	var k2 := k.duplicate() as InputEventKey
+	k2.pressed = false
+	Input.parse_input_event(k2)
+	await _wait(0.15)
+
+
+func _closed(n: Variant) -> bool:
+	return n == null or not is_instance_valid(n) or (n as Node).is_queued_for_deletion() or not (n as Node).is_inside_tree()
+
+
+## Team: the portrait grid fits all defenders, works with the keyboard, and a locked free agent
+## can be signed after a confirmation that shows the price and whether the player can afford it.
+func _test_u9_team() -> void:
+	Router.goto("roster")
+	_check(await _wait_scene("roster"), "Team screen opens")
+	await _wait(1.0)
+	var rs: Node = get_tree().current_scene
+	var tiles: Dictionary = rs.get("tiles")
+	_check(tiles.size() == DB.defender_order.size() and tiles.size() >= 12, "the Team grid has a tile for every defender (%d)" % tiles.size())
+	var vp := get_viewport().get_visible_rect()
+	var inside := true
+	for id in tiles:
+		inside = inside and vp.encloses((tiles[id] as Control).get_global_rect())
+	_check(inside, "every defender tile fits on screen without scrolling")
+	var f := get_viewport().gui_get_focus_owner()
+	_check(f != null and f == tiles.get(rs.selected), "the selected defender's tile has keyboard focus")
+	await _press(KEY_RIGHT)
+	var f2 := get_viewport().gui_get_focus_owner()
+	_check(f2 != null and f2 != f and f2 in tiles.values(), "arrow keys move between the tiles")
+	if f2 in tiles.values():
+		var fid: String = tiles.find_key(f2)
+		await _press(KEY_ENTER)
+		await _wait(0.3)
+		_check(fid == rs.selected, "Enter selects the focused defender (%s)" % rs.selected)
+		var f3 := get_viewport().gui_get_focus_owner()
+		_check(f3 == rs.tiles.get(rs.selected), "focus stays on the defender after the grid refreshes")
+	# A locked free agent: SIGN, the popup, Esc, then sign with enough coins.
+	var fa := ""
+	for a in Shop.free_agents():
+		if not bool(a.signed):
+			fa = str(a.id)
+			break
+	if fa == "":
+		_check(true, "every free agent is already signed")
+		return
+	await _click(_button_center(rs.tiles[fa]))
+	await _wait(0.5)
+	_check(rs.selected == fa, "clicking a locked free agent selects %s" % fa)
+	var sb: Button = rs.get("sign_button")
+	_check(sb != null and sb.is_visible_in_tree(), "a locked free agent shows SIGN NOW")
+	if sb == null:
+		return
+	var price := int(ShopScreen.agent_info(fa).price)
+	Profile.data.coins = price - 100
+	await _click(_button_center(sb))
+	await _wait(0.5)
+	var pop: Node = rs.find_child("SignConfirm", true, false)
+	_check(pop != null, "SIGN NOW opens the signing popup")
+	if pop:
+		var go: Button = pop.find_child("Sign", true, false)
+		_check(go != null and go.disabled, "the popup's SIGN is disabled when coins are short")
+		_check(_find_label(pop, "You need 100 more coins."), "the popup says how many coins are missing")
+		_check(_find_label(pop, UITheme.format_int(price)), "the popup shows the price")
+		await _key("pause")
+		await _wait(0.4)
+		_check(_closed(pop), "Esc closes the signing popup")
+		_check(Router.current == "roster", "Esc on the popup stays on the Team screen")
+	Profile.data.coins = price + 250
+	sb = rs.get("sign_button")
+	await _click(_button_center(sb))
+	await _wait(0.5)
+	pop = rs.find_child("SignConfirm", true, false)
+	var go2: Button = pop.find_child("Sign", true, false) if pop else null
+	_check(go2 != null and not go2.disabled, "SIGN is enabled with enough coins")
+	_check(pop != null and _find_label(pop, "After signing: 250 coins left."), "the popup shows the coins left after signing")
+	if go2 == null:
+		return
+	_check(get_viewport().gui_get_focus_owner() == go2, "the popup focuses SIGN for keyboard players")
+	await _click(_button_center(go2))
+	await _wait(0.8)
+	_check(_closed(pop), "confirming closes the popup")
+	if Profile.is_defender_unlocked(fa):
+		_check(int(Profile.data.coins) == 250, "signing charges the price (%d left)" % int(Profile.data.coins))
+		var t: Button = rs.tiles.get(fa)
+		_check(t != null and not "Locked" in t.tooltip_text, "the signed defender's tile is unlocked")
+		_check(rs.get("sign_button") == null, "SIGN NOW is gone once signed")
+	else:
+		_check(int(Profile.data.coins) == price + 250, "a refused signing charges nothing")
+
+
+## Shop: countdown, daily deals (or their empty state), the pack shop, free agents, the link to
+## Card Packs and back.
+func _test_u9_shop() -> void:
+	Profile.data.coins = 1000
+	Profile.data.stars = 0
+	Router.goto("shop")
+	_check(await _wait_scene("shop"), "the Shop opens")
+	await _wait(1.0)
+	var sh: ShopScreen = get_tree().current_scene as ShopScreen
+	_check(sh != null, "the Shop scene is a ShopScreen")
+	if sh == null:
+		return
+	var cd: Label = sh.find_child("Countdown", true, false)
+	_check(cd != null and cd.text.begins_with("NEW DEALS IN") and cd.text.count(":") == 2, "the Shop shows the refresh countdown (%s)" % (cd.text if cd else "none"))
+	var offers := Shop.offers()
+	if offers.is_empty():
+		var found := false
+		for l in sh.find_children("*", "Label", true, false):
+			found = found or (l as Label).text.begins_with("Today's deals are being stocked")
+		_check(found, "with no deals today the Shop says they are coming")
+	else:
+		_check(sh.deal_buttons.size() == offers.size(), "one tile per daily deal (%d)" % offers.size())
+		for o in offers:
+			if str(o.kind) == "gift" and not bool(o.bought):
+				var gb: Button = sh.deal_buttons.get(str(o.id))
+				_check(gb != null and not gb.disabled, "the free gift can be claimed")
+				if gb:
+					await _click(_button_center(gb))
+					await _wait(0.5)
+					var after := sh._offer(str(o.id))
+					_check(bool(after.get("bought", false)), "claiming marks the free gift as claimed")
+					var gb2: Button = sh.deal_buttons.get(str(o.id))
+					_check(gb2 != null and gb2.disabled, "a claimed gift's button is disabled")
+				break
+		for o in Shop.offers():
+			if str(o.kind) == "card" and not bool(o.bought):
+				var price := int(o.price.get("coins", 0))
+				Profile.data.coins = price + 40
+				sh._refresh()
+				await _wait(0.2)
+				var cb: Button = sh.deal_buttons.get(str(o.id))
+				_check(cb != null and not cb.disabled, "an affordable card deal can be bought")
+				if cb:
+					await _click(_button_center(cb))
+					await _wait(0.5)
+					_check(bool(sh._offer(str(o.id)).get("bought", false)), "buying a card deal marks it bought")
+					_check(int(Profile.data.coins) == 40, "the card deal charged its price (%d left)" % int(Profile.data.coins))
+				break
+		Profile.data.coins = 0
+		sh._refresh()
+		await _wait(0.2)
+		for o in Shop.offers():
+			if not bool(o.bought) and int(o.price.get("coins", 0)) > 0:
+				var ub: Button = sh.deal_buttons.get(str(o.id))
+				_check(ub != null and ub.disabled, "an unaffordable deal is disabled")
+				break
+	# Pack shop: same prices as Card Packs.
+	Profile.data.coins = 1000
+	sh._refresh()
+	await _wait(0.2)
+	_check(sh.pack_buttons.size() == 6, "the pack shop sells three packs, one or ten at a time")
+	var rb: Button = sh.pack_buttons.get("rookie:1")
+	var r10: Button = sh.pack_buttons.get("rookie:%d" % Profile.BUNDLE_SIZE)
+	var ch: Button = sh.pack_buttons.get("champion:1")
+	_check(rb != null and not rb.disabled and r10 != null and r10.disabled and ch != null and ch.disabled, "pack buttons follow the wallet (1,000 coins, 0 stars)")
+	if rb:
+		var before := Profile.pack_count("rookie")
+		await _click(_button_center(rb))
+		await _wait(0.4)
+		_check(Profile.pack_count("rookie") == before + 1, "BUY adds a Rookie Pack")
+		_check(int(Profile.data.coins) == 1000 - int(Profile.pack_price("rookie").coins), "BUY charges the pack price")
+	# Free agents: SIGN opens the same popup; Esc closes it.
+	_check(sh.agent_buttons.size() == Shop.free_agents().size(), "every free agent is listed (%d)" % sh.agent_buttons.size())
+	for a in Shop.free_agents():
+		if not bool(a.signed):
+			await _click(_button_center(sh.agent_buttons[str(a.id)]))
+			await _wait(0.5)
+			var pop: Node = sh.find_child("SignConfirm", true, false)
+			_check(pop != null, "a free agent's SIGN opens the signing popup")
+			await _key("pause")
+			await _wait(0.4)
+			_check(_closed(pop) and Router.current == "shop", "Esc closes it and stays in the Shop")
+			break
+	# OPEN PACKS goes to Card Packs; Esc comes back to the Shop.
+	var op := _find_button(sh, "OPEN PACKS  ▶")
+	_check(op != null, "the pack shop links to Card Packs")
+	if op:
+		await _click(_button_center(op))
+		_check(await _wait_scene("packs"), "OPEN PACKS opens Card Packs")
+		await _wait(0.8)
+		await _key("pause")
+		_check(await _wait_scene("shop"), "Esc from Card Packs returns to the Shop")
+		await _wait(0.6)
+	await _key("pause")
+	_check(await _wait_scene("main_menu"), "Esc leaves the Shop for the main menu")
+
+
+## Season Pass: name, countdown, tier, the track and claiming (one tier, Enter on a focused tier,
+## CLAIM ALL), or the empty state while there are no tiers.
+func _test_u9_season() -> void:
+	var cur := Season.current()
+	Profile.data["season"] = {"id": cur.get("id", 1), "xp": 3 * Season.XP_PER_TIER + 120, "claimed": [], "bonus_claimed": 0}
+	Router.goto("season")
+	_check(await _wait_scene("season"), "the Season Pass opens")
+	await _wait(1.2)
+	var ss: SeasonScreen = get_tree().current_scene as SeasonScreen
+	_check(ss != null, "the Season scene is a SeasonScreen")
+	if ss == null:
+		return
+	var nm: Label = ss.find_child("SeasonName", true, false)
+	_check(nm != null and nm.text != "", "the season's name is shown (%s)" % (nm.text if nm else ""))
+	var cd: Label = ss.find_child("SeasonCountdown", true, false)
+	_check(cd != null and cd.text.begins_with("ENDS IN"), "the season countdown is shown (%s)" % (cd.text if cd else ""))
+	var tn: Label = ss.find_child("TierNumber", true, false)
+	_check(tn != null and tn.text == str(Season.tier()), "the current tier is shown (%s)" % (tn.text if tn else ""))
+	var all: Button = ss.find_child("ClaimAll", true, false)
+	var tiers := Season.tiers()
+	if tiers.is_empty():
+		_check(ss.tier_buttons.is_empty(), "no tiers: the track shows its empty state")
+		_check(all != null and all.disabled, "no tiers: CLAIM ALL is disabled")
+		await _key("pause")
+		_check(await _wait_scene("main_menu"), "Esc leaves the Season Pass")
+		return
+	_check(ss.tier_buttons.size() == tiers.size() + 1, "the track has every tier plus the bonus (%d)" % ss.tier_buttons.size())
+	var claim := SeasonScreen._claimable()
+	_check(claim.size() == 3 and all != null and not all.disabled and all.text == "CLAIM ALL (3)", "three tiers are ready and CLAIM ALL counts them (%s)" % [claim])
+	_check(get_viewport().gui_get_focus_owner() == ss.tier_buttons.get(1), "focus starts on the first reward to claim")
+	var vp := get_viewport().get_visible_rect()
+	_check(vp.encloses((ss.tier_buttons[1] as Control).get_global_rect()), "the track is scrolled to the first reward to claim")
+	# Click tier 1.
+	await _click(_button_center(ss.tier_buttons[1]))
+	await _wait(0.6)
+	_check(not 1 in SeasonScreen._claimable() and SeasonScreen._claimable().size() == 2, "clicking a ready tier claims it")
+	# Enter on a focused tier claims it too.
+	(ss.tier_buttons[2] as Control).grab_focus()
+	await _press(KEY_ENTER)
+	await _wait(0.6)
+	_check(not 2 in SeasonScreen._claimable(), "Enter on a focused tier claims it")
+	# A locked tier does nothing.
+	var locked: int = mini(Season.TIERS, Season.tier() + 3)
+	await _click(_button_center(ss.tier_buttons[locked]))
+	await _wait(0.4)
+	_check(SeasonScreen._claimable().size() == 1, "a locked tier cannot be claimed")
+	all = ss.find_child("ClaimAll", true, false)
+	await _click(_button_center(all))
+	await _wait(0.6)
+	_check(SeasonScreen._claimable().is_empty(), "CLAIM ALL claims the rest")
+	all = ss.find_child("ClaimAll", true, false)
+	_check(all != null and all.disabled, "CLAIM ALL is disabled with nothing left")
+	await _key("pause")
+	_check(await _wait_scene("main_menu"), "Esc leaves the Season Pass")
+
+
+## Card Packs: the pity counters, the DAILY SHOP link (and back), extra-copy coins in the summary.
+func _test_u9_packs() -> void:
+	Router.goto("packs")
+	_check(await _wait_scene("packs"), "Card Packs opens")
+	await _wait(1.0)
+	var ps: Node = get_tree().current_scene
+	var e: Label = ps.find_child("Pity_epic", true, false)
+	var lg: Label = ps.find_child("Pity_legendary", true, false)
+	_check(e != null and e.text == ps.pity_text("Epic or better", Profile.pity_left("epic"), Profile.pity_pack_names("epic")), "Pack Luck shows the Epic counter (%s)" % (e.text if e else ""))
+	_check(lg != null and lg.text == ps.pity_text("Legendary", Profile.pity_left("legendary"), Profile.pity_pack_names("legendary")), "Pack Luck shows the Legendary counter (%s)" % (lg.text if lg else ""))
+	ps.set("_result", {"cards": [], "overflow_coins": 80, "pity": "epic"})
+	var st := str(ps.call("_summary_text"))
+	_check("+80 coins from extra copies" in st, "the reveal summary shows coins from extra copies")
+	_check("Epic guaranteed by Pack Luck" in st, "the reveal summary names a pity pull")
+	ps.set("_result", {})
+	var link: Button = ps.get("shop_link")
+	_check(link != null and link.is_visible_in_tree(), "Card Packs has a DAILY SHOP link")
+	if link:
+		await _click(_button_center(link))
+		_check(await _wait_scene("shop"), "DAILY SHOP opens the Shop")
+		await _wait(0.8)
+		await _key("pause")
+		_check(await _wait_scene("packs"), "Esc from the Shop returns to Card Packs")
+		await _wait(0.5)
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+## Level road: every caption is one line inside its own column (no overlaps), with a picture.
+func _test_u9_level_road() -> void:
+	Router.goto("progression")
+	_check(await _wait_scene("progression"), "Progression opens")
+	await _wait(1.2)
+	var views := get_tree().current_scene.find_children("*", "LevelRoadView", true, false)
+	_check(views.size() == 1, "the overview has the account level road")
+	if views.is_empty():
+		return
+	var road: LevelRoadView = views[0]
+	var prev := -1.0e9
+	var ok_lines := true
+	var ok_gap := true
+	for l in range(1, Profile.MAX_ACCOUNT_LEVEL + 1):
+		var node: Control = road.find_child("Level%d" % l, true, false)
+		if node == null:
+			ok_lines = false
+			continue
+		var cap: Control = node.get_child(node.get_child_count() - 1)
+		var r := cap.get_global_rect()
+		if cap is Label:
+			ok_lines = ok_lines and (cap as Label).get_line_count() == 1 and (cap as Label).autowrap_mode == TextServer.AUTOWRAP_OFF
+		ok_gap = ok_gap and r.position.x >= prev
+		prev = r.end.x
+	_check(ok_lines, "every level caption is a single line")
+	_check(ok_gap, "level captions never overlap their neighbours")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
