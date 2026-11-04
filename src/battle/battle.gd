@@ -1668,6 +1668,8 @@ func _preview_units(id: String, gp: Variant) -> Array:
 				return out
 			return enemies_in_radius(gp, float(c.get("radius", 3.0)))
 		"enemy":
+			if id == "scouting_report" and hover_enemy and effects.has_method("scouted"):
+				return effects.scouted(CardEffects.scout_type(hover_enemy))   # every runner of its type
 			return [hover_enemy] if hover_enemy else []
 		"defender":
 			if hover_defender == null:
@@ -1680,7 +1682,7 @@ func _preview_units(id: String, gp: Variant) -> Array:
 			return out2
 		"none":
 			match id:
-				"time_out", "changeup", "perfect_game", "rain_delay":
+				"time_out", "changeup", "perfect_game", "rain_delay", "fireworks_night":
 					var all: Array = []
 					for e in enemies:
 						if e.targetable():
@@ -1688,9 +1690,16 @@ func _preview_units(id: String, gp: Variant) -> Array:
 					return all
 				"sky_hook":
 					return lead_runners(1)
-				"grand_relay":
+				"grand_relay", "signal_caller":
 					return lead_runners(int(DB.card_param(id, "targets", run.card_level(id))))
-				"twin_play", "field_vision", "rally_cry":
+				"hidden_ball_trick":
+					var hb: Array = []
+					var strongest: Enemy = effects.strongest_runner()
+					if strongest:
+						hb.append(strongest)
+					hb.append_array(effects.live_bosses())
+					return hb
+				"twin_play", "field_vision", "rally_cry", "sweet_spot":
 					return defenders.duplicate()
 				"around_the_horn":
 					return effects.horn_targets(int(DB.card_param(id, "targets", run.card_level(id))))

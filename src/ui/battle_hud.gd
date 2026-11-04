@@ -73,6 +73,7 @@ var _boon_row: VBoxContainer
 var _milestone_label: Label
 var _start_sub: Label
 var _start_pulse: Tween
+var _double_badge: PanelContainer   # Ground Rule Double: "x2" over the hand while cards are cast twice
 
 
 func _ready() -> void:
@@ -283,6 +284,13 @@ func _build_bottom() -> void:
 	_combo_links.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_combo_links.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hand_box.add_child(_combo_links)
+	_double_badge = UITheme.badge("x2", Color(UITheme.GOLD.darkened(0.25), 0.95), 22)
+	_double_badge.name = "DoubleCastBadge"
+	_double_badge.position = Vector2(tray_w * 0.5 - 150, -44)
+	_double_badge.custom_minimum_size = Vector2(300, 0)
+	(_double_badge.get_child(0) as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_double_badge.visible = false
+	_hand_box.add_child(_double_badge)
 	# Energy bar
 	var eb := HBoxContainer.new()
 	eb.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -938,6 +946,10 @@ func refresh() -> void:
 	_energy_bar.queue_redraw()
 	_deck_label.text = "Deck %d · Discard %d" % [cs.draw_pile.size(), cs.discard.size()]
 	_draw_bar.value = cs.next_draw_progress()
+	var doubles: int = cs.double_casts_left(run.inning) if cs.has_method("double_casts_left") else 0
+	_double_badge.visible = doubles > 0 and battle.state != "results"
+	if doubles > 0:
+		(_double_badge.get_child(0) as Label).text = "x2  ·  NEXT %d CARD%s CAST TWICE" % [doubles, "" if doubles == 1 else "S"]
 	_update_cards()
 
 	# Start button: PLAY BALL in setup; NEXT WAVE NOW (+1 energy, the countdown) between waves.

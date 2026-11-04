@@ -543,6 +543,40 @@ func _target_for(id: String) -> Dictionary:
 			if last.is_empty() or int(DB.card(String(last.id)).cost) < 3:
 				return {}
 			return {"valid": true, "point": Field.HOME}
+		# Update 9 cards (stream B's targeting rules).
+		"second_wind":
+			# The hardest thrower, much preferred when its signature card is cooling down.
+			var pick: Defender = null
+			var best := -1.0
+			for df: Defender in battle.defenders:
+				var score := df.s_damage / maxf(df.s_interval, 0.1)
+				if battle.effects.has_method("signature_cards"):
+					for sig in battle.effects.signature_cards(df):
+						if sig in battle.cards.deck and battle.cards.cooldown_left(str(sig)) > 3.0:
+							score += 1000.0
+							break
+				if score > best:
+					best = score
+					pick = df
+			if pick == null:
+				return {}
+			return {"defender": pick, "point": pick.global_position, "valid": true}
+		"ground_rule_double":
+			if (battle.cards.has_method("double_casts_left") and battle.cards.double_casts_left(battle.run.inning) > 0) or _live() < 3:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"rally_monkey":
+			if battle.run.runs_inning == 0 and battle.cards.energy > 6.0:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"fireworks_night":
+			if _live() < 5 and battle.boss_alive == null:
+				return {}
+			return {"valid": true, "point": Field.HOME}
+		"hidden_ball_trick":
+			if battle.effects.strongest_runner() == null and battle.boss_alive == null:
+				return {}
+			return {"valid": true, "point": Field.HOME}
 	match c.target:
 		"enemy":
 			return {"enemy": lead[0], "point": lead[0].global_position, "valid": true}
