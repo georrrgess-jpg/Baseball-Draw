@@ -216,9 +216,9 @@ func _reveal(title: Control, sub: Control, foot: Control) -> void:
 			ct.chain().tween_property(c, "modulate", Color(1.5, 1.45, 1.6), 0.08)
 			ct.chain().tween_property(c, "modulate", Color.WHITE, 0.3)
 	# Nothing has focus until the player navigates (see _unhandled_input).
-	var owner := get_viewport().gui_get_focus_owner()
-	if owner:
-		owner.release_focus()
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused:
+		focused.release_focus()
 
 
 func _unhandled_input(event: InputEvent) -> void:
