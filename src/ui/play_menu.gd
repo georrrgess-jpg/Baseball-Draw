@@ -355,11 +355,11 @@ func _record_text(id: String) -> String:
 				return ""
 			return "Best: inning %d · %s points" % [int(rec.best_endless_inning), UITheme.format_int(int(rec.get("best_endless_score", 0)))]
 		"boss_rush":
-			var t := int(rec.get("best_time_boss_rush", 0))
+			var t := float(rec.get("best_time_boss_rush", 0.0))
 			var best := int(rec.get("best_score_boss_rush", 0))
 			var parts: Array = []
-			if t > 0:
-				parts.append("Best time %d:%02d" % [t / 60, t % 60])
+			if t > 0.0:
+				parts.append("Best time %s" % Rewards.time_text(t))
 			if best > 0:
 				parts.append("%s points" % UITheme.format_int(best))
 			return " · ".join(parts)
@@ -391,7 +391,8 @@ func _pays_text(id: String) -> String:
 		"boss_rush":
 			return "Win: Pro Pack + coins ×%.2f · best time kept" % mult
 		"endless":
-			return "Every 5 innings: coins + a Rookie Pack; Pro Packs at 10 and 20"
+			var m5 := Rewards.milestone_reward(5)
+			return "Every 5 innings: %s+ coins and a Rookie Pack; Pro Packs at 10 and 20" % UITheme.format_int(int(m5.get("coins", 0)))
 		"ranked":
 			var nd := Profile.next_division()
 			var n := int(Profile.data.division) + 1

@@ -103,14 +103,21 @@ func _ready() -> void:
 		Hints.first_visit(self, "results", func() -> Dictionary: return {"results_season": _season_row} if is_instance_valid(_season_row) else {}, [], T_TEAM + 1.2)
 
 
-## Screenshot helper (`--demo-results`, with `--show-results`): fills the Update 9 result keys
-## with sample values so the Results screen can be captured with every section showing.
+## Screenshot helper (`--demo-results`, with `--show-results`): Update 9 result keys the game left
+## empty get sample values (a win streak, extra copies, boons), so every section shows.
 func _demo_result() -> void:
 	if not "--demo-results" in OS.get_cmdline_user_args() or result.is_empty() or result.get("practice", false):
 		return
-	result.merge({"streak": 3, "streak_bonus_coins": 64, "first_win_today_coins": 128, "season_xp": 260, "season_tiers": [Season.tier()],
-		"boons": Boons.all().slice(0, 3).map(func(b: Dictionary) -> String: return str(b.get("id", ""))),
-		"milestones": [], "milestone_coins": 0, "overflow_coins": 80}, true)
+	var demo := {"streak": 3, "streak_bonus": 0.2, "streak_bonus_coins": 38, "overflow_coins": 80,
+		"boons": Boons.all().slice(0, 3).map(func(b: Dictionary) -> String: return str(b.get("id", "")))}
+	var extra := 0
+	for k in demo.keys():
+		var v: Variant = result.get(k, null)
+		if v == null or (typeof(v) in [TYPE_INT, TYPE_FLOAT] and float(v) == 0.0) or (typeof(v) == TYPE_ARRAY and (v as Array).is_empty()):
+			result[k] = demo[k]
+			if k.ends_with("_coins"):
+				extra += int(demo[k])
+	result["coins_total"] = int(result.get("coins_total", result.get("coins", 0))) + extra
 
 
 # ---------------------------------------------------------------- line score
@@ -219,7 +226,8 @@ func _build_rewards() -> PanelContainer:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 12)
 	rv.add_child(top)
-	top.add_child(_counter("coin", int(result.get("coins", 0)), "+%s", "COINS", UITheme.GOLD, T_COINS))
+	# The total of the game (bonuses included); the chips below break the bonuses out.
+	top.add_child(_counter("coin", int(result.get("coins_total", result.get("coins", 0))), "+%s", "COINS", UITheme.GOLD, T_COINS))
 	top.add_child(_counter("upgrade", int(result.get("xp", 0)), "+%s", "ACCOUNT XP", UITheme.GREEN, T_XP))
 	top.add_child(_counter("trophy", int(result.get("rp", 0)), "+%s", "RANK POINTS", UITheme.BLUE, T_RP))
 	var bonus := _bonus_chips()
@@ -248,7 +256,8 @@ func _bonus_chips() -> Control:
 	var streak := int(result.get("streak", 0))
 	if streak > 0:
 		var sc := int(result.get("streak_bonus_coins", 0))
-		chips.append(["fire", "%d-WIN STREAK" % streak, sc, UITheme.FLAME, "Win streak: +10%% coins per win in a row (max +50%%). Now +%d%%." % mini(50, streak * 10)])
+		var pct := int(round(float(result.get("streak_bonus", 0.0)) * 100.0))
+		chips.append(["fire", "%d-WIN STREAK" % streak, sc, UITheme.FLAME, "Win streak: +10%% coins per win in a row (max +50%%). This win: +%d%%." % pct])
 	if int(result.get("first_win_today_coins", 0)) > 0:
 		chips.append(["trophy", "FIRST WIN TODAY ×2", int(result.first_win_today_coins), UITheme.GREEN, "Your first win each day pays double coins."])
 	if int(result.get("milestone_coins", 0)) > 0:
@@ -330,15 +339,16 @@ func _level_row() -> Control:
 
 
 ## Season XP: the tier bar fills from before this game, flashing each tier reached with its
-## reward, and a link to the Season Pass when a reward is waiting. Null when no season XP.
+## reward (tiers above 30 are bonus Pro Packs, already granted), and a link to the Season Pass when
+## a reward is waiting. Null when the game gave no season XP.
 func _season_block() -> Control:
 	var gained := int(result.get("season_xp", 0))
 	if gained <= 0:
 		return null
-	var tiers_up: Array = result.get("season_tiers", [])
-	var per := maxi(1, int(Season.tier_progress().get("xp_need", Season.XP_PER_TIER)))
-	var now_xp := Season.xp()
-	var before_xp := maxi(0, now_xp - gained)
+	var after_xp := int(result.get("season_xp_after", Season.xp()))
+	var before_xp := int(result.get("season_xp_before", maxi(0, after_xp - gained)))
+	var p0 := _season_pos(before_xp)
+	var p1 := _season_pos(after_xp)
 	var box := VBoxContainer.new()
 	box.name = "SeasonXP"
 	box.add_theme_constant_override("separation", 2)
@@ -346,15 +356,13 @@ func _season_block() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
-	var cap_tier := Season.TIERS
-	var tier_of := func(x: int) -> int: return mini(cap_tier, x / per)
-	var t0: int = tier_of.call(before_xp)
-	var tl := UITheme.label("TIER %d" % t0, UITheme.FS_LEAD, SEASON_ACCENT, UITheme.font_header())
+	var tl := UITheme.label(_season_tier_label(int(p0[0])), UITheme.FS_LEAD, SEASON_ACCENT, UITheme.font_header())
 	tl.custom_minimum_size = Vector2(130, 0)
-	tl.tooltip_text = str(Season.current().get("name", "Season"))
+	var cur := Season.current()
+	tl.tooltip_text = "%s%s" % [cur.get("name", "Season"), (": " + str(cur.theme)) if str(cur.get("theme", "")) != "" else ""]
 	tl.mouse_filter = Control.MOUSE_FILTER_PASS
 	row.add_child(tl)
-	var bar := UITheme.bar(SEASON_ACCENT, 14, 1.0, float(before_xp % per) / per)
+	var bar := UITheme.bar(SEASON_ACCENT, 14, 1.0, float(p0[1]))
 	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.tooltip_text = "Season XP: 100 per game, +60 for a win, +80 per mission, +100 for the Daily Challenge"
@@ -381,36 +389,46 @@ func _season_block() -> Control:
 	var rewards := {}
 	for t in Season.tiers():
 		if typeof(t) == TYPE_DICTIONARY:
-			rewards[int(t.get("tier", 0))] = t.get("reward", {})
+			rewards[int(t.get("tier", 0))] = str(t.get("text", Season.reward_text(t.get("reward", {}))))
+	# Each step past a tier (or a bonus Pro Pack) fills the bar, flashes and names the reward.
+	var steps: Array = []
+	for t in range(int(p0[0]) + 1, int(p1[0]) + 1):
+		steps.append(t)
 	var tw := UITheme.bound_tween(box)
 	tw.tween_interval(T_SEASON)
-	var shown_tiers: Array = []
-	for t in tiers_up:
-		if int(t) > t0 and shown_tiers.size() < 5:
-			shown_tiers.append(int(t))
-	var reached: int = tier_of.call(now_xp)
-	for t in range(t0 + 1, reached + 1):
-		if not t in shown_tiers:
-			shown_tiers.append(t)
-	shown_tiers.sort()
-	for t in shown_tiers:
+	for t in steps.slice(maxi(0, steps.size() - 6)):
 		var tier: int = t
 		tw.tween_property(bar, "value", 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tw.tween_callback(func() -> void:
 			Audio.play("level_up", -5.0)
-			tl.text = "TIER %d" % tier
-			var rtxt := Season.reward_text(rewards.get(tier, {})) if rewards.has(tier) else ""
-			bl.text = "SEASON TIER %d!%s" % [tier, ("  " + rtxt + " waiting") if rtxt != "" else ""]
+			tl.text = _season_tier_label(tier)
+			if tier > Season.TIERS:
+				bl.text = "BONUS PRO PACK!  Added to your packs"
+			else:
+				var rtxt: String = rewards.get(tier, "")
+				bl.text = "SEASON TIER %d!%s" % [tier, ("  " + rtxt + " to claim") if rtxt != "" else ""]
 			banner.visible = true
 			bar.value = 0.0)
-	var end := float(now_xp % per) / per
-	if reached >= cap_tier and now_xp >= cap_tier * per:
-		end = 1.0
-	tw.tween_property(bar, "value", end, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	if shown_tiers.is_empty() and not Season.claimable().is_empty():
-		bl.text = "%d season reward%s to claim" % [Season.claimable().size(), "" if Season.claimable().size() == 1 else "s"]
+	tw.tween_property(bar, "value", float(p1[1]), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var waiting := Season.claimable().size()
+	if steps.is_empty() and waiting > 0:
+		bl.text = "%d season reward%s to claim" % [waiting, "" if waiting == 1 else "s"]
 		banner.visible = true
 	return box
+
+
+## [step, fraction] on the season track for `x` XP: tiers 1-30 every XP_PER_TIER, then one step per
+## bonus Pro Pack (Season.bonus_xp() each).
+static func _season_pos(x: int) -> Array:
+	var cap := Season.TIERS * Season.XP_PER_TIER
+	if x < cap:
+		return [x / Season.XP_PER_TIER, float(x % Season.XP_PER_TIER) / Season.XP_PER_TIER]
+	var bonus := maxi(1, Season.bonus_xp())
+	return [Season.TIERS + (x - cap) / bonus, float((x - cap) % bonus) / bonus]
+
+
+static func _season_tier_label(step: int) -> String:
+	return "TIER %d" % step if step <= Season.TIERS else "TIER 30 +%d" % (step - Season.TIERS)
 
 
 ## PROMOTED TO ...! with the promotion reward (coins, stars and a pack).

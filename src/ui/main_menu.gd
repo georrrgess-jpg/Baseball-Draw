@@ -477,9 +477,8 @@ static func _mode_record_text(id: String) -> String:
 		"endless":
 			return "Best: inning %d" % int(rec.best_endless_inning) if int(rec.get("best_endless_inning", 0)) > 0 else ""
 		"boss_rush":
-			if int(rec.get("best_time_boss_rush", 0)) > 0:
-				var s := int(rec.best_time_boss_rush)
-				return "Best time: %d:%02d" % [s / 60, s % 60]
+			if float(rec.get("best_time_boss_rush", 0.0)) > 0.0:
+				return "Best time: %s" % Rewards.time_text(float(rec.best_time_boss_rush))
 	var best := int(rec.get("best_score_" + id, 0))
 	return "Best score: %s" % UITheme.format_int(best) if best > 0 else ""
 
@@ -596,8 +595,10 @@ func _build_right(animate := false) -> void:
 
 ## The Shop's free gift offer when it can still be taken today ({} otherwise).
 static func _free_gift() -> Dictionary:
+	if not Shop.gift_available():
+		return {}
 	for o in Shop.offers():
-		if typeof(o) == TYPE_DICTIONARY and str(o.get("kind", "")) == "gift" and not bool(o.get("bought", false)):
+		if typeof(o) == TYPE_DICTIONARY and str(o.get("kind", "")) == "gift":
 			return o
 	return {}
 
@@ -732,12 +733,16 @@ func _build_season_bar() -> Button:
 	hb.add_child(mid)
 	var top := HBoxContainer.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var name_l := UITheme.label(str(cur.get("name", "Season")).to_upper(), UITheme.FS_LEAD, accent.lightened(0.2), UITheme.font_header())
+	var sname := str(cur.get("name", "Season"))
+	if str(cur.get("theme", "")) != "":
+		sname += ": " + str(cur.theme)
+	var name_l := UITheme.label(sname.to_upper(), UITheme.FS_LEAD, accent.lightened(0.2), UITheme.font_header())
+	name_l.clip_text = true
 	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(name_l)
 	var left_s := int(cur.get("seconds_left", 0))
 	if left_s > 0:
-		top.add_child(UITheme.label("ends in %s" % UITheme.format_duration(left_s), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
+		top.add_child(UITheme.label("ends in %s" % Season.countdown_text(left_s), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold()))
 	mid.add_child(top)
 	var need := maxi(1, int(prog.get("xp_need", Season.XP_PER_TIER)))
 	var maxed := tier >= Season.TIERS
@@ -837,7 +842,7 @@ func _login_cell(e: Dictionary, can: bool) -> Control:
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	var reward: Variant = e.get("reward", {})
-	var txt := DailyRewards.reward_text(reward) if typeof(reward) == TYPE_DICTIONARY else ""
+	var txt := str(e.get("text", DailyRewards.reward_text(reward) if typeof(reward) == TYPE_DICTIONARY else ""))
 	p.tooltip_text = "Day %d: %s%s" % [day, txt if txt != "" else "reward", "  (claimed)" if claimed else ("  (today)" if today else "")]
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 0)
@@ -871,14 +876,14 @@ func _claim_login() -> void:
 	var day := DailyRewards.day()
 	var cell: Control = _login_panel.find_child("LoginDay%d" % day, true, false) if _login_panel else null
 	var origin := cell.get_global_rect().get_center() if cell else (_login_panel.get_global_rect().get_center() if _login_panel else Vector2(1600, 300))
-	var r := DailyRewards.claim()
+	var r := DailyRewards.claim()   # {day, reward, granted, text, streak, best}
 	if r.is_empty():
 		return
 	Audio.play("achievement", -3.0)
 	Audio.play("coin", -6.0)
-	_float_reward(origin, r)
-	var txt := DailyRewards.reward_text(r)
-	Router.toast("Day %d login reward%s" % [day, (": " + txt) if txt != "" else "!"], "achievement")
+	_float_reward(origin, r.get("reward", {}))
+	var txt := str(r.get("text", ""))
+	Router.toast("Day %d login reward%s" % [int(r.get("day", day)), (": " + txt) if txt != "" else "!"], "achievement")
 	Profile.save_soon()
 	_build_right(false)
 
