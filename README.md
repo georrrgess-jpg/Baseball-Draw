@@ -25,13 +25,14 @@ What changed: [Update 6](docs/screenshots/update6_before_after.jpg), [Update 5](
   Frostpark, Champion's Citadel) with fortress walls, enemy gates, light towers, real dugouts, sponsor
   boards and themed skylines. About 1,800 fans that clap, cheer, groan, stand and do the wave. A jumbotron
   shows big plays live, a mascot entertains between waves, and fireworks go off on wins.
-- **Nine rigged and animated defenders** (Ace, Rico, Maya, Jax, Kai, Bruno + unlockable Nova, Dex, Hana),
-  each with a class trait, a signature card, levels, training traits, gear and team uniforms.
+- **Twelve rigged and animated defenders** (Ace, Rico, Maya, Jax, Kai, Bruno + unlockable Nova, Dex, Hana,
+  and the free agents Moose, Rosa and Sid), each with a class trait, a signature card, levels, training
+  traits, gear and team uniforms. Free agents unlock at an account level, or sign them early for coins.
 - **Nine runner types and three bosses** — Runner, Sprinter, Armored, Swarmer, Jumper, Trickster,
   Captain, Siege Slugger and the Base Stealer; bosses Iron Slugger, Phantom Captain and the Grand Slammer,
   all with telegraphed attacks and counterplay. Bosses get a camera entrance with a name card, and a
   slow-motion finale when defeated.
-- **44 ability cards** in four categories (offense, control, defense, utility) and five rarities,
+- **56 ability cards** in four categories (offense, control, defense, utility) and five rarities,
   with real combos (Curveball + Heat Wave, Magnet Glove + Grand Slam Barrage, Twin Play + relays...).
   8-card decks, 5-card hand, 10 energy, cooldowns, draw/discard cycling. Every card has a one-line rule,
   bold painted art and a metallic frame with a glow in its rarity colour; Rare, Epic and Legendary cards
@@ -67,11 +68,21 @@ What changed: [Update 6](docs/screenshots/update6_before_after.jpg), [Update 5](
   frame), and completing a card category pays out a pack.
 - **Adaptive music**: each stadium has its own take on the battle theme, with layers that build with waves,
   bosses and tense moments, plus a crowd that reacts to the game.
-- **Modes**: Standard Siege (9 innings, 3 bosses), Quick Defense (3 innings), The Endless Ninth
-  (survival with modifiers and milestones), Practice Field (sandbox) and Promotion Challenges for the
-  offline rank ladder (Rookie → Bronze → Silver → Gold → Platinum → Diamond → Champion → Legend).
+- **Modes**: Standard Siege (9 innings, 3 bosses), Quick Defense (3 innings), Boss Rush (three bosses back
+  to back, about 7 minutes), The Endless Ninth (survival with modifiers and a reward every 5 innings),
+  Practice Field (sandbox) and Promotion Challenges for the offline rank ladder (Rookie → Bronze → Silver →
+  Gold → Platinum → Diamond → Champion → Legend), with a reward for every promotion.
+- **Dugout Draft**: after a boss in Standard Siege, Endless and Boss Rush, pick 1 of 3 boons (18 in three
+  rarities) that last for the rest of the game, so no two runs play the same. Call the next wave early
+  between waves (NEXT WAVE NOW or Space) for +1 energy.
+- **Something to come back for every day**: a free 30-tier **Season Pass** every 14 days (season XP from
+  every game, missions and the Daily Challenge; a season uniform at tier 30), a 7-day **login calendar**
+  that pauses instead of resetting, a **Daily Shop** (free gift, copies of cards you're upgrading, pack and
+  star deals), **win streaks** (up to +50% coins) and double coins on the first win of the day.
+- **Fair packs**: Pack Luck guarantees an Epic or better within 10 packs and a Legendary within 30 Pro or
+  Champion Packs, and extra copies of max-level cards turn into coins.
 - **Long-term progression**: account level, defender XP/levels, card collection and upgrades, card packs,
-  gear shop, uniforms, 41 achievements, stadium unlocks, records and match history.
+  gear shop, uniforms, 52 achievements, stadium unlocks, records and match history.
 - **Four difficulties** (Rookie, Standard, Veteran, Legend) that change runner toughness, speed, wave size,
   enemy ability timing, elite affixes, starting shields and rewards.
 - **Settings**: resolution, window mode, V-Sync, FPS cap, UI scale, quality presets (shadows, AA, SSAO,

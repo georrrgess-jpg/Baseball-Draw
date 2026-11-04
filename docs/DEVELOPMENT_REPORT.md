@@ -778,3 +778,139 @@ the real amount for that level; before, it always said "+100 coins".
 | First rare card at max level | 13.0 h | 10.2 h |
 | All commons at max level | 16.3 h | 11.0 h |
 | Rookie bundle (1,800 coins) | 0.6 h of income | 0.4 h of income |
+
+## 18. Update 9: "Big League"
+
+Plan: `docs/plans/UPDATE_9_PLAN.md`. The lead wrote the plan and a foundation commit with the shared
+contracts as working stubs: Season, DailyRewards, Shop and Boons; profile keys; placeholder free agents; Boss
+Rush; the Shop and Season scenes. Six streams then built the update in parallel, each in its own copy of the
+code with one owner per file. The lead merged them, wired the streams together and ran the verification.
+
+### New team members (stream A)
+| Defender | Role | Trait | Signature card | Unlock |
+|---|---|---|---|---|
+| **Moose** Malone, #25 "The Big Scoop" | Infielder (first base) | **Long Stretch**: runners within 5 m take +25 % damage from everyone and are 10 % slower (lime ring). | Scoop & Tag | Account level 15, or sign for 5,000 coins |
+| **Rosa** Vega, #7 "The Strategist" | Catcher | **Pitch Framing**: every 6 s she frames the most dangerous runner: +35 % damage taken, and its out gives +0.5 energy ("FRAMED!" and a magenta marker). | Signal Caller | Level 20, or 7,500 coins |
+| **Sid** "Submarine" Okafor, #51 | Pitcher | **Skipper**: after a hit, the ball skips on into one runner up to 4 m behind for 60 % damage. | Worm Burner | Level 25, or 10,000 coins |
+
+* All three are hero-style models with the same rig, clips and event times as the other defenders:
+  * Moose is the tallest and broadest, with a long first-baseman's mitt.
+  * Rosa wears catcher's gear, with her mask pushed up.
+  * Sid is lanky and wears goggles; he has his own low submarine throw.
+* Each has 18–20k triangles. `verify_characters` is clean: no foot slide and loop seams of 0.
+* Stats were tuned with the simulator so each one is a real alternative to the defender it replaces, not a
+  straight upgrade.
+
+![New defenders](screenshots/u9/team_moose.jpg)
+
+### Twelve new cards (stream B)
+| Card | Rarity | What it does |
+|---|---|---|
+| Scouting Report | Common | Every runner of the chosen type takes +30 % damage for 8 s, including ones that spawn later. |
+| Sprinkler System | Common | Soaks a base path: runners are 30 % slower and can slip. |
+| Sweet Spot | Uncommon | Every throw is a critical hit for 6 s. |
+| Rally Monkey | Uncommon | +3 energy, or +5 energy and a card if a run scored this inning (clutch). |
+| Second Wind | Rare | One defender's signature card comes off cooldown, and they get +50 % attack speed. |
+| Money Ball | Rare | Outs pay double in-game coins for 12 s. |
+| Scoop & Tag | Rare | Moose's sweep: knocks runners back and stuns them. Hurt runners are out. |
+| Signal Caller | Rare | Rosa marks the three most dangerous runners: +40 % damage, and outs refund energy. |
+| Hidden Ball Trick | Epic | After a reveal, the strongest non-boss runner is out; bosses lose 15 % of max health. |
+| Worm Burner | Epic | Sid's skipping grounder tears down a base path, tripping runners and leaving a slick. |
+| Fireworks Night | Legendary | 14 fireworks strike runners over 4 s, then a finale. |
+| Ground Rule Double | Legendary | The next 2 cards played this inning are cast twice. |
+
+* Every card has painted art in the existing style, FX in the Update 8 vibrancy style, 19 new combos, the
+  "Big League" collection set (Champion Pack reward), Scouting Book "good against" entries, and Auto Build
+  support with simulator-calibrated `ai_weight`.
+* The card pool grows from 44 to 56.
+* Hand hit map with new-card decks: 0 of 175 dead points. Fast play: 12 of 12 clicks registered.
+
+![New card art](screenshots/u9/card_art_new_cards.jpg)
+![New card effects](screenshots/u9/vfx_new_cards.jpg)
+
+### Modes: Dugout Draft, Boss Rush, Endless milestones, Next Wave Now (stream C)
+* **Dugout Draft:** after a boss that doesn't end the game, the game holds and you pick 1 of 3 boons for the
+  rest of the game. This happens after innings 3 and 6 in Standard Siege, after every boss in Endless, and
+  after bosses 1 and 2 in Boss Rush.
+  * There are 18 boons: 8 common, 6 rare and 4 epic. Examples: Heavy Lumber +15 % team damage, Extra Innings
+    one more run allowed, Giant Killer bosses take +25 %, Deep Bench, Leadoff Discount, Infield In, the
+    Clinics (+1 card level for a category).
+  * Offers never repeat a boon you've taken, skip useless ones, and always include a rare or better.
+  * Pick with keys 1/2/3, a click or a controller. Boons survive Save & Quit, and the HUD shows them as chips.
+* **Boss Rush** (new mode): three innings, each ending with a tougher boss, with drafts in between. About 7
+  minutes, and the best time is recorded.
+* **Endless:** a reward every 5 innings (shown in the HUD with your best inning), and a gentler ramp.
+* **Next Wave Now:** between waves, the button or Space calls the next wave early for +1 energy and bonus
+  coins.
+* **New battle hooks** other systems build on: `runner_out`, `add_out_coin_bonus` and `add_energy`.
+
+Simulator (autopilot, starter deck unless "mid"; roughly ±14 points at 12 games):
+
+| Mode / difficulty | Before | After | Target |
+|---|---|---|---|
+| Standard Siege / Rookie | 100 % | 100 % | easy |
+| Standard Siege / Standard | 80 % | 67 % (wave budget ×1.12 so boons don't trivialise it) | about 65 % |
+| Boss Rush / Standard | 0 % (untuned stub) | 50 % (median 4.5 min of game time) | about 50 % |
+| Boss Rush / Rookie | 75 % | 100 % | easy |
+| Endless / Standard, mid profile | median inning 6.5 (fresh) | median inning 12.5 | 12–16 |
+
+![Dugout Draft](screenshots/u9/dugout_draft.jpg)
+![HUD: boons, milestone, Next Wave Now](screenshots/u9/hud_boons_milestone_next_wave.jpg)
+
+### Economy and the return loop (stream D)
+| System | Rules |
+|---|---|
+| Season Pass | 14-day seasons, 30 free tiers of 500 XP. XP: 100 per game, +60 for a win, +80 per mission, +100 for the Daily Challenge. Coins, packs and stars, a Champion Pack at tiers 15 and 30, a season uniform at tier 30, then a Pro Pack every 1,000 XP. At rollover, reached rewards are paid out automatically. |
+| Login calendar | 7 days: 150 coins → Rookie Pack → 250 coins → 10 stars → Pro Pack → 400 coins → Champion Pack. A missed day pauses it. |
+| Win streak | +10 % coins per win in the streak, up to +50 %. A loss resets it. |
+| First win of the day | The game's coins are paid twice. |
+| Daily Shop | A free gift; two deals on copies of cards you're upgrading (more likely if they're in your deck); a Pro Pack at −25 %; a Champion Pack for 40 stars. Refreshes at midnight. |
+| Free agents | Sign Moose, Rosa or Sid early for coins. |
+| Pack Luck | An Epic or better within 10 packs; a Legendary within 30 Pro or Champion Packs. Natural Legendary odds were lowered to 0.03 / 0.2 / 0.6 so the guarantee sets the pace. |
+| Extra copies | Copies of a max-level card become coins: 20 / 40 / 80 / 160 / 400 by rarity. |
+| Promotions | 300 coins and 10 stars × division, plus a Pro Pack (a Champion Pack from Gold up). |
+| Missions and achievements | 4 new daily and 3 new weekly missions; 11 new achievements (52 in total). |
+
+Economy model (`tools/balance/economy.py`, 200 players, 30 h):
+
+| | Update 8 economy, 44 cards | Update 9, 56 cards |
+|---|---|---|
+| Whole collection | about 39 h | 30.1 h |
+| First Legendary | 3.3 h | 3.1 h |
+| After 6 games (first hour) | 30.5 packs, 8,930 coins | 32 packs, 10,091 coins |
+| Coins per hour (all sources except extra copies) | 5,871 | 7,881 |
+| Packs earned per hour | 12.5 | 15.1 |
+| Season tier 30 at 1 h a day | – | 87 % of seasons, median day 13 of 14 |
+| Players who sign a free agent early | – | 30 % (80 % of players who save for one) |
+
+* The free-agent unlocks were moved from levels 13/16/19 to 15/20/25 after the model showed that almost
+  nobody signed early.
+* Extra-copy coins pay back about two thirds of a pack's price once most cards are maxed. There is no coin
+  loop, because every pack still costs more than it returns.
+
+### Screens (streams E1 and E2)
+* **Hub:**
+  * PLAY with a quick mode switch;
+  * a TODAY column: login calendar with CLAIM, the Daily Challenge, missions, the free-gift link;
+  * the season tier bar, the win streak flame and a first-win badge;
+  * a Shop tile;
+  * badges as corner bubbles.
+* **Play menu:** seven large mode cards with your best record and what a win pays (Boss Rush included),
+  two-line difficulty buttons with the reward multiplier, a stadium carousel instead of the wall of locked
+  tiles, and the streak box.
+* **Results:** three columns that fit at 1600×900, and a COINS total with bonus chips for the win streak,
+  first win, Endless milestones and extra copies. Also the season XP bar with tier-ups, boons drafted and
+  promotion rewards. The counter animations are bound to their own controls and stop when those controls
+  leave the screen. This fixes the six "Lambda capture was freed" errors from the Windows smoke run of the
+  coin-boost build.
+* **Team:** a 3×4 portrait grid for 12 defenders, free agents with SIGN NOW and a confirm showing the price,
+  and season uniforms shown as rewards instead of being for sale.
+* **Shop and Season Pass:** two new screens.
+* **Card Packs:** a Pack Luck panel, a Daily Shop link, and "+N COINS" / GUARANTEED tags in the results.
+* **Level road:** labels that are readable and don't overlap, with reward pictures.
+
+![Before and after: hub, Play, Results, Team, Card Packs, level road](screenshots/update9_before_after.jpg)
+![Shop](screenshots/u9/e2_shop.jpg)
+![Season Pass](screenshots/u9/e2_season.jpg)
+
+### Verification
