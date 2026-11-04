@@ -231,6 +231,7 @@ func _refresh() -> void:
 	_fill_info()
 	_fill_team()
 	_show_model(selected)
+	_screen.refresh_currency()
 
 
 func _fill_list() -> void:

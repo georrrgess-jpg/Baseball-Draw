@@ -522,8 +522,9 @@ func _refresh() -> void:
 	var focus_tier := _focused_tier()
 	_fill_header()
 	_fill_track()
+	refresh_currency()
 	_flash_tiers = []
-	if focus_tier >= 0:
+	if focus_tier != -1:
 		_restore_focus.call_deferred(focus_tier)
 
 

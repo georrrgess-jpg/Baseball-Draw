@@ -86,6 +86,7 @@ func _refresh() -> void:
 	_fill_deals()
 	_fill_packs()
 	_fill_agents()
+	refresh_currency()
 	_flash_id = ""
 	if focus_key != "":
 		_restore_focus.call_deferred(focus_key)
@@ -482,7 +483,7 @@ func _pack_buy(id: String, count: int) -> Control:
 	var can := Profile.can_buy_pack(id, count)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 0)
-	var b := price_button("BUY" if count == 1 else "×%d" % count, price, can)
+	var b := price_button("BUY" if count == 1 else "BUY %d" % count, price, can)
 	b.tooltip_text = "Buy %d %s%s" % [count, DB.pack(id).name, "s" if count > 1 else ""]
 	if count > 1 and can:
 		var full := Profile.pack_price(id, 1)
