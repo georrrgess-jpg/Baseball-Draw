@@ -51,6 +51,7 @@ func _run() -> void:
 	await test_u9_screens()
 	test_update5_content()
 	test_update7_content()
+	test_update9_modes()
 	test_update9_models()
 	test_update9_cards_content()
 	await test_scouting()
@@ -1202,6 +1203,8 @@ func test_battle_systems() -> void:
 	_clear()
 	await _test_update8_battle()
 	_clear()
+	await _test_update9_battle()
+	_clear()
 	await _test_update9_defenders()
 	_clear()
 	await _test_update9_cards_battle()
@@ -2130,6 +2133,422 @@ func test_update7_content() -> void:
 	for id in NEW_CARDS_U7:
 		ok(seen.has(id), "packs can contain %s" % id)
 	Profile.reset_profile()
+
+
+# ---------------------------------------------------------------- Update 9 (stream C: modes, boons, hooks)
+
+## Battle hooks for the other streams: runner_out once per out (after it is scored), the out coin
+## bonus and add_energy.
+func _test_update9_battle() -> void:
+	section("update 9 battle hooks (runner_out, coin bonus, energy)")
+	_hold_fire(true)
+	var route := battle.routes[0]
+	var outs_seen: Array = []
+	var cb := func(en: Enemy, info: Dictionary) -> void:
+		outs_seen.append([en, info, battle.run.outs_total])
+	battle.runner_out.connect(cb)
+	var pack: Array = []
+	for i in 3:
+		pack.append(battle.spawn_enemy("runner", route, route.length * 0.4 + i * 0.5, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01}))
+	await _wait(0.1)
+	var outs0 := battle.run.outs_total
+	(pack[0] as Enemy).apply_mark(5.0, 0.2)
+	battle.deal_damage(pack[0], 99999.0, {"source": battle.defenders[0], "kind": "throw", "card": "power_throw"})
+	battle.deal_damage(pack[1], 99999.0, {"kind": "fire"})
+	(pack[2] as Enemy).die({})
+	await _wait(0.1)
+	ok(outs_seen.size() == 3 and battle.run.outs_total == outs0 + 3, "runner_out fires once per out (%d signals, %d outs)" % [outs_seen.size(), battle.run.outs_total - outs0])
+	if outs_seen.size() == 3:
+		var i0: Dictionary = outs_seen[0][1]
+		ok(outs_seen[0][0] == pack[0] and int(outs_seen[0][2]) == outs0 + 1, "runner_out comes after the out is scored")
+		ok(i0.get("defender") == battle.defenders[0] and i0.get("source") == battle.defenders[0] and str(i0.get("card")) == "power_throw" and bool(i0.get("marked")),
+			"runner_out info names the defender, the card and the mark (%s)" % [i0])
+		var i1: Dictionary = outs_seen[1][1]
+		ok(i1.get("defender") == null and str(i1.get("card")) == "" and not bool(i1.get("marked")) and i1.has("source"), "runner_out info for a sourceless out")
+	# A decoy is not a runner: no signal.
+	outs_seen.clear()
+	var dec := battle.spawn_enemy("decoy", route, route.length * 0.4, {"lateral": 0.0})
+	dec.die({})
+	ok(outs_seen.is_empty(), "a vanishing decoy is not an out")
+	# Base Shield out at the plate: one signal, kind "plate".
+	battle.practice_invulnerable = true
+	battle.run.shields = 1
+	outs_seen.clear()
+	battle.spawn_enemy("runner", route, route.length - 0.2, {"lateral": 0.0})
+	await _wait(0.4)
+	ok(outs_seen.size() == 1 and str(outs_seen[0][1].get("kind")) == "plate", "a Base Shield out at the plate fires runner_out (%d)" % outs_seen.size())
+	battle.runner_out.disconnect(cb)
+	# Out coin bonus: (1 + bonuses) per out; fractions carry over; timed bonuses expire.
+	var base_mult := battle.out_coin_mult()
+	battle.add_out_coin_bonus(1.0, 5.0)
+	ok(is_equal_approx(battle.out_coin_mult(), base_mult + 1.0), "add_out_coin_bonus adds to the coin multiplier (%.2f)" % battle.out_coin_mult())
+	var coins0 := battle.run.coins
+	var r1 := battle.spawn_enemy("runner", route, route.length * 0.4, {"lateral": 0.0, "speed_mult": 0.01})
+	var expect := float(r1.coins) * battle.out_coin_mult()
+	battle.combo_timer = 0.0   # no combo bonus coins in these checks
+	r1.die({})
+	ok(absf(float(battle.run.coins - coins0) - expect) <= 1.0, "an out pays coins x the multiplier (%d, expected %.1f)" % [battle.run.coins - coins0, expect])
+	battle._update_buffs(5.5)
+	ok(is_equal_approx(battle.out_coin_mult(), base_mult), "a timed coin bonus expires")
+	battle.add_out_coin_bonus(0.25, 0.0)
+	battle._update_buffs(100.0)
+	ok(is_equal_approx(battle.out_coin_mult(), base_mult + 0.25), "a coin bonus with no time lasts the game")
+	battle._coin_bonuses.clear()
+	# +25 % on 2-coin runners pays over several outs (fractions carry).
+	battle.add_out_coin_bonus(0.25, 0.0)
+	coins0 = battle.run.coins
+	var paid_base := 0.0
+	for i in 8:
+		var rr := battle.spawn_enemy("runner", route, route.length * 0.4, {"lateral": 0.0, "speed_mult": 0.01})
+		paid_base += float(rr.coins) * base_mult
+		battle.combo_timer = 0.0
+		rr.die({})
+	ok(float(battle.run.coins - coins0) >= paid_base * 1.2, "a +25 %% coin bonus pays on small runners too (%d vs %.0f base)" % [battle.run.coins - coins0, paid_base])
+	battle._coin_bonuses.clear()
+	# add_energy: capped at the maximum.
+	battle.cards.infinite_energy = false
+	battle.cards.energy = 2.0
+	battle.add_energy(1.5)
+	ok(is_equal_approx(battle.cards.energy, 3.5), "add_energy adds energy")
+	battle.add_energy(50.0)
+	ok(is_equal_approx(battle.cards.energy, CardSystem.MAX_ENERGY), "add_energy caps at the maximum")
+	battle.cards.infinite_energy = true
+	_hold_fire(false)
+	await _test_update9_boons()
+	_clear()
+	await _test_update9_draft()
+
+
+## Dugout Draft data, offers, run state and save/resume; Boss Rush plan; Endless milestones.
+func test_update9_modes() -> void:
+	section("update 9 modes: boons data, offers, save/resume, Boss Rush, milestones")
+	var all := Boons.all()
+	ok(all.size() >= 18, "at least 18 boons (%d)" % all.size())
+	var rar := {}
+	var ids := {}
+	var fields_ok := true
+	for b: Dictionary in all:
+		rar[str(b.rarity)] = int(rar.get(str(b.rarity), 0)) + 1
+		ids[str(b.id)] = true
+		if str(b.get("name", "")) == "" or str(b.get("text", "")) == "" or DB.icon(str(b.get("icon", ""))) == null \
+				or not (b.rarity in Boons.RARITY_ORDER) or (b.get("effect", {}) as Dictionary).is_empty():
+			fields_ok = false
+			print("  bad boon ", b)
+	ok(fields_ok, "every boon has a name, text, an existing icon, a rarity and an effect")
+	ok(ids.size() == all.size(), "boon ids are unique")
+	ok(rar.get("common", 0) > rar.get("rare", 0) and rar.get("rare", 0) > rar.get("epic", 0) and rar.get("epic", 0) >= 2, "three rarities, commons most (%s)" % rar)
+	ok(Boons.rarity_weight("common") > Boons.rarity_weight("rare") and Boons.rarity_weight("rare") > Boons.rarity_weight("epic"), "rarer boons are offered less often")
+	var r := RunState.create(_cfg("standard"))
+	r.deck = Profile.STARTER_DECK.duplicate()
+	var rng := RandomNumberGenerator.new()
+	var three_ok := true
+	var never_taken := true
+	var seen := {}
+	var rare_plus := 0
+	for i in 200:
+		rng.seed = 1000 + i
+		r.boons = [all[i % all.size()].id, all[(i * 7) % all.size()].id]
+		var o := Boons.offer(r, rng)
+		var uniq := {}
+		for id in o:
+			uniq[id] = true
+			seen[id] = true
+			if id in r.boons:
+				never_taken = false
+		if o.size() != 3 or uniq.size() != 3:
+			three_ok = false
+		if o.any(func(id: String) -> bool: return Boons.get_boon(id).rarity != "common"):
+			rare_plus += 1
+	ok(three_ok, "an offer is three different boons")
+	ok(never_taken, "offers never repeat a boon already taken")
+	ok(seen.size() == all.size(), "every boon shows up in offers (%d of %d)" % [seen.size(), all.size()])
+	ok(rare_plus == 200, "every offer has at least one rare or epic boon (%d of 200)" % rare_plus)
+	rng.seed = 42
+	r.boons = []
+	var o1 := Boons.offer(r, rng)
+	rng.seed = 42
+	ok(Boons.offer(r, rng) == o1, "offers are deterministic for a seed (a replayed inning offers the same)")
+	var taken: Array = []
+	for b: Dictionary in all:
+		taken.append(b.id)
+	r.boons = taken.slice(0, taken.size() - 2)
+	ok(Boons.offer(r, rng).size() == 2, "with two boons left the offer has two")
+	r.boons = taken.duplicate()
+	ok(Boons.offer(r, rng).is_empty(), "with every boon taken there is no offer")
+	# Useless boons are not offered.
+	r.boons = []
+	r.shields = 3
+	ok(not Boons.available(r, "batting_helmet"), "no shield boon at 3 shields")
+	r.shields = 1
+	ok(Boons.available(r, "batting_helmet"), "the shield boon is offered below 3 shields")
+	var deck_before := r.deck.duplicate()
+	r.deck = ["power_throw", "heat_wave"]
+	ok(not Boons.available(r, "glove_clinic") and Boons.available(r, "slugger_clinic"), "a card clinic needs a card of its categories in the deck")
+	r.deck = deck_before
+	# Run state: boons feed the run modifiers and card levels, and survive save/resume.
+	var dmg0 := r.modifier_total("damage")
+	var lvl0 := r.card_level("power_throw")
+	var lvl_c0 := r.card_level("curveball")
+	r.boons = ["heavy_lumber", "all_star_break", "slugger_clinic", "rally_caps", "fresh_arms"]
+	ok(is_equal_approx(r.modifier_total("damage") - dmg0, 0.25), "boons add to the team damage modifier (+%.2f)" % (r.modifier_total("damage") - dmg0))
+	ok(r.card_level("power_throw") == lvl0 + 1 and r.card_level("curveball") == lvl_c0, "a card clinic raises its categories only")
+	ok(r.modifier_total("card_cooldown") < -0.2 and r.modifier_total("coin_mult") >= 0.3, "cooldown and coin boons feed the modifiers")
+	r.milestones = [5, 10]
+	var back := RunState.from_dict(JSON.parse_string(JSON.stringify(r.to_dict())))
+	ok(back.boons == r.boons and back.milestones == [5, 10], "boons and milestones survive save/resume (%s %s)" % [back.boons, back.milestones])
+	ok(is_equal_approx(back.modifier_total("damage"), r.modifier_total("damage")) and back.card_level("power_throw") == r.card_level("power_throw"),
+		"boon effects are the same after resume")
+	ok(back.stats.has("time"), "run stats keep the game time")
+	var summ := Boons.summary(["heavy_lumber", "nope", "extra_innings"])
+	ok(summ.size() == 2 and summ[1].rarity == "epic" and summ[0].has("icon") and summ[0].has("text"), "Boons.summary skips unknown ids")
+	# Draft modes.
+	ok(bool(DB.mode("standard").get("draft", false)) and bool(DB.mode("endless").get("draft", false)) and bool(DB.mode("boss_rush").get("draft", false)),
+		"Standard Siege, Endless and Boss Rush hold a draft after bosses")
+	ok(not bool(DB.mode("quick").get("draft", false)) and not bool(DB.mode("daily").get("draft", false)) and not bool(DB.mode("ranked").get("draft", false)),
+		"Quick, Daily and Promotion games have no draft")
+	# Boss Rush: three innings, each ending with a tougher boss.
+	var br := RunState.create(_cfg("boss_rush"))
+	ok(br.max_innings == 3 and br.waves_per_inning >= 2, "Boss Rush is three innings")
+	var bosses := ["iron_slugger", "phantom_captain", "grand_slammer"]
+	var plan_ok := true
+	var last_hp := 0.0
+	var rising := true
+	for i in 3:
+		br.inning = i + 1
+		ok(br.boss_for_inning(i + 1) == bosses[i], "Boss Rush inning %d ends with %s" % [i + 1, bosses[i]])
+		for w in br.waves_per_inning:
+			var wv := WaveGenerator.generate(br, w, 3)
+			var want: String = bosses[i] if w == br.waves_per_inning - 1 else ""
+			if str(wv.boss) != want:
+				plan_ok = false
+		# The boss's real health: data health x its share of the inning scaling x the mode's boss tuning (Enemy.setup).
+		var hp := float(DB.enemy(bosses[i]).hp) * (1.0 + (WaveGenerator.hp_multiplier(br) - 1.0) * 0.45) * WaveGenerator.boss_hp_tuning(br, bosses[i])
+		rising = rising and hp > last_hp
+		last_hp = hp
+	ok(plan_ok, "Boss Rush: only each inning's last wave has the boss")
+	ok(rising, "Boss Rush bosses get tougher every inning")
+	# Endless milestones: every 5th inning cleared.
+	var en := RunState.create(_cfg("endless"))
+	var got: Array = []
+	for i in range(1, 21):
+		en.inning = i
+		if en.note_milestone():
+			got.append(i)
+	ok(got == [5, 10, 15, 20] and en.milestones == [5, 10, 15, 20], "Endless milestones every 5 innings (%s)" % [en.milestones])
+	en.inning = 10
+	en.note_milestone()
+	ok(en.milestones.size() == 4, "a milestone is recorded once")
+	var st := RunState.create(_cfg("standard"))
+	st.inning = 5
+	ok(not st.note_milestone() and st.milestones.is_empty(), "no milestones outside Endless")
+
+
+## Each boon really applies in a battle (practice field, defenders holding their throws).
+func _test_update9_boons() -> void:
+	section("update 9 boons apply in battle")
+	_hold_fire(true)
+	var run := battle.run
+	var keep_shields := run.shields
+	var keep_limit := run.run_limit
+	run.boons.clear()
+	battle._refresh_team_stats()
+	battle.cards.infinite_energy = false
+	var df: Defender = battle.defenders[0]
+	var route := battle.routes[0]
+	var applied := {}
+	for b: Dictionary in Boons.all():
+		var id := str(b.id)
+		run.boons.clear()
+		run.shields = 1
+		run.run_limit = keep_limit
+		battle._refresh_team_stats()
+		var before := {"dmg": df.s_damage, "int": df.s_interval, "rng": df.s_range, "crit": df.s_crit, "regen": battle.cards.regen_mult,
+			"draw": battle.cards.draw_interval, "cd": battle.cards.cooldown_mult, "coin": battle.out_coin_mult(), "shields": run.shields,
+			"limit": run.run_limit, "lvl_pt": run.card_level("power_throw"), "lvl_cb": run.card_level("curveball")}
+		Boons.apply(battle, id)
+		ok(id in run.boons, "%s is recorded in run.boons" % id)
+		var eff: Dictionary = b.effect
+		var good := true
+		if eff.has("damage"):
+			good = good and df.s_damage > before.dmg * 1.05
+		if eff.has("attack_speed"):
+			good = good and df.s_interval < before.int * 0.95
+		if eff.has("range"):
+			good = good and df.s_range > before.rng * 1.05
+		if eff.has("crit"):
+			good = good and df.s_crit > before.crit + 0.05
+		if eff.has("energy_regen"):
+			good = good and battle.cards.regen_mult > before.regen * 1.1
+		if eff.has("draw_speed"):
+			good = good and battle.cards.draw_interval < before.draw * 0.9
+		if eff.has("card_cooldown"):
+			good = good and battle.cards.cooldown_mult < before.cd - 0.2
+		if eff.has("coin_mult"):
+			good = good and battle.out_coin_mult() > before.coin + 0.2
+		if eff.has("shield"):
+			good = good and run.shields == before.shields + 1
+		if eff.has("run_limit"):
+			good = good and run.run_limit == before.limit + 1
+		if eff.has("card_level"):
+			var cats: Array = eff.categories
+			good = good and (run.card_level("power_throw") == before.lvl_pt + 1) == ("offense" in cats) \
+				and (run.card_level("curveball") == before.lvl_cb + 1) == ("control" in cats)
+		if eff.has("wave_energy") or eff.has("wave_draw") or eff.has("first_card_refund"):
+			battle.cards.energy = 2.0
+			battle.cards.hand = ["power_throw", "", "", "", ""]
+			battle.cards.draw_pile = ["curveball", "heat_wave", "lockdown"]
+			battle._wave_start_bonuses(false)
+			var e_after := battle.cards.energy
+			var h_after := battle.cards.hand_count()
+			if eff.has("wave_energy"):
+				good = good and is_equal_approx(e_after, 3.0 + float(eff.wave_energy))
+			if eff.has("wave_draw"):
+				good = good and h_after == 1 + int(eff.wave_draw)
+			if eff.has("first_card_refund"):
+				var st := battle.state
+				battle.state = "wave"
+				battle.cards.energy = 2.0
+				battle.on_card_played("power_throw")
+				var first := battle.cards.energy
+				battle.on_card_played("curveball")
+				good = good and is_equal_approx(first, 2.0 + float(eff.first_card_refund)) and is_equal_approx(battle.cards.energy, first)
+				battle.state = st
+		if eff.has("home_slow"):
+			# A runner a few metres from home (inside the radius) and one at the gate.
+			var nd := route.length - 2.0
+			for k in 60:
+				if Field.v2(route.position_at(route.length - k * 0.25)).distance_to(Field.v2(Field.HOME)) > float(eff.home_radius) - 2.0:
+					nd = route.length - k * 0.25
+					break
+			var near := battle.spawn_enemy("runner", route, nd, {"lateral": 0.0, "speed_mult": 0.01, "hp_mult": 40.0})
+			var far := battle.spawn_enemy("runner", route, 1.0, {"lateral": 0.0, "speed_mult": 0.01, "hp_mult": 40.0})
+			await _wait(0.05)
+			battle._update_buffs(0.0)
+			var with_boon := near.zone_slow
+			run.boons.erase(id)
+			battle._update_buffs(0.0)
+			var without := near.zone_slow
+			run.boons.append(id)
+			battle._update_buffs(0.0)
+			good = good and with_boon >= float(eff.home_slow) - 0.001 and (without < float(eff.home_slow) - 0.001 or near.home_guard) and far.zone_slow < 0.001
+			_clear()
+		if eff.has("boss_damage"):
+			var boss := battle.spawn_enemy("iron_slugger", route, route.length * 0.3, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01})
+			boss.ability_t = 999.0
+			var mook := battle.spawn_enemy("runner", route, route.length * 0.3, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+			await _wait(0.05)
+			battle._update_buffs(0.0)
+			var bd := battle.deal_damage(boss, 100.0, {"kind": "throw", "pierce": 1.0})
+			var md := battle.deal_damage(mook, 100.0, {"kind": "throw", "pierce": 1.0})
+			good = good and bd > md * (1.0 + float(eff.boss_damage)) - 1.0 and boss.aura_dr < 0.0
+			_clear()
+		applied[id] = good
+		ok(good, "boon %s has its effect" % id)
+	run.boons.clear()
+	run.shields = keep_shields
+	run.run_limit = keep_limit
+	battle._refresh_team_stats()
+	battle.cards.infinite_energy = true
+	ok(applied.size() == Boons.all().size(), "every boon was applied (%d)" % applied.size())
+	# A boon is taken once.
+	Boons.apply(battle, "heavy_lumber")
+	Boons.apply(battle, "heavy_lumber")
+	ok(run.boons.count("heavy_lumber") == 1, "a boon is never stacked twice")
+	run.boons.clear()
+	battle._refresh_team_stats()
+	_hold_fire(false)
+
+
+## The draft holds the game, offers three boons, takes one (from the overlay too) and goes on.
+func _test_update9_draft() -> void:
+	section("update 9 Dugout Draft flow (battle)")
+	var run := battle.run
+	run.boons.clear()
+	var st0 := battle.state
+	var opened: Array = []
+	var cb := func(o: Array) -> void: opened.append(o)
+	battle.draft_opened.connect(cb)
+	var continued := [0]
+	# The first draft ever shows the "battle_boons" tip (hints are on for this check; not on the
+	# Practice Field, so the battle plays a normal game until the cards are up).
+	Hints.force_enabled = true
+	var hs: Dictionary = Profile.data.flags.get_or_add("hints_seen", {})
+	hs.erase("battle_boons")
+	battle.practice = false
+	battle.open_draft(func() -> void: continued[0] += 1)
+	ok(battle.state == "draft" and battle.draft_offers.size() == 3 and opened.size() == 1, "open_draft holds the game with three offers")
+	ok(not battle.choose_boon("not_a_boon"), "an id that is not on offer is refused")
+	var e0 := battle.cards.energy
+	battle.select_card(0)
+	ok(battle.targeting_index == -1, "no cards can be aimed during the draft")
+	# The overlay appears after the boss finale.
+	var ov: Node = null
+	for i in 60:   # the cards come up DRAFT_DELAY game seconds later
+		await _wait(0.1)
+		ov = battle.hud.get("_draft")
+		if ov and is_instance_valid(ov):
+			break
+	await _wait(0.4)
+	ok(ov != null and is_instance_valid(ov) and (ov.get("cards") as Array).size() == 3, "the draft overlay shows three cards")
+	if Hints.HINTS.has("battle_boons"):
+		for i in 30:
+			if Hints.is_showing():
+				break
+			await _wait(0.1)
+		ok(Hints.current_id() == "battle_boons", "the first draft shows the Dugout Draft tip (%s)" % Hints.current_id())
+		if Hints.current():
+			Hints.current().queue_free()
+	Hints.force_enabled = false
+	battle.practice = true
+	var pick: String = battle.draft_offers[1]
+	var stat0 := Profile.stat("boons_drafted")
+	battle.practice = false   # boons_drafted counts outside the Practice Field
+	if ov and is_instance_valid(ov):
+		ov.pick(pick)
+	else:
+		battle.choose_boon(pick)
+	battle.practice = true
+	ok(pick in run.boons and battle.draft_offers.is_empty(), "picking a card takes that boon (%s)" % pick)
+	ok(continued[0] == 1, "the game continues once after the pick")
+	ok(Profile.stat("boons_drafted") == stat0 + 1, "boons_drafted is counted")
+	ok(not battle.choose_boon(pick), "a second pick is ignored")
+	await _wait(1.2)
+	ok(battle.hud.get("_draft") == null or not is_instance_valid(battle.hud.get("_draft")), "the overlay closes after the pick")
+	await _wait(0.1)
+	# The HUD lists the boon as a chip with its text as the tooltip.
+	battle.hud.refresh()
+	var chips: Node = battle.hud.get("_boon_box")
+	var chip: Control = chips.get_node_or_null("Boon_" + pick) if chips else null
+	ok(chip != null and str(chip.tooltip_text).contains(str(Boons.get_boon(pick).text)), "the HUD shows the boon as a chip with a tooltip")
+	battle.draft_opened.disconnect(cb)
+	battle.set_state(st0)
+	run.boons.clear()
+	battle._refresh_team_stats()
+	battle.cards.energy = e0
+	# Early call: NEXT WAVE NOW during a break pays +1 energy on top of the wave's +1 (and bonus coins).
+	battle.practice = false
+	battle.cards.infinite_energy = false
+	battle.set_state("break")
+	battle.break_timer = 9.0
+	battle.cards.energy = 2.0
+	var calls0 := int(run.stats.get("early_calls", 0))
+	var coins0 := run.coins
+	battle.begin_wave()
+	ok(battle.state == "wave" and is_equal_approx(battle.cards.energy, 3.0 + Battle.EARLY_CALL_ENERGY),
+		"an early call gives +%d energy on top of the wave's +1 (%.1f from 2.0)" % [int(Battle.EARLY_CALL_ENERGY), battle.cards.energy])
+	ok(int(run.stats.get("early_calls", 0)) == calls0 + 1 and run.coins >= coins0 + 9, "an early call is counted and pays bonus coins")
+	battle.spawn_queue.clear()
+	battle.set_state("break")
+	battle.break_timer = 0.2
+	battle.cards.energy = 2.0
+	battle.begin_wave()
+	ok(is_equal_approx(battle.cards.energy, 3.0) and int(run.stats.get("early_calls", 0)) == calls0 + 1, "a wave started when the break is over is not an early call")
+	battle.spawn_queue.clear()
+	for gid in battle.stadium.gates.keys():
+		battle.stadium.set_gate_open(gid, false)
+	battle.practice = true
+	battle.cards.infinite_energy = true
+	battle.set_state(st0)
 
 
 # ---------------------------------------------------------------- Update 9: new defenders (Stream A)

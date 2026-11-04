@@ -66,6 +66,14 @@ var _combo_pairs: Array = []
 var _combo_links: ComboLinks
 const COMBO_COLOR := Color("#4DF2A0")
 var _scout_popup: Control
+## Update 9: Dugout Draft overlay, active boon chips, Endless milestone line, early-call caption.
+var _draft: Control
+var _boon_box: HFlowContainer
+var _boon_row: VBoxContainer
+var _milestone_label: Label
+var _start_sub: Label
+var _start_pulse: Tween
+var _double_badge: PanelContainer   # Ground Rule Double: "x2" over the hand while cards are cast twice
 
 
 func _ready() -> void:
@@ -236,6 +244,26 @@ func _build_threats() -> void:
 	_mods_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_mods_label.custom_minimum_size = Vector2(290, 0)
 	vb.add_child(_mods_label)
+	# Endless: the next milestone (every 5 innings, paid at the end) and the best inning so far.
+	_milestone_label = UITheme.label("", 16, UITheme.GOLD, UITheme.font_body_bold())
+	_milestone_label.name = "EndlessMilestone"
+	_milestone_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_milestone_label.custom_minimum_size = Vector2(290, 0)
+	_milestone_label.tooltip_text = "Every 5 innings cleared pays coins and a pack at the end of the game."
+	_milestone_label.mouse_filter = Control.MOUSE_FILTER_PASS
+	_milestone_label.visible = false
+	vb.add_child(_milestone_label)
+	# Dugout Draft boons taken this game: small chips, hover for what each does.
+	_boon_row = VBoxContainer.new()
+	_boon_row.add_theme_constant_override("separation", 4)
+	_boon_row.visible = false
+	vb.add_child(_boon_row)
+	_boon_row.add_child(UITheme.label("BOONS", 15, UITheme.MUTED, UITheme.font_body_bold()))
+	_boon_box = HFlowContainer.new()
+	_boon_box.name = "BoonChips"
+	_boon_box.add_theme_constant_override("h_separation", 6)
+	_boon_box.add_theme_constant_override("v_separation", 6)
+	_boon_row.add_child(_boon_box)
 
 
 func _build_bottom() -> void:
@@ -256,6 +284,13 @@ func _build_bottom() -> void:
 	_combo_links.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_combo_links.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hand_box.add_child(_combo_links)
+	_double_badge = UITheme.badge("x2", Color(UITheme.GOLD.darkened(0.25), 0.95), 22)
+	_double_badge.name = "DoubleCastBadge"
+	_double_badge.position = Vector2(tray_w * 0.5 - 150, -44)
+	_double_badge.custom_minimum_size = Vector2(300, 0)
+	(_double_badge.get_child(0) as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_double_badge.visible = false
+	_hand_box.add_child(_double_badge)
 	# Energy bar
 	var eb := HBoxContainer.new()
 	eb.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -383,6 +418,20 @@ func _build_controls() -> void:
 	_start_btn.tooltip_text = "Begin the next wave (Space)"
 	_start_btn.pressed.connect(func() -> void: battle.begin_wave())
 	root.add_child(_start_btn)
+	# Between waves the button reads NEXT WAVE NOW with what an early call pays and the countdown.
+	_start_sub = UITheme.label("", 16, UITheme.GOLD, UITheme.font_body_bold())
+	_start_sub.name = "EarlyCallCaption"
+	_start_sub.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_start_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_start_sub.offset_left = -170
+	_start_sub.offset_right = 170
+	_start_sub.offset_top = -26
+	_start_sub.offset_bottom = -4
+	_start_sub.add_theme_constant_override("outline_size", 4)
+	_start_sub.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	_start_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_start_sub.visible = false
+	_start_btn.add_child(_start_sub)
 
 
 ## Square icon button for the battle toolbar (icon + tooltip with its hotkey).
@@ -875,6 +924,10 @@ func refresh() -> void:
 		_fill_preview(info.preview)
 
 	var mods: Array[String] = []
+	if run.mode_id == "boss_rush" and run.max_innings > 0:   # Boss Rush: which boss closes this round
+		var boss_id := run.boss_for_inning(run.inning)
+		if boss_id != "":
+			mods.append("BOSS %d OF %d: %s" % [run.inning, run.max_innings, str(DB.enemy(boss_id).get("name", boss_id)).to_upper()])
 	var am: Dictionary = battle.arena.get("modifier", {})
 	if am.size() > 2:
 		mods.append("%s: %s" % [am.name, am.text])
@@ -893,16 +946,32 @@ func refresh() -> void:
 	_energy_bar.queue_redraw()
 	_deck_label.text = "Deck %d · Discard %d" % [cs.draw_pile.size(), cs.discard.size()]
 	_draw_bar.value = cs.next_draw_progress()
+	var doubles: int = cs.double_casts_left(run.inning) if cs.has_method("double_casts_left") else 0
+	_double_badge.visible = doubles > 0 and battle.state != "results"
+	if doubles > 0:
+		(_double_badge.get_child(0) as Label).text = "x2  ·  NEXT %d CARD%s CAST TWICE" % [doubles, "" if doubles == 1 else "S"]
 	_update_cards()
 
-	# Start button
+	# Start button: PLAY BALL in setup; NEXT WAVE NOW (+1 energy, the countdown) between waves.
 	var show_start: bool = battle.state in ["setup", "break"] and not battle.practice
 	_start_btn.visible = show_start
 	if battle.state == "break":
 		var auto := bool(Settings.get_value("gameplay", "auto_start_waves", true))
-		_start_btn.text = "NEXT WAVE  %ds" % int(ceil(battle.break_timer)) if auto else "NEXT WAVE"
+		_start_btn.text = "NEXT WAVE NOW"
+		_start_sub.text = ("+%d ENERGY  ·  SPACE  ·  AUTO IN %ds" % [int(Battle.EARLY_CALL_ENERGY), int(ceil(battle.break_timer))]) if auto \
+			else "+%d ENERGY  ·  SPACE" % int(Battle.EARLY_CALL_ENERGY)
+		_start_btn.tooltip_text = "Call the next wave now (Space): +%d energy and bonus coins for the time you skip." % int(Battle.EARLY_CALL_ENERGY)
+		_start_sub.visible = true
+		_set_start_pulse(true)
 	elif battle.state == "setup":
 		_start_btn.text = "PLAY BALL!"
+		_start_btn.tooltip_text = "Begin the next wave (Space)"
+		_start_sub.visible = false
+		_set_start_pulse(false)
+	else:
+		_set_start_pulse(false)
+	_fill_boons()
+	_fill_milestone()
 	# Boss
 	if _boss_enemy and is_instance_valid(_boss_enemy) and _boss_enemy.alive:
 		_boss_bar.max_value = _boss_enemy.max_hp
@@ -934,7 +1003,9 @@ func _context_hint() -> String:
 		"setup":
 			return "Drag defenders into position, pick a formation, then press PLAY BALL (Space)."
 		"break":
-			return "Wave cleared! Reposition now, or call the next wave early for bonus coins (Space)."
+			return "Wave cleared! Reposition now, or call NEXT WAVE NOW for +%d energy and bonus coins (Space)." % int(Battle.EARLY_CALL_ENERGY)
+		"draft":
+			return "Dugout Draft: pick a boon (click a card or press 1-3)."
 		"wave":
 			return ""
 	return ""
@@ -1370,6 +1441,9 @@ class RingBurst:
 
 func _on_state(s: String) -> void:
 	_setup_panel.visible = s in ["setup"] and not battle.practice
+	if s != "draft" and _draft and is_instance_valid(_draft) and not _draft.is_queued_for_deletion() and not bool(_draft.get("_picked")):
+		_draft.queue_free()   # the game moved on without a pick (forfeit): drop the overlay
+		_draft = null
 	_practice_panel.visible = battle.practice
 	_hand_box.visible = s != "results"
 	if s == "setup":
@@ -1444,6 +1518,86 @@ func toggle_pause() -> void:
 		get_tree().paused = false)
 	root.add_child(_pause)
 	get_tree().paused = true
+
+
+# ---------------------------------------------------------------- Update 9: draft, boons, milestones
+
+## Dugout Draft: three boon cards over the field (see BoonDraft). Battle.choose_boon takes the pick.
+func show_draft(offers: Array) -> void:
+	if _draft and is_instance_valid(_draft):
+		_draft.queue_free()
+	_card_tip.visible = false
+	_unit_panel.visible = false
+	var d := BoonDraft.new()
+	d.name = "BoonDraft"
+	d.battle = battle
+	d.offers = offers.duplicate()
+	_draft = d
+	d.tree_exited.connect(func() -> void:
+		if _draft == d:
+			_draft = null)
+	root.add_child(d)
+	# First draft ever: a short tip pointing at the cards (after the reveal; not during the tutorial).
+	if get_node_or_null("Tutorial") == null and not battle.practice and not battle.auto_test:
+		Hints.show_unseen(self, ["battle_boons"], func() -> Dictionary:
+			if not is_instance_valid(d):
+				return {}
+			return {"battle_boons": d.card_row if d.card_row else d}, 0.9)
+
+
+func _fill_boons() -> void:
+	var ids: Array = battle.run.boons
+	var key := ",".join(PackedStringArray(ids.map(func(x: Variant) -> String: return str(x))))
+	if _boon_box.get_meta("key", "-") == key:
+		return
+	_boon_box.set_meta("key", key)
+	for c in _boon_box.get_children():
+		c.queue_free()
+	_boon_row.visible = not ids.is_empty()
+	for b: Dictionary in Boons.summary(ids):
+		_boon_box.add_child(_boon_chip(b))
+
+
+## One active boon: a small rarity-coloured tile with its icon; the tooltip says what it does.
+func _boon_chip(b: Dictionary) -> Control:
+	var col := Boons.rarity_color(str(b.rarity))
+	var chip := PanelContainer.new()
+	chip.name = "Boon_" + str(b.id)
+	chip.add_theme_stylebox_override("panel", UITheme.panel_style(Color(col.darkened(0.6), 0.95), Color(col, 0.9), 2, 8, 4))
+	chip.tooltip_text = "%s (%s boon)\n%s" % [b.name, Boons.rarity_name(str(b.rarity)), b.text]
+	chip.mouse_filter = Control.MOUSE_FILTER_STOP
+	chip.add_child(UITheme.icon_rect(str(b.icon), 26, col.lightened(0.5)))
+	return chip
+
+
+func _fill_milestone() -> void:
+	var run: RunState = battle.run
+	if not run.is_endless():
+		_milestone_label.visible = false
+		return
+	var next := int(ceil(run.inning / 5.0)) * 5
+	var best := int(Profile.data.get("records", {}).get("best_endless_inning", 0))
+	var t := "NEXT MILESTONE: INNING %d" % next
+	if best > 0:
+		t += "   ·   BEST: %d" % best
+	if not run.milestones.is_empty():
+		t += "\nMilestones reached: %d" % run.milestones.size()
+	_milestone_label.text = t
+	_milestone_label.visible = true
+
+
+## A soft glow pulse on NEXT WAVE NOW between waves (clear, not loud).
+func _set_start_pulse(on: bool) -> void:
+	if on == (_start_pulse != null and _start_pulse.is_valid()):
+		return
+	if _start_pulse and _start_pulse.is_valid():
+		_start_pulse.kill()
+	_start_pulse = null
+	_start_btn.self_modulate = Color.WHITE
+	if on:
+		_start_pulse = _start_btn.create_tween().set_loops()
+		_start_pulse.tween_property(_start_btn, "self_modulate", Color(1.18, 1.12, 0.95), 0.7).set_trans(Tween.TRANS_SINE)
+		_start_pulse.tween_property(_start_btn, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
 
 
 func open_dugout() -> void:

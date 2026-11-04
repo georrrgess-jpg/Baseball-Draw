@@ -20,9 +20,20 @@ signal boss_intro_started(enemy: Enemy)
 signal boss_intro_finished(enemy: Enemy)
 ## A boss was put out (fires with the final hit, before the slow motion and the banner).
 signal boss_defeated(enemy: Enemy)
+## Update 9: a runner was put out, emitted once per out after the out is scored (outs, coins, combo).
+## info: {source (what put it out, may be null), defender (Defender or null), card (id or ""),
+## marked (the runner was marked), kind (hit kind; "plate" for a Base Shield out at the plate)}.
+signal runner_out(enemy: Enemy, info: Dictionary)
+## Update 9 Dugout Draft: the draft opened with three boon ids (state "draft") / a boon was taken.
+signal draft_opened(offers: Array)
+signal boon_taken(id: String)
 
 const COMBO_WINDOW := 1.35
 const BREAK_TIME := 12.0
+## Energy for calling the next wave early (NEXT WAVE NOW), on top of the usual +1 at wave start.
+const EARLY_CALL_ENERGY := 1.0
+## Seconds between the boss wave clearing and the Dugout Draft cards appearing (the boss finale).
+const DRAFT_DELAY := 1.3
 const SPEEDS := [1.0, 2.0, 3.0]
 ## Characters are drawn larger than life so they read clearly from the tactical camera.
 const UNIT_SCALE := 1.55
@@ -48,7 +59,7 @@ var hud: Node
 var field_mat: ShaderMaterial
 var shield_dome: Node3D
 
-var state := "loading"           # setup | wave | break | dugout | results
+var state := "loading"           # setup | wave | break | draft | dugout | results
 var wave_info: Dictionary = {}
 var spawn_queue: Array = []
 var wave_time := 0.0
@@ -91,6 +102,13 @@ var _intro_seen := {}
 var _slowmo_tw: Tween
 var _slowmo_base := 1.0
 var spawn_hold := 0.0                # Rain Delay: seconds the gates stay closed
+## Update 9: timed in-game coin bonuses for outs ([{mult, t}], t <= 0 = rest of the game), see add_out_coin_bonus.
+var _coin_bonuses: Array = []
+var _coin_frac := 0.0                # fractional out coins carried over, so +25 % pays on 2-coin runners too
+## Dugout Draft: the three boon ids on offer while state == "draft", and what to do after the pick.
+var draft_offers: Array = []
+var _after_draft: Callable
+var _wave_refund_left := 0.0         # Leadoff Discount: energy the first card of this wave still refunds
 
 
 func _ready() -> void:
@@ -189,6 +207,11 @@ func _ready() -> void:
 			sc.battle = self
 			sc.scenario = a.split("=")[1]
 			add_child(sc)
+		elif a.begins_with("--boons=") and not practice:   # screenshots/tests: start with these boons
+			for bid in a.split("=")[1].split(","):
+				Boons.apply(self, bid)
+		elif a.begins_with("--best-endless="):   # screenshots: an Endless record to show in the HUD
+			Profile.data.records["best_endless_inning"] = int(a.split("=")[1])
 	if auto_test:
 		var ap := Autopilot.new()
 		ap.battle = self
@@ -210,9 +233,32 @@ func _intro() -> void:
 			cam.cinematic = false
 		var resume: Variant = Session.run_config.get("resume")
 		var args := OS.get_cmdline_user_args()
+		var draft_arg := ""
+		for a in args:
+			if a.begins_with("--open-draft"):
+				draft_arg = a
 		if "--open-dugout" in args:
 			run.coins = 260
 			_open_dugout()
+		elif draft_arg != "":
+			# Screenshot/debug shortcut: the Dugout Draft right away (--open-draft=a,b,c fixes the offer).
+			open_draft(_enter_setup)
+			if draft_arg.contains("="):
+				var ids := Array(draft_arg.split("=")[1].split(",")).filter(func(id: String) -> bool: return not Boons.get_boon(id).is_empty())
+				if ids.size() == 3 and state == "draft":
+					draft_offers = ids
+					draft_opened.emit(ids)
+					get_tree().create_timer(DRAFT_DELAY, false).timeout.connect(func() -> void:
+						if state == "draft" and hud.has_method("show_draft"):
+							hud.show_draft(ids))
+		elif "--open-break" in args:
+			# Screenshot/debug shortcut: the break after wave 1 (NEXT WAVE NOW).
+			_enter_setup()
+			run.wave = maxi(run.wave, 1)
+			set_state("break")
+			break_timer = break_time()
+			field_mat.set_shader_parameter("zones_alpha", 0.6)
+			notify("WAVE CLEAR!", Color(0.5, 1.0, 0.6))
 		elif "--show-results" in args:
 			# Screenshot/debug shortcut: a plausible finished three-inning game.
 			run.outs_total = 64
@@ -485,12 +531,13 @@ func can_reposition() -> bool:
 func begin_wave() -> void:
 	if state not in ["setup", "break"] or practice:
 		return
-	if state == "break" and break_timer > 0.5:
+	var early := state == "break" and break_timer > 0.5
+	if early:
+		# Early call (NEXT WAVE NOW): bonus coins for the seconds skipped and +1 energy.
 		var bonus := int(break_timer)
-		if bonus > 0:
-			run.coins += bonus
-			run.stats.early_calls = int(run.stats.get("early_calls", 0)) + 1
-			vfx.text_popup(Field.HOME + Vector3(0, 3, 0), "+%d EARLY CALL" % bonus, UITheme.GOLD, 1.0)
+		run.coins += bonus
+		run.stats.early_calls = int(run.stats.get("early_calls", 0)) + 1
+		vfx.text_popup(Field.HOME + Vector3(0, 3, 0), "EARLY CALL  +1 ENERGY" + ("  +%d" % bonus if bonus > 0 else ""), UITheme.GOLD, 1.0)
 	_cancel_drag()
 	field_mat.set_shader_parameter("zones_alpha", 0.0)
 	wave_info = WaveGenerator.generate(run, run.wave, routes.size())
@@ -509,7 +556,7 @@ func begin_wave() -> void:
 	set_state("wave")
 	for df in defenders:
 		df.reset_wave_state()
-	cards.add_energy(1.0)
+	_wave_start_bonuses(early)
 	var opened := {}
 	for s in spawn_queue:
 		opened[routes[s.route].gate] = true
@@ -527,6 +574,16 @@ func begin_wave() -> void:
 	_update_scoreboard()
 
 
+## Every wave starts with +1 energy; an early call (NEXT WAVE NOW) and the Pep Talk boon add to it,
+## Deep Bench draws extra cards and Leadoff Discount arms its refund for the wave's first card.
+func _wave_start_bonuses(early: bool) -> void:
+	cards.add_energy(1.0 + (EARLY_CALL_ENERGY if early else 0.0) + Boons.total(run.boons, "wave_energy"))
+	var extra_draw := int(Boons.total(run.boons, "wave_draw"))
+	if extra_draw > 0:
+		cards.draw(extra_draw)
+	_wave_refund_left = Boons.total(run.boons, "first_card_refund")
+
+
 func _on_wave_cleared() -> void:
 	for gid in stadium.gates.keys():
 		stadium.set_gate_open(gid, false)
@@ -535,16 +592,90 @@ func _on_wave_cleared() -> void:
 	cards.add_energy(1.0)
 	if boss_alive == null and wave_info.get("boss", "") != "":
 		Audio.play_music("battle_theme")
+	_update_scoreboard()
+	# Dugout Draft: a boss wave that does not end the game is followed by a boon pick.
+	if str(wave_info.get("boss", "")) != "" and draft_enabled() and not (run.wave >= run.waves_per_inning and run.is_final_inning()):
+		open_draft(_after_wave_cleared)
+		return
+	_after_wave_cleared()
+
+
+func _after_wave_cleared() -> void:
 	if run.wave >= run.waves_per_inning:
 		_on_inning_complete()
 	else:
 		set_state("break")
-		break_timer = BREAK_TIME
+		break_timer = break_time()
 		field_mat.set_shader_parameter("zones_alpha", 0.6)
 		notify("WAVE CLEAR!", Color(0.5, 1.0, 0.6))
 		if auto_test:
 			get_tree().create_timer(0.3).timeout.connect(begin_wave)
 	_update_scoreboard()
+
+
+## Seconds of break between waves (data/modes.json "break_time", default 12).
+func break_time() -> float:
+	return float(DB.mode(run.mode_id).get("break_time", BREAK_TIME))
+
+
+# ---------------------------------------------------------------- Dugout Draft (Update 9)
+
+## Modes with "draft": true in data/modes.json hold a boon pick after every boss that doesn't end the game.
+func draft_enabled() -> bool:
+	return bool(DB.mode(run.mode_id).get("draft", false)) and not practice and not run.is_daily()
+
+
+## Holds the game (state "draft") and offers three boons; `then` runs once one is taken.
+## The offer is the same for a seed and inning, so a replayed inning offers the same boons.
+func open_draft(then: Callable = Callable()) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([run.run_seed, run.inning, run.boons.size(), "draft"])
+	var offers := Boons.offer(run, rng)
+	if offers.is_empty():
+		if then.is_valid():
+			then.call()
+		return
+	draft_offers = offers
+	_after_draft = then
+	_cancel_targeting()
+	_cancel_drag()
+	select_defender(null)
+	set_state("draft")
+	run.stats.drafts = int(run.stats.get("drafts", 0)) + 1
+	field_mat.set_shader_parameter("zones_alpha", 0.0)
+	draft_opened.emit(offers)
+	# The boss finale plays first; the timer follows pause and game speed.
+	get_tree().create_timer(DRAFT_DELAY, false).timeout.connect(func() -> void:
+		if state == "draft" and draft_offers == offers:
+			Audio.play_music("dugout_theme")
+			if hud.has_method("show_draft"):
+				hud.show_draft(offers))
+
+
+## Takes one of the offered boons (the draft overlay, the autopilot and tests call this).
+func choose_boon(id: String) -> bool:
+	if state != "draft" or not id in draft_offers:
+		return false
+	draft_offers = []
+	Boons.apply(self, id)
+	if not practice:
+		Profile.bump_stat("boons_drafted")
+	var b := Boons.get_boon(id)
+	var col := Boons.rarity_color(str(b.get("rarity", "common")))
+	notify("BOON: " + str(b.get("name", id)).to_upper(), col.lightened(0.25))
+	Audio.play("crowd_cheer", -6.0)
+	vfx.shockwave(Field.HOME, 3.2, col, 0.5)
+	boon_taken.emit(id)
+	if run.wave < run.waves_per_inning:   # more waves this inning (else the dugout keeps its theme)
+		Audio.play_music("battle_theme")
+	var then := _after_draft
+	_after_draft = Callable()
+	if then.is_valid():
+		then.call()
+	else:
+		_after_wave_cleared()
+	score_changed.emit()
+	return true
 
 
 func _on_inning_complete() -> void:
@@ -563,7 +694,7 @@ func _on_inning_complete() -> void:
 		df.celebrate()
 	stadium.scoreboard_ui.flash("SIDE RETIRED!" if clean else "INNING OVER", 3.0)
 	notify("INNING %d COMPLETE  +%d coins" % [run.inning, bonus], Color(1.0, 0.85, 0.35))
-	if run.is_endless() and run.inning % 5 == 0:
+	if run.note_milestone():   # Endless: every 5 innings (paid out at the end by Rewards)
 		run.coins += 50
 		run.score += 1000
 		notify("MILESTONE: INNING %d!" % run.inning, UITheme.GOLD)
@@ -750,7 +881,9 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 	run.add_card_impact(str(info.get("card", "")), 0.0, 1)
 	if src and is_instance_valid(src):
 		src.outs += 1
-	var coin := int(round(e.coins * (1.0 + run.modifier_total("coin_mult"))))
+	var coin_f := float(e.coins) * out_coin_mult() + _coin_frac
+	var coin := int(floor(coin_f + 0.0001))
+	_coin_frac = maxf(0.0, coin_f - float(coin))
 	run.coins += coin
 	run.coins_earned += coin
 	run.score += 10 + e.coins * 2
@@ -775,6 +908,28 @@ func on_enemy_out(e: Enemy, info: Dictionary) -> void:
 		Profile.bump_stat("total_outs")
 	score_changed.emit()
 	_update_scoreboard()
+	runner_out.emit(e, {"source": info.get("source"), "defender": src if src and is_instance_valid(src) else null,
+		"card": str(info.get("card", "")), "marked": e.mark_t > 0.0, "kind": str(info.get("kind", ""))})
+
+
+## In-game coins per out are multiplied by this: 1 + run modifiers (Endless Home Cooking, boons)
+## + every active add_out_coin_bonus.
+func out_coin_mult() -> float:
+	var m := 1.0 + run.modifier_total("coin_mult")
+	for b in _coin_bonuses:
+		m += float(b.mult)
+	return maxf(m, 0.0)
+
+
+## Update 9 hook (Money Ball, coin boons): outs pay (1 + mult) more in-game coins for `time` game
+## seconds (time <= 0: for the rest of this game; not saved, re-add it on resume).
+func add_out_coin_bonus(mult: float, time: float) -> void:
+	_coin_bonuses.append({"mult": mult, "t": time if time > 0.0 else -1.0})
+
+
+## Update 9 hook: energy gain (capped at the maximum).
+func add_energy(n: float) -> void:
+	cards.add_energy(n)
 
 
 func _on_combo(n: int) -> void:
@@ -856,6 +1011,7 @@ func on_enemy_reached_home(e: Enemy) -> void:
 			if is_instance_valid(e):
 				e.queue_free())
 		score_changed.emit()
+		runner_out.emit(e, {"source": null, "defender": null, "card": "", "marked": e.mark_t > 0.0, "kind": "plate"})
 		return
 	if not (practice and practice_invulnerable):
 		run.runs += runs_scored
@@ -1097,6 +1253,11 @@ func _update_buffs(delta: float) -> void:
 		buffs[i].t -= delta
 		if buffs[i].t <= 0.0:
 			buffs.remove_at(i)
+	for i in range(_coin_bonuses.size() - 1, -1, -1):
+		if float(_coin_bonuses[i].t) > 0.0:
+			_coin_bonuses[i].t = float(_coin_bonuses[i].t) - delta
+			if float(_coin_bonuses[i].t) <= 0.0:
+				_coin_bonuses.remove_at(i)
 	field_vision_active = buff_active("field_vision")
 	var cap: Defender = null
 	for df in defenders:
@@ -1153,6 +1314,26 @@ func _update_buffs(delta: float) -> void:
 				if e.alive and Field.v2(e.global_position).distance_to(Field.v2(df.global_position)) <= df.aura_radius:
 					e.zone_slow = maxf(e.zone_slow, 0.25)
 					e.home_guard = true
+	_apply_boon_auras()
+
+
+## Dugout Draft boons that act on runners every frame: Infield In slows runners near home plate,
+## Giant Killer makes bosses take more damage (a negative damage reduction).
+func _apply_boon_auras() -> void:
+	if run.boons.is_empty():
+		return
+	var slow := Boons.total(run.boons, "home_slow")
+	var radius := Boons.total(run.boons, "home_radius")
+	var boss_dmg := Boons.total(run.boons, "boss_damage")
+	if slow <= 0.0 and boss_dmg <= 0.0:
+		return
+	for e in enemies:
+		if not e.alive:
+			continue
+		if slow > 0.0 and Field.v2(e.global_position).distance_to(Field.v2(Field.HOME)) <= radius:
+			e.zone_slow = maxf(e.zone_slow, slow)
+		if boss_dmg > 0.0 and e.is_boss:
+			e.aura_dr -= boss_dmg
 
 
 # ---------------------------------------------------------------- main loop
@@ -1202,6 +1383,8 @@ func _process(delta: float) -> void:
 
 	var active := state == "wave" or practice
 	cards.tick(delta, active)
+	if state in ["setup", "wave", "break"] and not practice:
+		run.stats.time = float(run.stats.get("time", 0.0)) + delta   # game seconds (Boss Rush best time)
 	if combo_timer > 0.0:
 		combo_timer -= delta
 	excitement = move_toward(excitement, 0.2, delta * 0.08)
@@ -1343,7 +1526,7 @@ func cycle_speed() -> void:
 ## Selects a hand card for targeting. Clicking the selected card again plays it only if it
 ## needs no target (otherwise it is put back); pressing its hotkey again plays it at the cursor.
 func select_card(index: int, from_key := false) -> void:
-	if state in ["dugout", "results", "loading"]:
+	if state in ["dugout", "draft", "results", "loading"]:
 		return
 	if index == targeting_index and index >= 0:
 		var t := str(DB.card(targeting_card()).get("target", "none"))
@@ -1485,6 +1668,8 @@ func _preview_units(id: String, gp: Variant) -> Array:
 				return out
 			return enemies_in_radius(gp, float(c.get("radius", 3.0)))
 		"enemy":
+			if id == "scouting_report" and hover_enemy and effects.has_method("scouted"):
+				return effects.scouted(CardEffects.scout_type(hover_enemy))   # every runner of its type
 			return [hover_enemy] if hover_enemy else []
 		"defender":
 			if hover_defender == null:
@@ -1497,7 +1682,7 @@ func _preview_units(id: String, gp: Variant) -> Array:
 			return out2
 		"none":
 			match id:
-				"time_out", "changeup", "perfect_game", "rain_delay":
+				"time_out", "changeup", "perfect_game", "rain_delay", "fireworks_night":
 					var all: Array = []
 					for e in enemies:
 						if e.targetable():
@@ -1505,9 +1690,16 @@ func _preview_units(id: String, gp: Variant) -> Array:
 					return all
 				"sky_hook":
 					return lead_runners(1)
-				"grand_relay":
+				"grand_relay", "signal_caller":
 					return lead_runners(int(DB.card_param(id, "targets", run.card_level(id))))
-				"twin_play", "field_vision", "rally_cry":
+				"hidden_ball_trick":
+					var hb: Array = []
+					var strongest: Enemy = effects.strongest_runner()
+					if strongest:
+						hb.append(strongest)
+					hb.append_array(effects.live_bosses())
+					return hb
+				"twin_play", "field_vision", "rally_cry", "sweet_spot":
 					return defenders.duplicate()
 				"around_the_horn":
 					return effects.horn_targets(int(DB.card_param(id, "targets", run.card_level(id))))
@@ -1555,10 +1747,20 @@ func try_cast_at_cursor() -> bool:
 	last_cast_point = tgt.get("point", null)
 	_cancel_targeting()
 	effects.execute(id, run.card_level(id), tgt)
+	on_card_played(id)
 	if hud.has_method("on_card_played"):
 		hud.on_card_played(id)
 	card_cast.emit(id)
 	return true
+
+
+## After any card is played (by the player or the autopilot): Leadoff Discount refunds energy on
+## the first card of each wave.
+func on_card_played(_id: String) -> void:
+	if _wave_refund_left > 0.0 and state == "wave":
+		cards.add_energy(_wave_refund_left)
+		vfx.text_popup(Field.HOME + Vector3(0, 3.4, 0), "LEADOFF DISCOUNT  +%d ENERGY" % int(_wave_refund_left), UITheme.ENERGY, 0.9)
+		_wave_refund_left = 0.0
 
 
 # ---------------------------------------------------------------- input & selection
@@ -1736,6 +1938,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				select_defender(null)
 		return
 	if state == "dugout":
+		return
+	if state == "draft":
+		# The draft overlay takes 1-3 and clicks; only pause works underneath it.
+		if event.is_action_pressed("pause") and hud.has_method("toggle_pause"):
+			hud.toggle_pause()
 		return
 	for i in 5:
 		if event.is_action_pressed("card_%d" % (i + 1)):

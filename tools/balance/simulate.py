@@ -14,9 +14,15 @@ Extra game arguments go through --extra (write it as --extra=... because the val
   --extra=--shop=scouting_report,stronger_arm     dugout purchase order (or --shop=none)
   --extra=--cast-gap=3,6                          seconds between autopilot casts (a slower player)
   --extra=--no-cards                              defenders only
+  --extra="--card-level=3 --defender-level=5"     a "mid" profile: deck cards and team at those levels
+  --extra=--boon-pick=random                      Dugout Draft picks at random (default: by ai_value)
+  --extra=--boon=giant_killer                     always take that boon when it is offered
+Modes: standard, quick, endless, boss_rush (Update 9), ranked, daily. Games with different --extra arguments
+are reported as separate rows (the extra arguments are shown next to the difficulty).
 The report adds per-card damage / outs per energy, the card's win rate and runs per inning against its
 mode/difficulty group (random decks), per-defender shares (also when on the team), Rico's Home Guard
-assist and the dugout upgrades bought.
+assist, the dugout upgrades bought and (Update 9) the median inning reached and game time per row, early
+calls, and the Dugout Draft boons: how often each is offered and taken, and the win rate when taken.
 
 The numbers measure the autopilot, not a human: it casts the first affordable card in its hand every
 1-2.5 s at a simple target (lead runner, densest cluster), never saves cards for bosses and buys dugout
@@ -79,16 +85,16 @@ def cmd_run(a):
 	if os.path.exists(path):
 		for l in open(path):
 			d = json.loads(l)
-			done.add((d["mode"], d["difficulty"], d["seed"], d.get("deck_tag", "")))
+			done.add((d["mode"], d["difficulty"], d["seed"], d.get("deck_tag", ""), d.get("extra_tag", "")))
+	extra = a.extra.split() if a.extra else []
 	jobs = []
 	for i in range(a.games):          # interleaved, so a partial run covers every difficulty
 		for diff in a.difficulty.split(","):
 			seed = a.seed_base + i
 			deck = random_deck(seed) if a.deck == "random" else a.deck
-			if (a.mode, diff, seed, deck or "") not in done:
+			if (a.mode, diff, seed, deck or "", " ".join(extra)) not in done:
 				jobs.append((a.mode, diff, seed, deck))
 	print("%d games to play (%d already in %s)" % (len(jobs), len(done), path), flush=True)
-	extra = a.extra.split() if a.extra else []
 	with cf.ThreadPoolExecutor(a.jobs) as ex, open(path, "a") as f:
 		futs = {ex.submit(play, m, d, s, dk, a.speed, extra, a.timeout): (m, d, s) for m, d, s, dk in jobs}
 		for fu in cf.as_completed(futs):
@@ -119,25 +125,38 @@ def load(folders):
 	return games
 
 
+def median(xs):
+	return statistics.median(xs) if xs else 0.0
+
+
+def label(k):
+	"""Row label for a (mode, difficulty, extra) group: the difficulty plus any extra game arguments."""
+	return k[1] + (" (%s)" % k[2] if k[2] else "")
+
+
 def summarize(games):
 	"""Returns markdown text with the tables used in the balance report."""
 	out = []
 	groups = collections.defaultdict(list)
 	for g in games:
-		groups[(g["mode"], g["difficulty"])].append(g)
-	order = sorted(groups, key=lambda k: (k[0], DIFFS.index(k[1]) if k[1] in DIFFS else 9))
+		groups[(g["mode"], g["difficulty"], g.get("extra_tag", ""))].append(g)
+	order = sorted(groups, key=lambda k: (k[0], DIFFS.index(k[1]) if k[1] in DIFFS else 9, k[2]))
 
 	out.append("### Win rate and run flow\n")
-	out.append("| Mode | Difficulty | Games | Win rate | Avg inning reached | Runs allowed / game | Loss inning (histogram) | Energy wasted / game | Time at max energy | Coins earned / spent | Reward coins | Packs / game | Max combo |")
-	out.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+	out.append("Inning reached counts the inning the game ended in. Game time is game seconds from the first pitch to the end, "
+		"including breaks (the autopilot calls every wave early) but not the dugout or the draft.\n")
+	out.append("| Mode | Difficulty | Games | Win rate | Avg inning reached | Median inning | Runs allowed / game | Loss inning (histogram) | Median game time (min) | Early calls / game | Energy wasted / game | Time at max energy | Coins earned / spent | Reward coins | Packs / game | Max combo |")
+	out.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
 	for k in order:
 		gs = groups[k]
 		wins = sum(1 for g in gs if g["won"])
 		losses = collections.Counter(g["inning"] for g in gs if not g["won"])
 		hist = ", ".join("%d:%d" % (i, n) for i, n in sorted(losses.items())) or "-"
 		cap = mean([g["capped_time"] / max(g["wave_time"], 1) for g in gs])
-		out.append("| %s | %s | %d | %s | %.1f | %.2f | %s | %.1f | %s | %.0f / %.0f | %.0f | %.1f | %.1f |" % (k[0], k[1], len(gs), pct(wins / len(gs)),
-			mean([g["inning"] for g in gs]), mean([g["runs"] for g in gs]), hist, mean([g["energy_wasted"] for g in gs]), pct(cap),
+		gtime = median([g.get("time", g["game_time"]) / 60.0 for g in gs])
+		out.append("| %s | %s | %d | %s | %.1f | %.1f | %.2f | %s | %.1f | %.1f | %.1f | %s | %.0f / %.0f | %.0f | %.1f | %.1f |" % (k[0], label(k), len(gs), pct(wins / len(gs)),
+			mean([g["inning"] for g in gs]), median([g["inning"] for g in gs]), mean([g["runs"] for g in gs]), hist, gtime,
+			mean([g.get("early_calls", 0) for g in gs]), mean([g["energy_wasted"] for g in gs]), pct(cap),
 			mean([g["coins_earned"] for g in gs]), mean([g["coins_spent"] for g in gs]), mean([g["reward_coins"] for g in gs]),
 			mean([len(g["reward_packs"]) for g in gs]), mean([g["max_combo"] for g in gs])))
 
@@ -151,7 +170,7 @@ def summarize(games):
 		for i in range(maxi):
 			v = [g["runs_by_inning"][i] for g in gs if len(g["runs_by_inning"]) > i]
 			cells.append("%.2f" % mean(v) if v else "")
-		out.append("| %s | %s | %s |" % (k[0], k[1], " | ".join(cells)))
+		out.append("| %s | %s | %s |" % (k[0], label(k), " | ".join(cells)))
 
 	out.append("\n### Runs allowed per runner type (runs per 100 runners of that type that spawned)\n")
 	types = sorted({t for g in games for t in g["spawned_by_type"]})
@@ -164,7 +183,7 @@ def summarize(games):
 			sp = sum(g["spawned_by_type"].get(t, 0) for g in gs)
 			rn = sum(g["runs_by_type"].get(t, 0) for g in gs)
 			cells.append("%.1f (%d)" % (100.0 * rn / sp, rn) if sp else "")
-		out.append("| %s | %s | %s |" % (k[0], k[1], " | ".join(cells)))
+		out.append("| %s | %s | %s |" % (k[0], label(k), " | ".join(cells)))
 
 	out.append("\n### Bosses\n")
 	out.append("| Mode | Difficulty | Boss | Seen | Beaten | Scored | Avg time to kill (s) | Games lost in the boss inning |")
@@ -179,12 +198,41 @@ def summarize(games):
 			kills = [b["ttk"] for b, g in lst if b["result"] == "out"]
 			scored = sum(1 for b, g in lst if b["result"] == "scored")
 			lost_here = sum(1 for b, g in lst if not g["won"] and g["inning"] == b["inning"])
-			out.append("| %s | %s | %s | %d | %d | %d | %.1f | %d |" % (k[0], k[1], bid, len(lst), len(kills), scored, mean(kills), lost_here))
+			out.append("| %s | %s | %s | %d | %d | %d | %.1f | %d |" % (k[0], label(k), bid, len(lst), len(kills), scored, mean(kills), lost_here))
 
+	out += boon_table(games)
 	out += card_table(games)
 	out += defender_table(games)
 	out += upgrade_table(games)
 	return "\n".join(out) + "\n"
+
+
+def boon_table(games):
+	"""Dugout Draft (Update 9): per boon, times offered and taken, and the win rate of games that took it
+	against their group (mode / difficulty / extra)."""
+	offered = collections.Counter()
+	taken = collections.Counter()
+	wins = collections.Counter()
+	delta = collections.defaultdict(list)
+	drafts = 0
+	res = residuals(games)
+	for g in games:
+		for b, n in g.get("boons_offered", {}).items():
+			offered[b] += n
+		for b in g.get("boons", []):
+			taken[b] += 1
+			wins[b] += int(g["won"])
+			delta[b].append(res[id(g)])
+		drafts += len(g.get("boons", []))
+	if not offered:
+		return []
+	out = ["\n### Dugout Draft boons\n", "%d boons taken in %d games. 'vs group' = win rate of games that took the boon minus "
+		"their mode/difficulty group's (a boon taken in a game that was going well looks better than it is).\n" % (drafts, len(games)),
+		"| Boon | Offered | Taken | Pick rate | Win rate when taken | vs group |", "|---|---|---|---|---|---|"]
+	for b in sorted(offered, key=lambda x: -taken[x]):
+		out.append("| %s | %d | %d | %s | %s | %+.0f |" % (b, offered[b], taken[b], pct(taken[b] / offered[b]) if offered[b] else "-",
+			pct(wins[b] / taken[b]) if taken[b] else "-", 100.0 * mean(delta[b]) if delta[b] else 0.0))
+	return out
 
 
 def residuals(games, key=lambda g: int(g["won"])):
@@ -342,7 +390,7 @@ def main():
 	r.add_argument("--speed", type=float, default=1.0)
 	r.add_argument("--jobs", type=int, default=2)
 	r.add_argument("--timeout", type=int, default=1800)
-	r.add_argument("--extra", default="", help="extra game arguments, e.g. --no-cards")
+	r.add_argument("--extra", default="", help="extra game arguments, e.g. --no-cards or \"--card-level=3 --defender-level=5\"")
 	r.add_argument("--out", default=os.path.join(ROOT, "build", "balance", "latest"))
 	r.set_defaults(fn=cmd_run)
 	s = sub.add_parser("report")
