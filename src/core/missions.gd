@@ -12,6 +12,8 @@ extends RefCounted
 ## * One free reroll per day replaces one unclaimed daily mission with another of its tier.
 ## * A finished mission is claimed once for its reward (coins, a pack, stars). Missions
 ##   finished but not claimed when the day or week rolls over are paid out automatically.
+## * Update 9: every claimed (or paid-out) mission also pays 80 season XP (Season.add_xp); new events:
+##   boons_drafted, wins_boss_rush, shop_purchases and win_streak (sent by Rewards.apply after a win).
 ## State lives in Profile.data.missions; older saves get the defaults (Profile._sanitize).
 
 const DATA_PATH := "res://data/missions.json"
@@ -210,6 +212,8 @@ static func reward_text(r: Dictionary) -> String:
 		parts.append(str(DB.pack(str(r.pack)).get("name", r.pack)))
 	if int(r.get("stars", 0)) > 0:
 		parts.append("%d stars" % int(r.stars))
+	if int(r.get("season_xp", 0)) > 0:
+		parts.append("%d Season XP" % int(r.season_xp))
 	return " + ".join(parts)
 
 
@@ -377,16 +381,24 @@ static func claim(kind: String, index := 0) -> Dictionary:
 	if not can_claim(inst):
 		return {}
 	inst.claimed = true
-	var r := reward(inst)
+	var r := reward(inst).duplicate()
 	_grant(r, "Mission: " + text(inst))
 	s.completed = int(s.completed) + 1
 	if kind == "starter":
 		s.starter_step = int(inst.get("step", 0)) + 1
 		s.starter = _starter_instance(int(s.starter_step)) if int(s.starter_step) < starter_steps().size() else {}
 	Profile.bump_stat("missions_completed")
+	# Update 9: every claimed mission pays season XP.
+	r["season_xp"] = season_xp()
+	r["season_tiers"] = Season.add_xp(int(r.season_xp), "mission")
 	Profile.changed.emit()
 	Profile.save_soon()
 	return r
+
+
+## Season XP a claimed mission pays (data/season.json).
+static func season_xp() -> int:
+	return int(Season.xp_rules().get("mission", 80))
 
 
 static func _grant(r: Dictionary, source: String) -> void:
@@ -406,6 +418,7 @@ static func _payout_unclaimed(list: Array) -> void:
 			_grant(reward(inst), "Mission: " + text(inst))
 			state().completed = int(state().completed) + 1
 			Profile.bump_stat("missions_completed")
+			Season.add_xp(season_xp(), "mission")
 
 
 ## Repairs saved mission state (unknown ids, wrong types). Called by Profile._sanitize.

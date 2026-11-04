@@ -1,5 +1,5 @@
 {
-  "_comment": "Permanent gear bought with coins. Each item is owned once and equipped on one defender.",
+  "_comment": "Permanent gear bought with coins. Each item is owned once and equipped on one defender. Uniforms are team-wide and bought with stars; season uniforms ('season': n, 'for_sale': false) are only earned at tier 30 of that Season Pass (data/season.json) and are never sold (Profile.uniform_for_sale).",
   "gear": [
     {"id": "iron_wristband", "name": "Iron Wristband", "price": 400, "text": "+10% damage.", "effect": {"damage": 0.10}},
     {"id": "pro_glove", "name": "Pro Glove", "price": 350, "text": "+10 accuracy and +4% critical chance.", "effect": {"accuracy": 10, "crit": 0.04}},
@@ -27,6 +27,14 @@
     {"id": "retro", "name": "Retro Cream", "price_stars": 30, "colors": {"Jersey": "#EFE3C8", "JerseyTrim": "#B0221A", "Pants": "#EFE3C8", "Cap": "#B0221A", "Socks": "#B0221A", "Number": "#B0221A"}},
     {"id": "shadow", "name": "Shadow Ops", "price_stars": 40, "colors": {"Jersey": "#16121F", "JerseyTrim": "#9B5DE5", "Pants": "#2A2436", "Cap": "#16121F", "Socks": "#9B5DE5", "Number": "#C9A8FF"}},
     {"id": "gold", "name": "Golden Era", "price_stars": 60, "colors": {"Jersey": "#121212", "JerseyTrim": "#F5B82E", "Pants": "#1E1E1E", "Cap": "#121212", "Socks": "#F5B82E", "Number": "#F5B82E"}},
-    {"id": "champion", "name": "Champion White", "price_stars": 80, "colors": {"Jersey": "#F7F5F0", "JerseyTrim": "#F5B82E", "Pants": "#F7F5F0", "Cap": "#F5B82E", "Socks": "#F7F5F0", "Number": "#C8962A"}}
+    {"id": "champion", "name": "Champion White", "price_stars": 80, "colors": {"Jersey": "#F7F5F0", "JerseyTrim": "#F5B82E", "Pants": "#F7F5F0", "Cap": "#F5B82E", "Socks": "#F7F5F0", "Number": "#C8962A"}},
+    {"id": "season_1", "name": "Opening Day", "season": 1, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#0F5A3A", "JerseyTrim": "#F2C14E", "Pants": "#F4F1E8", "Cap": "#0F5A3A", "Socks": "#F2C14E", "Number": "#F2C14E"}},
+    {"id": "season_2", "name": "Pennant Race", "season": 2, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#7A1022", "JerseyTrim": "#F4F1EA", "Pants": "#2B2B2E", "Cap": "#7A1022", "Socks": "#F4F1EA", "Number": "#F4F1EA"}},
+    {"id": "season_3", "name": "Hot Stove", "season": 3, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#E2571E", "JerseyTrim": "#2A1A12", "Pants": "#F3E9DC", "Cap": "#2A1A12", "Socks": "#E2571E", "Number": "#2A1A12"}},
+    {"id": "season_4", "name": "Spring Training", "season": 4, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#7CC6E8", "JerseyTrim": "#0B3954", "Pants": "#F7F7F2", "Cap": "#0B3954", "Socks": "#7CC6E8", "Number": "#0B3954"}},
+    {"id": "season_5", "name": "Rivalry Week", "season": 5, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#1B1F3B", "JerseyTrim": "#E63946", "Pants": "#1B1F3B", "Cap": "#E63946", "Socks": "#1B1F3B", "Number": "#E63946"}},
+    {"id": "season_6", "name": "Night Game", "season": 6, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#0A0A12", "JerseyTrim": "#38F2D2", "Pants": "#1C1C28", "Cap": "#0A0A12", "Socks": "#38F2D2", "Number": "#38F2D2"}},
+    {"id": "season_7", "name": "All-Star Break", "season": 7, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#F7F7F7", "JerseyTrim": "#2E5BFF", "Pants": "#F7F7F7", "Cap": "#2E5BFF", "Socks": "#E0262F", "Number": "#2E5BFF"}},
+    {"id": "season_8", "name": "October Glory", "season": 8, "for_sale": false, "price_stars": 0, "colors": {"Jersey": "#3B2410", "JerseyTrim": "#F5A623", "Pants": "#E9DCC6", "Cap": "#F5A623", "Socks": "#3B2410", "Number": "#F5A623"}}
   ]
 }

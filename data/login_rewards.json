@@ -1,1 +1,12 @@
-{"_comment": "7-day login calendar (Update 9, filled by the economy stream).", "days": []}
+{
+  "_comment": "Daily login calendar (Update 9, src/core/daily_rewards.gd): a 7-day cycle, one claim per local calendar day. Missing a day pauses the calendar (the next claim pays the next day, it never resets); the login streak counts consecutive calendar days with a claim, for flair. Reward keys as in the Season Pass: coins, stars, packs.",
+  "days": [
+    {"coins": 150},
+    {"packs": ["rookie"]},
+    {"coins": 250},
+    {"stars": 10},
+    {"packs": ["pro"]},
+    {"coins": 400},
+    {"packs": ["champion"]}
+  ]
+}

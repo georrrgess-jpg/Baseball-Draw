@@ -1,25 +1,27 @@
 {
- "_comment": "Card packs are the only way to receive new cards. Each slot rolls a rarity from the pack's weights; 'min' raises that slot to at least the given rarity. Duplicates become upgrade copies.",
+ "_comment": "Card packs are the only way to receive new cards. Each slot rolls a rarity from the pack's weights; 'min' raises that slot to at least the given rarity. Duplicates become upgrade copies; copies of a card already at max level turn into 'overflow_coins' per copy (Update 9). Pity (Update 9): after 'pity.epic' - 1 packs in a row without an Epic or better the next pack's last slot is at least Epic, and after 'pity.legendary' - 1 packs without a Legendary it is Legendary. 'pity.counts' names the pack types that advance each counter: every pack for the Epic guarantee, Pro and Champion Packs for the Legendary one (Rookie Packs are the cheap volume pack); pulling the rarity from any pack resets its counter, and signature packs never touch them. Counters persist in the profile (Profile.pity_left). Update 9 also lowered the natural Legendary weights (0.1 / 0.4 / 1.2 to 0.03 / 0.2 / 0.6) so the guarantee carries most Legendaries: tools/balance/economy.py puts the whole collection at about 27 hours and the first Legendary at about 3 hours.",
+ "pity": {"epic": 10, "legendary": 30, "counts": {"epic": ["rookie", "pro", "champion"], "legendary": ["pro", "champion"]}},
+ "overflow_coins": {"common": 20, "uncommon": 40, "rare": 80, "epic": 160, "legendary": 400},
  "packs": [
   {
    "id": "rookie", "name": "Rookie Pack", "tagline": "Three cards to grow your collection.",
    "cards": 3, "price_coins": 200, "price_stars": 0, "for_sale": true,
    "color": "#2F7BE0", "color2": "#0E2A5C", "accent": "#9FD3FF",
-   "weights": {"common": 56, "uncommon": 30, "rare": 12, "epic": 0.8, "legendary": 0.1},
+   "weights": {"common": 56, "uncommon": 30, "rare": 12, "epic": 0.8, "legendary": 0.03},
    "slots": [{}, {}, {"min": "uncommon"}]
   },
   {
    "id": "pro", "name": "Pro Pack", "tagline": "Four cards with a guaranteed Rare or better.",
    "cards": 4, "price_coins": 500, "price_stars": 0, "for_sale": true,
    "color": "#8A3BE0", "color2": "#2A0E57", "accent": "#E2B8FF",
-   "weights": {"common": 41, "uncommon": 33, "rare": 21, "epic": 2.5, "legendary": 0.4},
+   "weights": {"common": 41, "uncommon": 33, "rare": 21, "epic": 2.5, "legendary": 0.2},
    "slots": [{}, {}, {"min": "uncommon"}, {"min": "rare"}]
   },
   {
    "id": "champion", "name": "Champion Pack", "tagline": "Five cards with a guaranteed Epic or better.",
    "cards": 5, "price_coins": 0, "price_stars": 50, "for_sale": true,
    "color": "#E8A317", "color2": "#5C2E00", "accent": "#FFF0B8",
-   "weights": {"common": 26, "uncommon": 31, "rare": 30, "epic": 9, "legendary": 1.2},
+   "weights": {"common": 26, "uncommon": 31, "rare": 30, "epic": 9, "legendary": 0.6},
    "slots": [{}, {"min": "uncommon"}, {"min": "uncommon"}, {"min": "rare"}, {"min": "epic"}]
   },
   {

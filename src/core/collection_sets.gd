@@ -1,7 +1,8 @@
 class_name CollectionSets
 extends RefCounted
 ## Collection book: card sets per category (Offense, Control, Defense, Utility), the
-## Signature set (cards linked to a defender) and the full collection. Completing a set
+## Signature set (cards linked to a defender), release sets (cards whose "set" field names
+## them, e.g. the Update 9 "Big League" cards) and the full collection. Completing a set
 ## gives a one-time pack, claimed from Cards & Deck. Sets are computed from the card data,
 ## so new cards join their set automatically; a reward already claimed stays claimed.
 
@@ -12,6 +13,7 @@ const SETS := [
 	["defense", "DEFENSE", "defense", "pro"],
 	["utility", "UTILITY", "utility", "pro"],
 	["signature", "SIGNATURE", "star", "pro"],
+	["big_league", "BIG LEAGUE", "trophy", "champion"],
 	["all", "FULL COLLECTION", "collection", "champion"],
 ]
 
@@ -35,7 +37,7 @@ static func cards_in(set_id: String) -> Array:
 		match set_id:
 			"all": hit = true
 			"signature": hit = str(c.get("linked", "")) != ""
-			_: hit = str(c.category) == set_id
+			_: hit = str(c.category) == set_id or str(c.get("set", "")) == set_id
 		if hit:
 			out.append(cid)
 	return out
