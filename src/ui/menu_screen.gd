@@ -19,6 +19,8 @@ var help_button: Button
 ## Optional hook run on Esc before leaving: return true to stay (it handled the key, e.g. Esc
 ## skips a pack reveal before it leaves the screen). The BACK button always leaves.
 var before_back := Callable()
+## Keyboard / controller: the control the first direction press focuses (falls back to BACK).
+var default_focus: Control
 
 
 func setup_screen(title: String, subtitle := "") -> void:
@@ -216,6 +218,46 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		_on_back()
 		get_viewport().set_input_as_handled()
+		return
+	if focus_on_nav(self, event, default_focus if default_focus and is_instance_valid(default_focus) else back_button):
+		get_viewport().set_input_as_handled()
+
+
+## Keyboard / controller: nothing has focus until the player first presses a direction, Tab or a
+## d-pad button; that press focuses `target` (the screen's main action) instead of being lost.
+## After that Godot's own focus navigation moves between buttons. Returns true when it focused.
+static func focus_on_nav(host: Control, event: InputEvent, target: Control) -> bool:
+	if target == null or not is_instance_valid(target) or not target.is_visible_in_tree():
+		return false
+	if host.get_viewport() == null or host.get_viewport().gui_get_focus_owner() != null:
+		return false
+	for a in ["ui_up", "ui_down", "ui_left", "ui_right", "ui_focus_next", "ui_focus_prev"]:
+		if event.is_action_pressed(a):
+			target.grab_focus()
+			return true
+	return false
+
+
+## Why a mode cannot be started yet ("" when it can): the Promotion Challenge needs enough rank
+## points, and a mode with an `unlock` entry in data/modes.json ({"level": n} or
+## {"type": "level", "value": n}) waits for that account level.
+static func mode_locked_reason(id: String) -> String:
+	if id == "ranked":
+		var nd := Profile.next_division()
+		if nd.is_empty():
+			return "You are a Legend: there is no division left to reach."
+		if not Profile.promotion_available():
+			return "Unlocks at %d RP (you have %d)" % [int(nd.rp_required), int(Profile.data.rp)]
+		return ""
+	var u: Variant = DB.mode(id).get("unlock", null)
+	if typeof(u) == TYPE_DICTIONARY:
+		var ud: Dictionary = u
+		var need := 0
+		if str(ud.get("type", "level")) == "level":
+			need = int(ud.get("level", ud.get("value", 0)))
+		if need > 0 and int(Profile.data.level) < need:
+			return "Reach account level %d" % need
+	return ""
 
 
 static func panel(bg := UITheme.PANEL_BG, border := UITheme.BORDER, pad := 16) -> PanelContainer:

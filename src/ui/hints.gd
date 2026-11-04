@@ -17,6 +17,16 @@ const HINTS := {
 	"menu_home": ["YOUR CLUBHOUSE", "PLAY starts a game. Tiles with a badge have something waiting for you: unopened packs, new cards or cards ready to upgrade."],
 	"menu_daily": ["DAILY CHALLENGE", "A new game every day with fixed rules, the same for every manager. Your first game and first win each day give a bonus pack; play on back-to-back days for a streak."],
 	"menu_promotion": ["PROMOTION CHALLENGE", "You have enough Rank Points to move up a division. Open PLAY and pick Promotion Challenge: win it to get promoted."],
+	# Update 9: the return loop on the hub.
+	"menu_login": ["LOGIN CALENDAR", "Claim a reward every day you play: coins, packs and stars, with a Champion Pack on day 7. Miss a day and the calendar just waits for you; it never resets."],
+	"menu_season": ["SEASON PASS", "Every game earns season XP (more for wins, missions and the Daily Challenge). Each tier pays a reward, with Champion Packs at tiers 15 and 30. A season lasts 14 days."],
+	"menu_streak": ["WIN STREAK", "Win games in a row for bonus coins: +10% for every win in the streak, up to +50%. A loss resets it. Your first win each day also pays double coins."],
+	"menu_shop": ["DAILY SHOP", "A free gift every day, plus card copies, a discounted pack and a star deal. The deals change at midnight, and you can sign free agents there too."],
+	# Daily Shop and Season Pass screens (Update 9).
+	"shop_intro": ["DAILY SHOP", "Today's deals: copies of cards you still need, a pack deal and a star deal. Each can be bought once a day. The free gift costs nothing; new deals come at midnight."],
+	"shop_free_agents": ["FREE AGENTS", "Sign a new defender early for coins instead of waiting for their account level. A signed defender joins your team list and brings their signature card pack."],
+	"season_intro": ["SEASON PASS", "Season XP fills the track: 100 per game, +60 for a win, +80 per mission and +100 for the Daily Challenge. Claim each tier's reward here before the season ends."],
+	"season_claim": ["CLAIM REWARDS", "Tiers you have reached glow gold. Claim them one at a time or all at once. After tier 30, every 1,000 XP pays a Pro Pack."],
 	# Card packs.
 	"packs_intro": ["CARD PACKS", "Pick a pack on the shelf and open it. New cards join your collection; a card you already own becomes a copy, used to upgrade that card."],
 	"packs_rarity": ["CARD RARITY", "The colour of a card's frame is its rarity: Common (grey), Uncommon (green), Rare (blue), Epic (purple), Legendary (gold). Rarer cards are stronger and show up less often."],
@@ -32,12 +42,17 @@ const HINTS := {
 	"team_intro": ["YOUR TEAM", "Pick a defender on the left to see their stats. The strip at the bottom is your starting six; the captain boosts nearby teammates."],
 	"team_road": ["LEVEL ROAD", "Defenders earn XP in every game they play. Each level on the road gives a reward: coins, a pack or a new trait to choose."],
 	"team_traits": ["TRAINING TRAITS", "At the levels shown, pick one of two traits for this defender. You can switch your pick any time. Gear (from Progression → Pro Shop) and uniforms (bought with stars) are below."],
+	"team_free_agents": ["FREE AGENTS", "Sign a locked defender early for coins, or wait for the account level shown to unlock them for free. A signed defender brings their signature card pack."],
 	# Play.
 	"play_modes": ["CHOOSE A GAME", "Quick Defense is a short 3-inning game; Standard Siege is the full 9 innings with 3 bosses. Higher difficulty means tougher runners and bigger rewards."],
 	"play_daily": ["DAILY CHALLENGE", "Today's game has a fixed deck, stadium and twist, the same for everyone. Bonus pack for your first game and first win today. It never touches your saved run."],
 	"play_ranked": ["PROMOTION CHALLENGE", "Win games to earn Rank Points (RP). With enough RP this short challenge unlocks: win it to move up a division and earn more rewards."],
 	"play_endless": ["THE ENDLESS NINTH", "Survive as long as you can. Every inning adds a random modifier and every third inning brings a boss. Your best inning and score are kept as records."],
 	"play_practice": ["PRACTICE FIELD", "A sandbox: spawn any runner and try any card. No rewards and no risk."],
+	"play_boss_rush": ["BOSS RUSH", "Three short innings, each ending with a tougher boss. After bosses 1 and 2 you draft a boon for the rest of the game. A win pays a Pro Pack, and your best time is kept."],
+	"play_streak": ["WIN STREAK BONUS", "Every win in a row adds +10% coins to your next game (up to +50%). The first win each day pays double coins on top."],
+	# Results (Update 9).
+	"results_season": ["SEASON XP", "Every game fills the season track; wins fill it faster. Reached a tier? Open the Season Pass to claim its reward."],
 	# Battle dugout (between innings).
 	"dugout_intro": ["THE DUGOUT", "Between innings, spend the coins earned in this game on upgrades for the rest of this game. Then press NEXT INNING."],
 	# Scouting Book (Update 8).
@@ -45,29 +60,35 @@ const HINTS := {
 	# Battle (Update 8): shown once, never during the battle tutorial.
 	"battle_combo": ["COMBO IN YOUR HAND", "These two cards work together: the green link joins them. Hover a card to read the combo, then play them one after the other."],
 	"battle_scout": ["SCOUTING REPORT", "A new kind of runner! Click its picture in the threat panel for a quick report: what it does and how to stop it. The game pauses while you read."],
+	# Dugout Draft (Update 9): shown the first time the boon draft opens.
+	"battle_boons": ["DUGOUT DRAFT", "Bosses down! Pick one of three boons: it lasts for the rest of this game. Rarer boons are stronger. Your picks are listed on the Results screen."],
 	# Settings.
 	"settings_intro": ["SETTINGS", "Search for any option at the top. Graphics has a benchmark that recommends a quality preset for your computer."],
 }
 
 ## Which hints each screen shows (in order) and replays from its "?" button.
 const SCREENS := {
-	"main_menu": ["menu_home", "menu_daily", "menu_promotion"],
+	"main_menu": ["menu_home", "menu_login", "menu_daily", "menu_season", "menu_streak", "menu_shop", "menu_promotion"],
 	"packs": ["packs_intro", "packs_rarity"],
 	"deck_builder": ["deck_intro", "deck_auto", "deck_compare", "deck_mastery", "deck_sets"],
 	"collection": ["deck_mastery", "deck_compare", "deck_sets", "packs_rarity"],
 	"card_upgrades": ["upgrades_intro"],
-	"roster": ["team_intro", "team_road", "team_traits"],
-	"play_menu": ["play_modes", "play_daily", "play_ranked", "play_endless", "play_practice"],
+	"roster": ["team_intro", "team_road", "team_traits", "team_free_agents"],
+	"play_menu": ["play_modes", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak"],
+	"shop": ["shop_intro", "shop_free_agents"],
+	"season": ["season_intro", "season_claim"],
+	"results": ["results_season"],
 	"dugout": ["dugout_intro"],
 	"settings": ["settings_intro"],
 	"scouting_book": ["scouting_intro"],
-	"battle": ["battle_combo", "battle_scout"],
+	"battle": ["battle_combo", "battle_scout", "battle_boons"],
 }
 
 ## Feature hints: part of a screen's "?" replay, but shown automatically only when the screen
 ## passes them in `extra` (the player has actually met the feature).
-const FEATURE_ONLY := ["menu_promotion", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
-	"play_daily", "play_ranked", "play_endless", "play_practice", "battle_combo", "battle_scout"]
+const FEATURE_ONLY := ["menu_promotion", "menu_streak", "menu_shop", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
+	"team_free_agents", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak",
+	"season_claim", "battle_combo", "battle_scout", "battle_boons"]
 
 const ACCENT := UITheme.GOLD
 const CARD_W := 440.0
