@@ -22,6 +22,10 @@ const SCENES := {
 
 var current := ""
 var busy := false
+## The `tab` the current screen was opened with (also for screens without a TabContainer: e.g.
+## the Shop scrolls to "agents", the Team screen selects a defender id). Set before the new
+## screen's _ready runs.
+var open_arg := ""
 ## Screens that opened the current one through a cross-link (e.g. Upgrade Cards -> Card Packs):
 ## BACK returns along this path. Going to the main menu or a battle clears it.
 var _back_stack: Array[String] = []
@@ -156,6 +160,7 @@ func goto(scene_name: String, show_loading := false, tab := "") -> void:
 			_loading_bar.value = float(progress[0]) * 100.0
 		await get_tree().process_frame
 	var packed: PackedScene = ResourceLoader.load_threaded_get(path)
+	open_arg = tab
 	get_tree().change_scene_to_packed(packed)
 	current = scene_name
 	await get_tree().process_frame

@@ -6,6 +6,8 @@ extends Node3D
 ## with light rays, a shockwave, confetti and a banner.
 ## Multi-open (OPEN ×5 / ×10): the packs fan out into a hand, merge into one glowing pack
 ## that tears with a bigger burst, and every card is dealt into a PackSummary grid.
+## Update 9: the pity counters ("Epic or better within N packs") under your packs, a link to the
+## Daily Shop, and the coins from extra copies of maxed cards in the reveal summary.
 
 const CARD_W := 0.86
 const CARD_H := 1.204
@@ -33,6 +35,8 @@ var _left: PanelContainer
 var _right: PanelContainer
 var _inv_box: VBoxContainer
 var _shop_box: VBoxContainer
+var _pity_box: VBoxContainer
+var shop_link: Button
 var _action: Button
 var _open_multi_btns := {}     # count -> Button (OPEN ×5 / OPEN ×10)
 var _buy_buttons := {}         # "type:count" -> Button
@@ -586,6 +590,10 @@ func _build_ui() -> void:
 	_inv_box.add_theme_constant_override("separation", 8)
 	_inv_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ls.add_child(_inv_box)
+	_pity_box = VBoxContainer.new()
+	_pity_box.name = "PackLuck"
+	_pity_box.add_theme_constant_override("separation", 6)
+	lv.add_child(_pity_box)
 
 	var center := VBoxContainer.new()
 	_center = center
@@ -628,6 +636,10 @@ func _build_ui() -> void:
 	_shop_box = VBoxContainer.new()
 	_shop_box.add_theme_constant_override("separation", 10)
 	rv.add_child(_shop_box)
+	var rfill := Control.new()
+	rfill.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rv.add_child(rfill)
+	rv.add_child(_shop_link())
 
 	# Let clicks on empty space reach the 3D stage (pack and cards); panels and buttons still catch theirs.
 	_pass_through(_screen)
@@ -702,8 +714,69 @@ func _refresh_panels() -> void:
 	for id in DB.pack_order:
 		if bool(DB.pack(id).get("for_sale", false)):
 			_shop_box.add_child(_shop_row(id))
+	_fill_pity()
 	_flash_type = ""
 	_update_action()
+
+
+## PACK LUCK: how many packs until the pity guarantee (an Epic or better within 10 packs, a
+## Legendary within 30), as two bars that fill up with every pack opened.
+func _fill_pity() -> void:
+	for c in _pity_box.get_children():
+		c.queue_free()
+	var t := UITheme.tile_panel(Color(UITheme.PURPLE, 0.45), 14)
+	t.tooltip_text = ("Pity protection: an Epic or better is guaranteed within %d packs, a Legendary within %d %s. "
+		+ "Pulling one resets its counter.") % [Profile.pity_limit("epic"), Profile.pity_limit("legendary"), Profile.pity_pack_names("legendary")]
+	_pity_box.add_child(t)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	t.add_child(v)
+	v.add_child(UITheme.section_header("PACK LUCK", "star", UITheme.PURPLE.lightened(0.35), UITheme.FS_LEAD))
+	for e in [["epic", "Epic or better"], ["legendary", "Legendary"]]:
+		var r := str(e[0])
+		var limit := Profile.pity_limit(r)
+		var have := clampi(int(Profile.data.get("pity", {}).get(r, 0)), 0, limit)
+		var col := DB.rarity_color(r)
+		var l := UITheme.label(pity_text(str(e[1]), Profile.pity_left(r), Profile.pity_pack_names(r)), UITheme.FS_BODY, col.lightened(0.25), UITheme.font_body_bold())
+		l.name = "Pity_" + r
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(l)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		v.add_child(row)
+		var b := UITheme.bar(col, 12, float(limit), float(have))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(b)
+		row.add_child(UITheme.label("%d / %d" % [have, limit], UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold()))
+
+
+## "Epic or better within 4 packs", "Legendary within 19 Pro or Champion Packs", or for the last one
+## "Legendary guaranteed in your next Pro or Champion Pack". `packs` is Profile.pity_pack_names().
+static func pity_text(what: String, left: int, packs := "packs") -> String:
+	if left <= 1:
+		return "%s guaranteed in your next %s" % [what, packs.trim_suffix("s")]
+	return "%s within %d %s" % [what, left, packs]
+
+
+## DAILY SHOP link: today's deals and the free gift (with a GIFT badge while it is unclaimed).
+func _shop_link() -> Control:
+	var b := UITheme.button("DAILY SHOP  ▶", "secondary", UITheme.FS_LEAD, "gift", UITheme.GOLD)
+	b.name = "ShopLink"
+	b.custom_minimum_size = Vector2(0, UITheme.BTN_H)
+	b.tooltip_text = "Today's deals: a free gift, card copies, a discounted pack and free agents"
+	b.pressed.connect(func() -> void:
+		if state == "idle":
+			Router.open("shop"))
+	for o in Shop.offers():
+		if str(o.get("kind", "")) == "gift" and not bool(o.get("bought", false)):
+			var bd := UITheme.badge("FREE GIFT", UITheme.GREEN.darkened(0.3))
+			bd.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+			bd.position = Vector2(-104, -12)
+			b.add_child(bd)
+			break
+	shop_link = b
+	return b
 
 
 func _inventory_row(e: Dictionary) -> Control:
@@ -897,7 +970,7 @@ func _update_action() -> void:
 			_action.disabled = false
 			if _multi:
 				_action.text = "DONE"
-				_hint.text = _multi.summary_text()
+				_hint.text = _multi.summary_text() + _overflow_text()
 			else:
 				var left := Profile.pack_count()
 				_action.text = "OPEN NEXT PACK  (%d)" % left if left > 0 else "DONE"
@@ -917,7 +990,29 @@ func _summary_text() -> String:
 		parts.append("%d new card%s" % [new_n, "" if new_n == 1 else "s"])
 	if copies > 0:
 		parts.append("%d upgrade cop%s" % [copies, "y" if copies == 1 else "ies"])
-	return " · ".join(parts)
+	return " · ".join(parts) + _overflow_text()
+
+
+## " · +80 coins from extra copies · Epic guaranteed by Pack Luck": copies of max-level cards turn into
+## coins (the result's `overflow_coins`) and the pity guarantees that kicked in (`pity`: a String for one
+## pack, an Array for several), Update 9.
+func _overflow_text() -> String:
+	var t := ""
+	var n := int(_result.get("overflow_coins", 0))
+	if n > 0:
+		t += "  ·  +%s coins from extra copies" % UITheme.format_int(n)
+	for r in pity_list(_result):
+		t += "  ·  %s guaranteed by Pack Luck" % ("Epic" if r == "epic" else str(r).capitalize())
+	return t
+
+
+## The pity guarantees of a pack result as a list ("pity" is a String from open_pack, an Array from
+## open_packs).
+static func pity_list(result: Dictionary) -> Array:
+	var p: Variant = result.get("pity", "")
+	if p is Array:
+		return (p as Array).filter(func(x: Variant) -> bool: return str(x) != "")
+	return [str(p)] if str(p) != "" else []
 
 
 func _on_action() -> void:
@@ -1513,12 +1608,28 @@ func _add_badge(i: int) -> void:
 	if cd.new:
 		lab.text = "NEW!"
 		lab.modulate = UITheme.GOLD
+	elif int(cd.get("overflow", 0)) > 0:
+		# A max-level card: its copies became coins.
+		lab.text = "+%s COINS" % UITheme.format_int(int(cd.overflow))
+		lab.modulate = UITheme.GOLD
 	else:
 		lab.text = "+%d COP%s" % [int(cd.copies), "Y" if int(cd.copies) == 1 else "IES"]
 		lab.modulate = Color(0.75, 0.9, 1.0)
 		if Profile.can_upgrade_card(cd.id):
 			lab.text = "UPGRADE READY"
 			lab.modulate = UITheme.GREEN
+	# Pity: the pack's last card was raised to the guaranteed rarity.
+	if i == _cards.size() - 1 and not pity_list(_result).is_empty():
+		var pl := Label3D.new()
+		pl.font = UITheme.font_display()
+		pl.font_size = 52
+		pl.outline_size = 12
+		pl.pixel_size = 0.0032
+		pl.outline_modulate = Color(0, 0, 0, 0.9)
+		pl.text = "GUARANTEED"
+		pl.modulate = DB.rarity_color(str(cd.rarity)).lightened(0.3)
+		pl.position = Vector3(0, CARD_H * 0.5 + 0.16, 0.05)
+		c.root.add_child(pl)
 	lab.position = Vector3(0, -CARD_H * 0.5 - 0.2, 0.05)
 	lab.scale = Vector3.ONE * 0.2
 	c.root.add_child(lab)
