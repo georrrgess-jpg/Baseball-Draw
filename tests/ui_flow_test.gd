@@ -132,6 +132,10 @@ func _run() -> void:
 		await _test_multi_packs()
 		_finish()
 		return
+	if "--ui-test-section=draft" in OS.get_cmdline_user_args():
+		await _test_draft()
+		_finish()
+		return
 	Profile.data.flags["battle_help"] = true
 	Profile.data.flags["battle_tutorial_done"] = true
 	var cfg := Session.new_run_config("quick")
@@ -355,6 +359,7 @@ func _run() -> void:
 	await _test_scouting()
 	await _test_title()
 	await _test_tutorial()
+	await _test_draft()
 	_finish()
 
 
@@ -1430,3 +1435,156 @@ func _finish() -> void:
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+# ---------------------------------------------------------------- Update 9: NEXT WAVE NOW, Dugout Draft
+
+## Plays waves until the battle reaches `want`: the runners of each wave are sent out at once and
+## put out (bosses too), so this checks the UI flow, not the balance, and stays quick on a slow
+## software renderer. Returns true when reached.
+func _play_until(want: Array, max_steps := 600) -> bool:
+	for i in max_steps:
+		if battle.state in want:
+			return true
+		if battle.state == "results":
+			return false
+		if battle.state == "wave":
+			battle.wave_time += 4.0
+			for e: Enemy in battle.enemies.duplicate():
+				if is_instance_valid(e) and e.alive and e.d > 2.0:
+					battle.deal_damage(e, e.hp + 10.0, {"kind": "throw", "true": true, "pierce": 1.0})
+		await _wait(0.1)
+	return battle.state in want
+
+
+## Boss Rush on Rookie: NEXT WAVE NOW by click and by Space (+1 energy), then the Dugout Draft after
+## bosses 1 and 2, picked once with a key and once with a click, with pause and 2x speed in between.
+func _test_draft() -> void:
+	Profile.data.flags["battle_help"] = true
+	Profile.data.flags["battle_tutorial_done"] = true
+	Engine.time_scale = 1.0
+	var cfg := Session.new_run_config("boss_rush")
+	cfg.difficulty = "rookie"
+	cfg.seed = 4242
+	Session.start(cfg)
+	battle = null
+	for i in 300:
+		await _wait(0.1)
+		var sc := get_tree().current_scene
+		if sc is Battle and (sc as Battle).state == "setup":
+			battle = sc
+			break
+	_check(battle != null and battle.run.mode_id == "boss_rush", "Boss Rush battle loaded")
+	if battle == null:
+		return
+	await _wait(0.8)
+	await _key("start_wave")
+	await _wait(0.3)
+	_check(battle.state == "wave", "Boss Rush wave 1 started")
+	# 1. NEXT WAVE NOW by click.
+	Engine.time_scale = 4.0
+	var reached := await _play_until(["break"])
+	Engine.time_scale = 1.0
+	_check(reached, "wave 1 cleared into a break (state=%s)" % battle.state)
+	await _wait(0.4)
+	var hud: Node = battle.hud
+	var btn := _find_button(hud.root, "NEXT WAVE NOW")
+	var cap: Label = hud.get("_start_sub")
+	_check(btn != null, "the break shows a NEXT WAVE NOW button")
+	_check(cap != null and cap.visible and cap.text.contains("+1 ENERGY") and cap.text.contains("SPACE"), "NEXT WAVE NOW says what it pays and its key (%s)" % (cap.text if cap else "-"))
+	var calls0 := int(battle.run.stats.get("early_calls", 0))
+	battle.cards.energy = 2.0
+	if btn:
+		await _click(_button_center(btn))
+		await _wait(0.2)
+	_check(battle.state == "wave", "clicking NEXT WAVE NOW starts the next wave")
+	_check(battle.cards.energy >= 4.0 - 0.01, "an early call gives +1 energy on top of the wave's +1 (%.1f from 2.0)" % battle.cards.energy)
+	_check(int(battle.run.stats.get("early_calls", 0)) == calls0 + 1, "the early call is counted")
+	# 2. NEXT WAVE NOW by key (Space).
+	Engine.time_scale = 4.0
+	reached = await _play_until(["break"])
+	Engine.time_scale = 1.0
+	await _wait(0.3)
+	battle.cards.energy = 2.0
+	await _key("start_wave")
+	await _wait(0.2)
+	_check(reached and battle.state == "wave" and battle.cards.energy >= 3.99, "Space calls the next wave early with +1 energy (%.1f)" % battle.cards.energy)
+	# 3. Boss 1 -> draft; pause and 2x speed while it is up; pick with the 2 key.
+	Engine.time_scale = 4.0
+	reached = await _play_until(["draft", "dugout"])
+	Engine.time_scale = 1.0
+	_check(reached and battle.state == "draft", "beating boss 1 opens the Dugout Draft (state=%s)" % battle.state)
+	var draft: Node = null
+	for i in 40:
+		await _wait(0.1)
+		draft = hud.get("_draft")
+		if draft and is_instance_valid(draft):
+			break
+	_check(draft != null and is_instance_valid(draft) and (draft.get("cards") as Array).size() == 3, "the draft overlay shows three boon cards")
+	if draft == null or not is_instance_valid(draft):
+		return
+	await _wait(1.0)
+	var offers: Array = battle.draft_offers.duplicate()
+	var wave0 := battle.run.wave
+	await _wait(1.5)
+	_check(battle.state == "draft" and battle.run.wave == wave0 and battle.spawn_queue.is_empty(), "the next wave is held while the draft is open")
+	await _key("pause")
+	await _wait(0.2)
+	_check(get_tree().paused, "Escape pauses during the draft")
+	await _key("card_1")
+	_check(battle.run.boons.is_empty(), "keys don't pick a boon while paused")
+	await _key("pause")
+	await _wait(0.2)
+	_check(not get_tree().paused and battle.state == "draft", "Escape resumes the draft")
+	Engine.time_scale = 2.0
+	await _key("card_2")
+	await _wait(0.3)
+	_check(battle.run.boons == [offers[1]], "key 2 takes the second boon at 2x speed (%s of %s)" % [battle.run.boons, offers])
+	_check(battle.state != "draft", "the game goes on after the pick (state=%s)" % battle.state)
+	Engine.time_scale = 1.0
+	# 4. Dugout, then inning 2 to boss 2 -> pick with a click.
+	reached = await _play_until(["dugout"], 100)
+	var dug: Node = null
+	for i in 60:
+		await _wait(0.1)
+		dug = hud.get("_dugout")
+		if dug and is_instance_valid(dug):
+			break
+	var next := _find_button(dug, "NEXT INNING  ▶") if dug else null
+	_check(next != null, "the dugout follows the draft")
+	if next == null:
+		return
+	await _wait(0.8)
+	await _click(_button_center(next))
+	for i in 100:
+		await _wait(0.1)
+		if battle.state in ["setup", "wave"]:
+			break
+	if battle.state == "setup":
+		await _key("start_wave")
+	Engine.time_scale = 4.0
+	reached = await _play_until(["draft"])
+	Engine.time_scale = 1.0
+	_check(reached and battle.run.inning == 2, "boss 2 opens the second draft (inning %d, state %s)" % [battle.run.inning, battle.state])
+	draft = null
+	for i in 40:
+		await _wait(0.1)
+		draft = hud.get("_draft")
+		if draft and is_instance_valid(draft):
+			break
+	await _wait(1.2)
+	offers = battle.draft_offers.duplicate()
+	_check(offers.size() == 3 and not (battle.run.boons[0] in offers), "the second draft doesn't offer the boon already taken")
+	var cards: Array = draft.get("cards") if draft and is_instance_valid(draft) else []
+	if cards.size() == 3:
+		await _click(_button_center(cards[2]))
+		await _wait(0.3)
+	_check(battle.run.boons.size() == 2 and battle.run.boons[1] == offers[2], "clicking the third card takes it (%s)" % [battle.run.boons])
+	await _wait(1.0)
+	hud.refresh()
+	var chips: Node = hud.get("_boon_box")
+	_check(chips != null and chips.get_child_count() == 2 and (chips as Control).is_visible_in_tree(), "the HUD shows both boons as chips")
+	_check(hud.get("_draft") == null or not is_instance_valid(hud.get("_draft")), "the overlay is gone after the pick")
+	Engine.time_scale = 1.0
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")

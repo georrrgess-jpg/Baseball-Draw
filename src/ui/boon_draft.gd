@@ -96,9 +96,12 @@ func _make_card(id: String, index: int) -> Button:
 	card.add_theme_stylebox_override("pressed", _card_style(col, 0.3, glow + 14.0, 4))
 	card.add_theme_stylebox_override("focus", _card_style(col, 0.12, glow + 8.0, 4, UITheme.GOLD))
 	card.pressed.connect(func() -> void: pick(id))
+	# Hover grows the card; focus (controller / arrow keys only, so a stray Space press can't pick
+	# a card) does the same with a gold border.
 	card.mouse_entered.connect(func() -> void:
 		Audio.ui("card_hover", -6.0)
-		card.grab_focus())
+		_hover(card, true))
+	card.mouse_exited.connect(func() -> void: _hover(card, card.has_focus()))
 	card.focus_entered.connect(func() -> void: _hover(card, true))
 	card.focus_exited.connect(func() -> void: _hover(card, false))
 
@@ -212,16 +215,22 @@ func _reveal(title: Control, sub: Control, foot: Control) -> void:
 		if rarity != "common":
 			ct.chain().tween_property(c, "modulate", Color(1.5, 1.45, 1.6), 0.08)
 			ct.chain().tween_property(c, "modulate", Color.WHITE, 0.3)
-	var ft := create_tween().set_ignore_time_scale(true)
-	ft.tween_interval(0.3 + 0.16 * cards.size())
-	ft.tween_callback(func() -> void:
-		if not _picked and cards.size() > 1 and get_viewport().gui_get_focus_owner() == null:
-			cards[1].grab_focus())
+	# Nothing has focus until the player navigates (see _unhandled_input).
+	var owner := get_viewport().gui_get_focus_owner()
+	if owner:
+		owner.release_focus()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _picked or not event.is_pressed() or event.is_echo():
 		return
+	# Controller / arrow keys: the first move focuses a card (then left/right and accept work).
+	for a in ["ui_left", "ui_right", "ui_up", "ui_down"]:
+		if event.is_action_pressed(a) and not cards.is_empty() and get_viewport().gui_get_focus_owner() == null:
+			get_viewport().set_input_as_handled()
+			var idx := 0 if a == "ui_right" else (cards.size() - 1 if a == "ui_left" else 1)
+			cards[clampi(idx, 0, cards.size() - 1)].grab_focus()
+			return
 	for i in cards.size():
 		if event.is_action_pressed("card_%d" % (i + 1)):
 			get_viewport().set_input_as_handled()

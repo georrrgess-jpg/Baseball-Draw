@@ -2216,7 +2216,8 @@ func test_update9_modes() -> void:
 			var want: String = bosses[i] if w == br.waves_per_inning - 1 else ""
 			if str(wv.boss) != want:
 				plan_ok = false
-		var hp := WaveGenerator.hp_multiplier(br) * WaveGenerator.boss_hp_tuning(br, bosses[i])
+		# The boss's real health: data health x its share of the inning scaling x the mode's boss tuning (Enemy.setup).
+		var hp := float(DB.enemy(bosses[i]).hp) * (1.0 + (WaveGenerator.hp_multiplier(br) - 1.0) * 0.45) * WaveGenerator.boss_hp_tuning(br, bosses[i])
 		rising = rising and hp > last_hp
 		last_hp = hp
 	ok(plan_ok, "Boss Rush: only each inning's last wave has the boss")
@@ -2370,8 +2371,13 @@ func _test_update9_draft() -> void:
 	battle.select_card(0)
 	ok(battle.targeting_index == -1, "no cards can be aimed during the draft")
 	# The overlay appears after the boss finale.
-	await _wait(Battle.DRAFT_DELAY + 0.6)
-	var ov: Node = battle.hud.get("_draft")
+	var ov: Node = null
+	for i in 60:   # the cards come up DRAFT_DELAY game seconds later
+		await _wait(0.1)
+		ov = battle.hud.get("_draft")
+		if ov and is_instance_valid(ov):
+			break
+	await _wait(0.4)
 	ok(ov != null and is_instance_valid(ov) and (ov.get("cards") as Array).size() == 3, "the draft overlay shows three cards")
 	var pick: String = battle.draft_offers[1]
 	var stat0 := Profile.stat("boons_drafted")
@@ -2398,3 +2404,27 @@ func _test_update9_draft() -> void:
 	run.boons.clear()
 	battle._refresh_team_stats()
 	battle.cards.energy = e0
+	# Early call: NEXT WAVE NOW during a break pays +1 energy on top of the wave's +1 (and bonus coins).
+	battle.practice = false
+	battle.cards.infinite_energy = false
+	battle.set_state("break")
+	battle.break_timer = 9.0
+	battle.cards.energy = 2.0
+	var calls0 := int(run.stats.get("early_calls", 0))
+	var coins0 := run.coins
+	battle.begin_wave()
+	ok(battle.state == "wave" and is_equal_approx(battle.cards.energy, 3.0 + Battle.EARLY_CALL_ENERGY),
+		"an early call gives +%d energy on top of the wave's +1 (%.1f from 2.0)" % [int(Battle.EARLY_CALL_ENERGY), battle.cards.energy])
+	ok(int(run.stats.get("early_calls", 0)) == calls0 + 1 and run.coins >= coins0 + 9, "an early call is counted and pays bonus coins")
+	battle.spawn_queue.clear()
+	battle.set_state("break")
+	battle.break_timer = 0.2
+	battle.cards.energy = 2.0
+	battle.begin_wave()
+	ok(is_equal_approx(battle.cards.energy, 3.0) and int(run.stats.get("early_calls", 0)) == calls0 + 1, "a wave started when the break is over is not an early call")
+	battle.spawn_queue.clear()
+	for gid in battle.stadium.gates.keys():
+		battle.stadium.set_gate_open(gid, false)
+	battle.practice = true
+	battle.cards.infinite_energy = true
+	battle.set_state(st0)

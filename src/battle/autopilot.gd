@@ -139,7 +139,7 @@ func _on_draft(offers: Array) -> void:
 		print("%s boon %s (offered %s)" % [log_prefix, pick, offers]))
 
 
-## The boon the autopilot takes: --boon=<id> if offered, else the best "ai_value" with +-25 %
+## The boon the autopilot takes: --boon=<id> if offered, else the best "ai_value" with +-35 %
 ## noise (value), a random one (random) or the first one (first).
 func choose_boon(offers: Array) -> String:
 	if boon_force != "" and boon_force in offers:
@@ -153,7 +153,7 @@ func choose_boon(offers: Array) -> String:
 	var best_v := -1.0
 	for id in offers:
 		var b := Boons.get_boon(str(id))
-		var v := float(b.get("ai_value", 5.0)) * _boon_rng.randf_range(0.75, 1.25)
+		var v := float(b.get("ai_value", 5.0)) * _boon_rng.randf_range(0.65, 1.35)
 		if v > best_v:
 			best_v = v
 			best = str(id)

@@ -207,6 +207,11 @@ func _ready() -> void:
 			sc.battle = self
 			sc.scenario = a.split("=")[1]
 			add_child(sc)
+		elif a.begins_with("--boons=") and not practice:   # screenshots/tests: start with these boons
+			for bid in a.split("=")[1].split(","):
+				Boons.apply(self, bid)
+		elif a.begins_with("--best-endless="):   # screenshots: an Endless record to show in the HUD
+			Profile.data.records["best_endless_inning"] = int(a.split("=")[1])
 	if auto_test:
 		var ap := Autopilot.new()
 		ap.battle = self
@@ -228,9 +233,32 @@ func _intro() -> void:
 			cam.cinematic = false
 		var resume: Variant = Session.run_config.get("resume")
 		var args := OS.get_cmdline_user_args()
+		var draft_arg := ""
+		for a in args:
+			if a.begins_with("--open-draft"):
+				draft_arg = a
 		if "--open-dugout" in args:
 			run.coins = 260
 			_open_dugout()
+		elif draft_arg != "":
+			# Screenshot/debug shortcut: the Dugout Draft right away (--open-draft=a,b,c fixes the offer).
+			open_draft(_enter_setup)
+			if draft_arg.contains("="):
+				var ids := Array(draft_arg.split("=")[1].split(",")).filter(func(id: String) -> bool: return not Boons.get_boon(id).is_empty())
+				if ids.size() == 3 and state == "draft":
+					draft_offers = ids
+					draft_opened.emit(ids)
+					get_tree().create_timer(DRAFT_DELAY, false).timeout.connect(func() -> void:
+						if state == "draft" and hud.has_method("show_draft"):
+							hud.show_draft(ids))
+		elif "--open-break" in args:
+			# Screenshot/debug shortcut: the break after wave 1 (NEXT WAVE NOW).
+			_enter_setup()
+			run.wave = maxi(run.wave, 1)
+			set_state("break")
+			break_timer = break_time()
+			field_mat.set_shader_parameter("zones_alpha", 0.6)
+			notify("WAVE CLEAR!", Color(0.5, 1.0, 0.6))
 		elif "--show-results" in args:
 			# Screenshot/debug shortcut: a plausible finished three-inning game.
 			run.outs_total = 64
@@ -638,7 +666,8 @@ func choose_boon(id: String) -> bool:
 	Audio.play("crowd_cheer", -6.0)
 	vfx.shockwave(Field.HOME, 3.2, col, 0.5)
 	boon_taken.emit(id)
-	Audio.play_music("battle_theme")
+	if run.wave < run.waves_per_inning:   # more waves this inning (else the dugout keeps its theme)
+		Audio.play_music("battle_theme")
 	var then := _after_draft
 	_after_draft = Callable()
 	if then.is_valid():
