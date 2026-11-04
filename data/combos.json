@@ -42,6 +42,25 @@
     {"cards": ["momentum", "grand_slam_barrage"], "text": "A barrage full of outs refills your energy."},
     {"cards": ["relief_pitcher", "frost_field"], "text": "The reliever's throws crit chilled runners too."},
     {"cards": ["instant_replay", "thunderbolt"], "text": "Replay a Thunderbolt for a second, stronger chain of lightning."},
-    {"cards": ["instant_replay", "heat_wave"], "text": "Replay a Heat Wave: a second line of fire, one level hotter."}
+    {"cards": ["instant_replay", "heat_wave"], "text": "Replay a Heat Wave: a second line of fire, one level hotter."},
+    {"cards": ["scouting_report", "splitter"], "text": "A swarm is all one type: scout it and every Splitter ball hits 30% harder."},
+    {"cards": ["scouting_report", "called_shot"], "text": "Scout the boss, then Called Shot lands 30% harder."},
+    {"cards": ["sprinkler_system", "wall_of_dirt"], "text": "Runners held at the wall stand in the wet grass and keep slipping."},
+    {"cards": ["sprinkler_system", "bunt_trap"], "text": "Trap the soaked stretch: slowed runners take longer to cross it."},
+    {"cards": ["sweet_spot", "twin_play"], "text": "Every throw crits, and every crit bounces to a second runner."},
+    {"cards": ["sweet_spot", "rally_cry"], "text": "Faster throws that all crit: the biggest burst of team damage."},
+    {"cards": ["rally_monkey", "perfect_game"], "text": "After a run scores, the clutch energy pays for Perfect Game."},
+    {"cards": ["second_wind", "heat_wave"], "text": "Recharge Ace's Heat Wave and set the path on fire again."},
+    {"cards": ["second_wind", "worm_burner"], "text": "Recharge Sid's Worm Burner for a second grounder."},
+    {"cards": ["money_ball", "grand_slam_barrage"], "text": "A barrage full of outs pays double coins."},
+    {"cards": ["scoop_and_tag", "magnet_glove"], "text": "Pull the runners together, then Moose sweeps them all."},
+    {"cards": ["scoop_and_tag", "line_drive"], "text": "Line Drive softens the pack; the sweep tags out the hurt runners."},
+    {"cards": ["signal_caller", "called_shot"], "text": "A signalled runner takes +40% from Called Shot."},
+    {"cards": ["signal_caller", "hidden_ball_trick"], "text": "If the tricked runner is signalled, its out refunds energy too."},
+    {"cards": ["signal_caller", "momentum"], "text": "Outs on signalled runners pay energy twice."},
+    {"cards": ["worm_burner", "wall_of_dirt"], "text": "Runners piled up at the wall all get mowed down by the grounder."},
+    {"cards": ["fireworks_night", "magnet_glove"], "text": "A pulled-together crowd takes every rocket splash and the whole finale."},
+    {"cards": ["ground_rule_double", "grand_salami"], "text": "Two giant fireballs roll down the path."},
+    {"cards": ["ground_rule_double", "seventh_inning_stretch"], "text": "A doubled Stretch gives 10 energy and 4 cards for 1 energy."}
   ]
 }

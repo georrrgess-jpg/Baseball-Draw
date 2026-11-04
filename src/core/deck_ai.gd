@@ -168,24 +168,41 @@ static func _values(cid: String, level: int) -> Dictionary:
 		t = 1.0 + extra
 	if prm.has("charges"):   # a trap: each charge catches one runner
 		t = maxf(1.0, p.call("charges"))
+	if tgt == "enemy" and prm.has("vulnerability") and not prm.has("damage"):
+		t = 3.0   # a mark that spreads over the target's whole type (Scouting Report)
 	var dmg: float = p.call("damage") * t * hits
+	if prm.has("rockets"):   # a volley of single-target hits with splash, then a finale (Fireworks Night)
+		dmg = p.call("damage") * p.call("rockets") * 1.3 + p.call("finale_damage") * 3.0
 	dmg += p.call("burn_dps") * maxf(p.call("burn_time"), 1.0) * t
-	dmg += p.call("percent") * 10.0 * t + p.call("threshold") * 400.0
+	dmg += p.call("percent") * 10.0 * t + p.call("threshold") * 400.0 + p.call("outs") * 350.0
 	if prm.has("per_defender"):
 		dmg *= 1.0 + p.call("per_defender") * 3.0
 	var dur: float = p.call("duration")
 	var ctl := 0.0
 	ctl += _frac(p.call("slow")) * maxf(dur, maxf(p.call("slow_time"), 3.0)) * t
-	ctl += (p.call("stun") * 1.5 + p.call("freeze") * 1.5 + p.call("root") * 1.2 + p.call("confuse")) * t * hits
+	var sure_stun: float = 0.0 if prm.has("slip_chance") else p.call("stun")
+	ctl += (sure_stun * 1.5 + p.call("freeze") * 1.5 + p.call("root") * 1.2 + p.call("confuse")) * t * hits
 	ctl += (p.call("pushback") + p.call("pull") + p.call("knockback")) / 3.0 * t + p.call("pull_time") * t
-	ctl += _frac(p.call("vulnerability")) * maxf(dur, 3.0) * t * 2.0
+	# A chance to slip each second (Sprinkler System): about chance x duration stuns per runner.
+	ctl += _frac(p.call("slip_chance")) * dur * p.call("stun") * 1.5 * t
+	# Marks: slow + mark cards count them as control, pure damage amplifiers (role buff) as buffs.
+	var mark: float = _frac(p.call("vulnerability")) * maxf(dur, 3.0) * t * 2.0
+	if str(c.get("role", "")) == "buff":
+		mark *= 0.5
+	else:
+		ctl += mark
 	var def: float = p.call("hp") / 60.0 + p.call("shields") * 10.0 + p.call("home_bonus") * 3.0 + p.call("tag_time") * 0.8
 	if str(c.get("category", "")) == "defense" and dur > 0.0 and not prm.has("slow"):
 		def += dur * 0.8
 	var reach: float = 6.0 if tgt == "none" else 1.0 + p.call("radius") * 0.4
 	var bonus: float = _frac(p.call("damage_bonus")) + _frac(p.call("speed_bonus")) + _frac(p.call("range_bonus")) + p.call("chain_damage") * 0.5
 	var buff: float = bonus * maxf(dur, 1.0) * reach + _frac(p.call("crit_bonus")) * maxf(dur, 1.0) * t
-	var eco: float = p.call("energy") + p.call("draw") * 1.5
+	if str(c.get("role", "")) == "buff":
+		buff += mark
+	# Economy: energy and cards; a clutch bonus counts a third (it needs a run against you);
+	# in-game coins and cast-twice charges (Ground Rule Double: about 3 energy of value per echo).
+	var eco: float = p.call("energy") + p.call("draw") * 1.5 + maxf(0.0, p.call("clutch_energy") - p.call("energy")) * 0.33
+	eco += p.call("coin_bonus") * dur * 0.15 + p.call("casts") * 3.0
 	var boss: float = p.call("boss_freeze") * 2.0 + p.call("boss_stun") * 2.0 + p.call("boss_percent") + p.call("percent") * 0.6
 	return {"damage": dmg, "control": ctl, "defense": def, "buff": buff, "economy": eco, "boss": boss, "targets": t}
 
