@@ -914,3 +914,29 @@ Economy model (`tools/balance/economy.py`, 200 players, 30 h):
 ![Season Pass](screenshots/u9/e2_season.jpg)
 
 ### Verification
+* **Script check:** 95 scripts, 0 failed.
+* **System suite:** 2,917 checks, 0 failed (2,068 at the foundation commit).
+* **Full UI flow test** on the final merge, fresh profile: 369 checks, 0 failed. The stream sections passed too:
+  Dugout Draft 23/0, Team/Shop/Season/Packs 71/0, hub/Play/Results 41/0.
+* **Card clicks with new-card decks:** the hand hit map has 0 of 175 dead points in both decks. All 12 of 12
+  fast clicks registered, with none dropped.
+  * One logged target click didn't cast. The note now says why: the aimed runner was put out before the click
+    landed. That is a test artifact, not a click problem.
+* **Simulator on the final code** (autopilot, starter deck, 9 games each, about ±15 points):
+
+  | Mode | Difficulty | Wins | Runs allowed per game | Median game time |
+  |---|---|---|---|---|
+  | Standard Siege | Standard | 6/9 (67 %) | 1.22 | 18.6 min |
+  | Boss Rush | Standard | 6/9 (67 %) | 2.11 | 4.8 min |
+  | Quick Defense | Standard | 9/9 | 0.11 | 5.7 min |
+
+  Quick Defense on Standard also won 9 of 9 on the foundation commit with the same seeds, so Update 9 didn't
+  make it easier. It stays the gentle three-inning mode.
+* **Windows build:** CI run 41902203216 passed the automated tests, the Linux smoke test and the Windows smoke
+  test (`BaseballDraw.exe` plays a short autopilot game, then saves and reloads).
+* **Known limits:**
+  * Endless still gets hard within 1–2 innings once the ramp catches up; the gentler ramp only moves where that
+    happens.
+  * The Long Toss and Fresh Arms boons are never picked by the value-based autopilot. Their effects are covered
+    by system tests.
+  * Sprinkler System and Worm Burner read only moderately well from the far camera.
