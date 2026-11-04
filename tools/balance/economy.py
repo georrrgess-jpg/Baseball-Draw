@@ -4,27 +4,39 @@
   tools/balance/economy.py                     # 20 hours, default mix, 200 simulated players
   tools/balance/economy.py --policy bundles    # a player who buys 10-pack bundles whenever possible
   tools/balance/economy.py --hours 30 --players 500 --json out.json
+  tools/balance/economy.py --u8                # the Update 8 economy (no Update 9 systems), same cards
 
 What it reads (so a data change is reflected without editing this file):
-  data/packs.json (prices, odds, slots), data/cards.json (rarities), data/defenders.json (XP curve, level road,
-  unlock levels, signature cards), data/modes.json + data/difficulties.json (reward multipliers),
-  data/ranks.json (RP thresholds), data/gear.json (gear prices), data/achievements.json (stars),
-  data/account_levels.json (account level road), data/missions.json (mission rewards, starter chain),
-  data/daily.json (Daily Challenge bonus),
+  data/packs.json (prices, odds, slots, pity, overflow coins), data/cards.json (rarities), data/defenders.json
+  (XP curve, level road, unlock levels and coin prices, signature cards), data/modes.json + data/difficulties.json
+  (reward multipliers), data/ranks.json (RP thresholds, promotion rewards), data/gear.json (gear prices),
+  data/achievements.json (stars), data/account_levels.json (account level road), data/missions.json (mission
+  rewards, starter chain), data/daily.json (Daily Challenge bonus), data/season.json (Season Pass XP and tiers),
+  data/login_rewards.json (login calendar), data/shop.json (Daily Shop),
   src/autoload/db.gd (COPIES_TO_UPGRADE, COINS_TO_UPGRADE), src/autoload/profile.gd (starter cards, starting
-  coins, account XP curve, level-up coins, bundle size/discount).
-What it mirrors by hand (keep in sync): the formulas in src/core/rewards.gd (coins, XP, defender XP, packs, RP),
-Profile.roll_pack (60 % preference for unowned cards, commons give 2 copies) and RunState.round_price.
+  coins, account XP curve, level-up coins, bundle size/discount, streak bonus), src/core/rewards.gd (constants).
+What it mirrors by hand (keep in sync): the formulas in src/core/rewards.gd (coins, XP, defender XP, packs, RP,
+streak and first-win bonuses, Endless milestones), Profile.roll_pack and _open_one (60 % preference for unowned
+cards, commons give 2 copies, pity, overflow), Shop.generate (deals), Season (tiers, bonus packs) and
+RunState.round_price.
 
 Per-game inputs (in-run coins, outs, game length) come from the balance simulator's averages for a fresh
-profile; see GAME_TABLE. The player model: a game mix (Quick / Standard / Endless) at one difficulty with a fixed
-win rate, a Promotion Challenge as soon as one is available, every pack opened at once, cards upgraded as soon as
-copies and coins allow (cheapest first), spare coins spent on gear and Rookie Packs per --policy.
+profile; see GAME_TABLE. The player model: a game mix (Quick / Standard / Endless / Boss Rush) at one difficulty
+with a fixed win rate, a Promotion Challenge as soon as one is available, every pack opened at once, cards
+upgraded as soon as copies and coins allow (cheapest first), spare coins spent on gear and Rookie Packs per
+--policy.
 
 Update 6 adds days (--day-minutes of play each, default 60): the third game of each day is the Daily Challenge
 (Quick Defense rewards plus the daily bonus), the three daily missions are claimed after the 2nd, 4th and 6th game
 of the day, the weekly mission after every 7th day, the "Learn the ropes" starter chain step by step, and the
 first-win bonus. --no-missions leaves the missions and the starter chain out.
+
+Update 9 adds (off with --u8): the twelve new cards (taken from cards.json once they are there, else from
+U9_CARDS), the Season Pass (tiers claimed as soon as reached; a season is 14 days of play), the login calendar
+(one claim a day), the Daily Shop (the gift every day; the card deals, the Pro Pack deal and the star deal bought
+when the coins or stars are there above the reserve), free agents (signed once the coins are there, saving up for
+them instead of buying packs while one is available), pack pity, coins for extra copies of max-level cards, the
+win streak and first-win-of-the-day coin bonuses, promotion rewards, Endless milestones and Boss Rush.
 """
 import argparse
 import json
@@ -36,10 +48,21 @@ import statistics
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 RARITIES = ["common", "uncommon", "rare", "epic", "legendary"]
+# The Update 9 cards (docs/plans/UPDATE_9_PLAN.md) until they are in data/cards.json.
+U9_CARDS = {"scouting_report": "common", "sprinkler_system": "common", "sweet_spot": "uncommon", "rally_monkey": "uncommon",
+	"second_wind": "rare", "money_ball": "rare", "scoop_and_tag": "rare", "signal_caller": "rare", "hidden_ball_trick": "epic",
+	"worm_burner": "epic", "fireworks_night": "legendary", "ground_rule_double": "legendary"}
+U9_SIGNATURES = {"moose": "scoop_and_tag", "rosa": "signal_caller", "sid": "worm_burner"}
+U8_LEGENDARY = {"rookie": 0.1, "pro": 0.4, "champion": 1.2}
 
 
 def jload(name):
 	return json.load(open(os.path.join(ROOT, "data", name)))
+
+
+def jload_opt(name, default):
+	path = os.path.join(ROOT, "data", name)
+	return json.load(open(path)) if os.path.exists(path) else default
 
 
 def gd_const(path, name):
@@ -50,9 +73,12 @@ def gd_const(path, name):
 	return json.loads(src)
 
 
-def gd_number(path, pattern, cast=float):
+def gd_number(path, pattern, cast=float, default=None):
 	text = open(os.path.join(ROOT, path)).read()
-	return cast(re.search(pattern, text).group(1))
+	m = re.search(pattern, text)
+	if m is None:
+		return default
+	return cast(m.group(1))
 
 
 def round_price(v):
@@ -67,6 +93,7 @@ def round_price(v):
 # Per (mode, difficulty, won): in-run coins earned, outs, innings cleared and minutes of play
 # (game time from the simulator plus ~40 s per inning of setup/dugout and ~1 min of results/packs).
 # Measured with tools/balance/simulate.py on the Update 5 balance (fresh profile, starter deck).
+# Boss Rush (Update 9): three innings that each end with a boss, about 7 minutes (plan estimate until measured).
 GAME_TABLE = {
 	("quick", True): {"coins": 750, "outs": 165, "cleared": 3, "minutes": 6.0},
 	("quick", False): {"coins": 650, "outs": 140, "cleared": 2, "minutes": 5.0},
@@ -75,20 +102,43 @@ GAME_TABLE = {
 	("endless", False): {"coins": 3000, "outs": 650, "cleared": 9, "minutes": 18.0},
 	("ranked", True): {"coins": 750, "outs": 165, "cleared": 3, "minutes": 6.0},
 	("ranked", False): {"coins": 650, "outs": 140, "cleared": 2, "minutes": 5.0},
+	("boss_rush", True): {"coins": 900, "outs": 180, "cleared": 3, "minutes": 7.5},
+	("boss_rush", False): {"coins": 700, "outs": 140, "cleared": 2, "minutes": 6.0},
 }
 
 
 class Data:
-	def __init__(self):
+	def __init__(self, args):
 		self.cards = jload("cards.json")["cards"]
 		self.card_rarity = {c["id"]: c["rarity"] for c in self.cards}
+		if not args.no_u9_cards:
+			for cid, r in U9_CARDS.items():
+				self.card_rarity.setdefault(cid, r)
+		else:
+			for cid in U9_CARDS:
+				self.card_rarity.pop(cid, None)
+		self.card_ids = list(self.card_rarity)
 		self.max_level = jload("cards.json").get("max_level", 5)
-		self.packs = {p["id"]: p for p in jload("packs.json")["packs"]}
+		pk = jload("packs.json")
+		self.packs = {p["id"]: p for p in pk["packs"]}
+		if args.u8:   # the Update 8 Legendary odds (Update 9 lowered them when pity arrived)
+			for t, w in U8_LEGENDARY.items():
+				self.packs[t]["weights"]["legendary"] = w
+		self.pity = pk.get("pity", {})
+		self.overflow = pk.get("overflow_coins", {})
 		d = jload("defenders.json")
 		self.xp_curve = d["xp_curve"]
 		self.level_rewards = d["level_rewards"]
 		self.def_max = d.get("max_level", 10)
 		self.defenders = d["defenders"]
+		self.signature = {}
+		for x in self.defenders:
+			sig = x.get("signature", "")
+			if x["id"] in U9_SIGNATURES and U9_SIGNATURES[x["id"]] in self.card_rarity:
+				sig = U9_SIGNATURES[x["id"]]
+			self.signature[x["id"]] = sig
+		if args.u8:   # Update 8: nine defenders, none for sale
+			self.defenders = [x for x in self.defenders if x["id"] not in U9_SIGNATURES]
 		self.modes = {m["id"]: m for m in jload("modes.json")["modes"]}
 		self.diffs = {x["id"]: x for x in jload("difficulties.json")["difficulties"]}
 		self.divisions = jload("ranks.json")["divisions"]
@@ -98,19 +148,29 @@ class Data:
 		self.coins_up = gd_const("src/autoload/db.gd", "COINS_TO_UPGRADE")
 		prof = "src/autoload/profile.gd"
 		self.starter = gd_const(prof, "STARTER_CARDS")
+		self.starter_deck = gd_const(prof, "STARTER_DECK")
 		self.start_coins = gd_number(prof, r'"coins":\s*(\d+)', int)
 		self.bundle_size = gd_number(prof, r"BUNDLE_SIZE\s*:=\s*(\d+)", int)
 		self.bundle_discount = gd_number(prof, r"BUNDLE_DISCOUNT\s*:=\s*([\d.]+)")
+		self.streak_step = gd_number(prof, r"STREAK_STEP\s*:=\s*([\d.]+)", float, 0.1)
+		self.streak_max = gd_number(prof, r"STREAK_MAX\s*:=\s*([\d.]+)", float, 0.5)
 		m = re.search(r"func xp_to_next.*?return\s+(\d+)\s*\+\s*(\d+)\s*\*", open(os.path.join(ROOT, prof)).read(), re.S)
 		self.xp_base, self.xp_step = int(m.group(1)), int(m.group(2))
 		self.road = jload("account_levels.json")
 		self.missions = jload("missions.json")
 		self.daily = jload("daily.json").get("rewards", {})
-		self.first_win_coins = int(re.search(r"const FIRST_WIN_COINS\s*:=\s*(\d+)", open(os.path.join(ROOT, "src/core/rewards.gd")).read()).group(1))
-		self.first_win_pack = re.search(r'const FIRST_WIN_PACK\s*:=\s*"(\w+)"', open(os.path.join(ROOT, "src/core/rewards.gd")).read()).group(1)
-		rw = open(os.path.join(ROOT, "src/core/rewards.gd")).read()
+		rw_path = "src/core/rewards.gd"
+		rw = open(os.path.join(ROOT, rw_path)).read()
+		self.first_win_coins = int(re.search(r"const FIRST_WIN_COINS\s*:=\s*(\d+)", rw).group(1))
+		self.first_win_pack = re.search(r'const FIRST_WIN_PACK\s*:=\s*"(\w+)"', rw).group(1)
 		self.rw = {k: float(re.search(r"const %s\s*:=\s*([\d.]+)" % k, rw).group(1))
 			for k in ["COIN_SHARE", "COINS_PER_INNING", "WIN_COINS", "DEFENDER_XP_SHARE", "DEFENDER_XP_PER_OUT"]}
+		self.first_win_today_mult = gd_number(rw_path, r"FIRST_WIN_TODAY_MULT\s*:=\s*([\d.]+)", float, 2.0)
+		self.milestone_every = gd_number(rw_path, r"MILESTONE_EVERY\s*:=\s*(\d+)", int, 5)
+		self.milestone_coins = gd_number(rw_path, r"MILESTONE_COINS\s*:=\s*(\d+)", int, 150)
+		self.season = jload_opt("season.json", {})
+		self.login = jload_opt("login_rewards.json", {}).get("days", [])
+		self.shop = jload_opt("shop.json", {})
 
 	def level_reward(self, level):
 		"""LevelRoad.reward: default, the last matching 'every', then a per-level override."""
@@ -127,15 +187,27 @@ class Data:
 	def bundle_price(self, pack):
 		return round_price(self.packs[pack]["price_coins"] * self.bundle_size * self.bundle_discount)
 
+	def pity_counts(self, pack, rarity):
+		"""Profile.pity_counts: 'counts' is a list (every rarity) or {rarity: [pack types]}."""
+		c = self.pity.get("counts", ["rookie", "pro", "champion"])
+		if isinstance(c, dict):
+			c = c.get(rarity, [])
+		return pack in c
+
+	def copies_to_max(self, rarity, level, copies):
+		return max(0, sum(self.copies[rarity][level:self.max_level]) - copies)
+
 
 class Player:
 	def __init__(self, data, rng, args):
 		self.d, self.rng, self.a = data, rng, args
+		self.u9 = not args.u8 and not args.u5
 		self.coins = data.start_coins
 		self.stars = 0
 		self.level, self.xp = 1, 0
 		self.rp, self.division = 0, 0
-		self.cards = {c["id"]: {"owned": c["id"] in data.starter, "level": 1, "copies": 0} for c in data.cards}
+		self.cards = {c: {"owned": c in data.starter, "level": 1, "copies": 0} for c in data.card_ids}
+		self.deck = list(data.starter_deck)
 		self.team = [x["id"] for x in data.defenders if x.get("unlock", {}).get("type") == "default"][:6]
 		self.def_level = {x["id"]: 1 for x in data.defenders}
 		self.def_xp = {x["id"]: 0 for x in data.defenders}
@@ -145,16 +217,43 @@ class Player:
 		self.gear_owned = 0
 		self.stats = {"outs": 0, "wins_quick": 0, "wins_standard": 0, "games": 0, "packs_earned": 0, "packs_bought": 0,
 			"coins_earned": 0, "upgrades": 0, "coins_upgrades": 0, "coins_packs": 0, "coins_gear": 0, "best_endless": 0,
-			"missions": 0, "dailies": 0, "daily_wins": 0, "wins": 0, "packs_opened": 0, "coins_missions": 0}
+			"missions": 0, "dailies": 0, "daily_wins": 0, "wins": 0, "packs_opened": 0, "coins_missions": 0,
+			"coins_shop": 0, "coins_agents": 0, "shop_deals": 0, "agents": 0, "overflow": 0, "season_xp": 0,
+			"season_tier": 0, "best_streak": 0, "wins_boss_rush": 0, "legendary_pity": 0}
+		self.coin_src = {}
 		self.first_win = False
 		self.day = -1
 		self.games_today = 0
+		self.won_today = False
+		self.streak = 0
 		self.starter_step = 0
 		self.starter_mark = None
 		self.achieved = set()
 		self.pack_src = {}
 		self.timeline = []
 		self.by_game = []   # (packs earned, coins earned incl. bonuses, minutes) after each game
+		self.pity = {"epic": 0, "legendary": 0}
+		self.season_xp = 0
+		self.season_claimed = 0      # tiers claimed this season
+		self.season_bonus = 0
+		self.season_results = []     # tier reached at the end of every finished season
+		self.season_t30_day = []     # day of the season tier 30 was reached (1-14)
+		self.login_day = 0
+		self.shop_today = []
+		self.shop_pack = self.shop_stars = False
+
+	def earn(self, n, src):
+		self.coins += n
+		self.stats["coins_earned"] += n
+		self.coin_src[src] = self.coin_src.get(src, 0) + n
+
+	def grant_bundle(self, r, src):
+		self.earn(int(r.get("coins", 0)), src)
+		self.stars += int(r.get("stars", 0))
+		for p in r.get("packs", []):
+			self.add_pack(p, src)
+		if r.get("pack"):
+			self.add_pack(r["pack"], src)
 
 	# ---- rewards.gd mirror
 	def play(self, mode, won):
@@ -166,8 +265,20 @@ class Player:
 		R = self.d.rw
 		coins = int(round((g["coins"] * R["COIN_SHARE"] + cleared * R["COINS_PER_INNING"] + (R["WIN_COINS"] if won else 0)) * mult))
 		xp = max(15, int(round((g["outs"] * 2.0 + cleared * 30 + (220 if won else 0)) * mult)))
-		self.coins += coins
-		self.stats["coins_earned"] += coins
+		self.earn(coins, "games")
+		if self.u9:
+			# Win streak (Endless never counts) and the day's first win.
+			if mode != "endless":
+				if won:
+					bonus = min(self.d.streak_max, self.d.streak_step * self.streak)
+					self.earn(int(round(coins * bonus)), "win streak")
+					self.streak += 1
+					self.stats["best_streak"] = max(self.stats["best_streak"], self.streak)
+				else:
+					self.streak = 0
+			if won and not self.won_today:
+				self.won_today = True
+				self.earn(int(round(coins * (self.d.first_win_today_mult - 1.0))), "first win of the day")
 		self.add_xp(xp)
 		outs_each = g["outs"] / 6.0
 		for i, did in enumerate(self.team):
@@ -177,13 +288,25 @@ class Player:
 			if won:
 				self.add_pack("champion" if self.a.difficulty in ("veteran", "legend") else "pro")
 		elif mode == "endless":
-			for _ in range(min(cleared // 5, 2)):
-				self.add_pack("rookie")
+			if self.u9:   # milestones every 5 innings cleared
+				ms = 0
+				for k in range(self.d.milestone_every, cleared + 1, self.d.milestone_every):
+					ms += self.d.milestone_coins * (k // self.d.milestone_every)
+					self.add_pack("rookie", "endless milestones")
+					if k in (10, 20):
+						self.add_pack("pro", "endless milestones")
+				self.earn(ms, "endless milestones")
+			else:
+				for _ in range(min(cleared // 5, 2)):
+					self.add_pack("rookie")
 			self.stats["best_endless"] = max(self.stats["best_endless"], cleared + 1)
 		elif mode == "ranked" and won:
 			self.add_pack("pro")
+		elif mode == "boss_rush" and won:
+			self.add_pack("pro", "boss rush")
+			self.stats["wins_boss_rush"] += 1
 		if daily:   # DailyChallenge.record_result: first game of the day and first win of the day
-			self.coins += int(self.d.daily.get("first_coins", 0))
+			self.earn(int(self.d.daily.get("first_coins", 0)), "daily challenge")
 			self.add_pack(self.d.daily.get("first_pack", "rookie"), "daily challenge")
 			self.stats["dailies"] += 1
 			if won:
@@ -193,14 +316,19 @@ class Player:
 			self.stats["wins"] += 1
 			if not self.first_win and not self.a.u5:
 				self.first_win = True
-				self.coins += self.d.first_win_coins
+				self.earn(self.d.first_win_coins, "first win ever")
 				self.add_pack(self.d.first_win_pack, "first win bonus")
 		rpm = df.get("rp", 1.0)
 		rp = {"standard": (60 if won else cleared * 4), "quick": (22 if won else cleared * 3),
-			"endless": cleared * 5, "ranked": (30 if won else 0), "daily": 0}[mode]
+			"endless": cleared * 5, "ranked": (30 if won else 0), "daily": 0, "boss_rush": (30 if won else cleared * 4)}[mode]
 		self.rp += int(round(rp * rpm))
-		if mode == "ranked" and won:
-			self.division = min(self.division + 1, len(self.d.divisions) - 1)
+		if mode == "ranked" and won and self.division < len(self.d.divisions) - 1:
+			self.division += 1
+			if self.u9:
+				self.grant_bundle(self.d.divisions[self.division].get("reward", {}), "promotions")
+		if self.u9:
+			sx = self.d.season.get("xp", {})
+			self.add_season_xp(int(sx.get("game", 100)) + (int(sx.get("win", 60)) if won else 0) + (int(sx.get("daily", 100)) if daily else 0))
 		self.stats["outs"] += g["outs"]
 		self.stats["games"] += 1
 		if won and mode in ("quick", "standard"):
@@ -214,19 +342,24 @@ class Player:
 			self.xp -= self.d.xp_to_next(self.level)
 			self.level += 1
 			if self.a.u5:   # Update 5: 100 coins and a Rookie Pack, a Pro Pack every 5th level
-				self.coins += 100
+				self.earn(100, "account levels")
 				self.add_pack("pro" if self.level % 5 == 0 else "rookie", "account level")
 			else:
 				coins, packs = self.d.level_reward(self.level)
-				self.coins += coins
+				self.earn(coins, "account levels")
 				for pk in packs:
 					self.add_pack(pk, "account level")
 			for x in self.d.defenders:
 				u = x.get("unlock", {})
 				if u.get("type") == "level" and self.level >= int(u["value"]) and x["id"] not in self.unlocked:
-					self.unlocked.add(x["id"])
-					self.packs.append(("signature", x["signature"]))
-					self.pack_src["signature"] = self.pack_src.get("signature", 0) + 1
+					self.unlock(x["id"])
+
+	def unlock(self, did):
+		self.unlocked.add(did)
+		sig = self.d.signature.get(did, "")
+		if sig in self.cards and not self.cards[sig]["owned"]:
+			self.packs.append(("signature", sig))
+			self.pack_src["signature"] = self.pack_src.get("signature", 0) + 1
 
 	def add_def_xp(self, did, n):
 		self.def_xp[did] += n
@@ -235,7 +368,7 @@ class Player:
 			self.def_xp[did] -= self.d.xp_curve[lv] - self.d.xp_curve[lv - 1]
 			lv += 1
 			r = self.d.level_rewards.get(str(lv), {})
-			self.coins += int(r.get("coins", 0))
+			self.earn(int(r.get("coins", 0)), "defender levels")
 			if "pack" in r:
 				self.add_pack(r["pack"], "defender level")
 		self.def_level[did] = lv
@@ -245,7 +378,32 @@ class Player:
 		self.stats["packs_earned"] += 1
 		self.pack_src[src] = self.pack_src.get(src, 0) + 1
 
-	# ---- Profile.roll_pack mirror
+	# ---- Season Pass (season.gd mirror): tiers claimed as soon as reached
+	def add_season_xp(self, n):
+		self.season_xp += n
+		self.stats["season_xp"] += n
+		per = 500
+		tiers = self.d.season.get("tiers", {})
+		reached = min(30, self.season_xp // per)
+		while self.season_claimed < reached:
+			self.season_claimed += 1
+			r = dict(tiers.get(str(self.season_claimed), {}))
+			r.pop("uniform", None)
+			self.grant_bundle(r, "season pass")
+			if self.season_claimed == 30:
+				self.season_t30_day.append(self.day % 14 + 1)
+		bonus = self.d.season.get("bonus", {})
+		earned = max(0, self.season_xp - 30 * per) // int(bonus.get("xp", 1000))
+		while self.season_bonus < earned:
+			self.season_bonus += 1
+			self.grant_bundle({"packs": bonus.get("packs", ["pro"])}, "season pass")
+		self.stats["season_tier"] = reached
+
+	def end_season(self):
+		self.season_results.append(min(30, self.season_xp // 500))
+		self.season_xp = self.season_claimed = self.season_bonus = 0
+
+	# ---- Profile._open_one mirror (pity, overflow)
 	def open_packs(self):
 		while self.packs:
 			t, fixed = self.packs.pop()
@@ -253,10 +411,19 @@ class Player:
 				self.grant(fixed)
 				continue
 			p = self.d.packs[t]
+			counts = {r: self.u9 and self.d.pity_counts(t, r) for r in ("epic", "legendary")}
+			forced = None
+			if counts["legendary"] and self.pity["legendary"] >= int(self.d.pity.get("legendary", 30)) - 1:
+				forced = "legendary"
+			elif counts["epic"] and self.pity["epic"] >= int(self.d.pity.get("epic", 10)) - 1:
+				forced = "epic"
 			out = []
-			for slot in p["slots"]:
+			slots = p["slots"]
+			for si, slot in enumerate(slots):
 				r = self.roll_rarity(p["weights"])
 				mn = slot.get("min", "common")
+				if forced and si == len(slots) - 1 and RARITIES.index(forced) > RARITIES.index(mn):
+					mn = forced
 				if RARITIES.index(r) < RARITIES.index(mn):
 					r = mn
 				pool = [c for c, rr in self.d.card_rarity.items() if rr == r and c not in out] or \
@@ -264,6 +431,14 @@ class Player:
 				unowned = [c for c in pool if not self.cards[c]["owned"]]
 				choice = unowned if unowned and self.rng.random() < 0.6 else pool
 				out.append(self.rng.choice(choice))
+			if forced == "legendary":
+				self.stats["legendary_pity"] += 1
+			best = max(RARITIES.index(self.d.card_rarity[c]) for c in out)
+			for r, idx in (("epic", 3), ("legendary", 4)):
+				if best >= idx:
+					self.pity[r] = 0
+				elif counts[r]:
+					self.pity[r] += 1
 			for c in out:
 				self.grant(c)
 
@@ -276,12 +451,18 @@ class Player:
 				return r
 		return "common"
 
-	def grant(self, cid):
+	def grant(self, cid, copies=None):
 		c = self.cards[cid]
+		rarity = self.d.card_rarity[cid]
+		n = copies if copies is not None else (2 if rarity == "common" else 1)
 		if not c["owned"]:
 			c["owned"] = True
+		elif self.u9 and c["level"] >= self.d.max_level:
+			coins = n * int(self.d.overflow.get(rarity, 0))
+			self.earn(coins, "extra copies")
+			self.stats["overflow"] += coins
 		else:
-			c["copies"] += 2 if self.d.card_rarity[cid] == "common" else 1
+			c["copies"] += n
 
 	# ---- spending
 	def upgrade_cost(self, cid):
@@ -290,7 +471,7 @@ class Player:
 			return None
 		return self.d.copies[self.d.card_rarity[cid]][lv], self.d.coins_up[lv]
 
-	def spend(self):
+	def upgrade_all(self):
 		changed = True
 		while changed:
 			changed = False
@@ -308,6 +489,34 @@ class Player:
 				self.stats["upgrades"] += 1
 				self.stats["coins_upgrades"] += co
 				changed = True
+
+	def next_agent(self):
+		"""The next free agent worth signing: not unlocked, and its account level more than --agent-lead levels away."""
+		if not self.u9 or self.a.no_agents:
+			return None
+		for x in self.d.defenders:
+			u = x.get("unlock", {})
+			if int(u.get("coins", 0)) > 0 and x["id"] not in self.unlocked and self.level < int(u.get("value", 0)) - self.a.agent_lead:
+				return x
+		return None
+
+	def spend(self):
+		self.upgrade_all()
+		# Free agents: signed once the coins are there (a saver also keeps the price aside instead of buying packs).
+		agent = self.next_agent()
+		if agent and self.coins >= int(agent["unlock"]["coins"]) + self.a.reserve:
+			price = int(agent["unlock"]["coins"])
+			self.coins -= price
+			self.stats["coins_agents"] += price
+			self.stats["agents"] += 1
+			self.unlock(agent["id"])
+			agent = self.next_agent()
+		if not self.a.save_for_agents:
+			agent = None
+		# Daily Shop deals.
+		if self.u9:
+			self.shop_deals()
+			self.upgrade_all()
 		# Gear: one piece at a time once the player has a cushion.
 		if self.gear_owned < len(self.d.gear_prices) and self.coins >= self.d.gear_prices[self.gear_owned] + self.a.reserve:
 			self.coins -= self.d.gear_prices[self.gear_owned]
@@ -317,13 +526,14 @@ class Player:
 			return
 		rookie = self.d.packs["rookie"]["price_coins"]
 		bundle = self.d.bundle_price("rookie")
+		keep = self.a.reserve + (int(agent["unlock"]["coins"]) if agent else 0)
 		if self.a.policy == "bundles":
-			while self.coins >= bundle:
+			while self.coins >= bundle + (keep - self.a.reserve):
 				self.buy("rookie", self.d.bundle_size, bundle)
 		elif self.a.policy == "balanced":
-			if self.coins >= bundle + self.a.reserve:
+			if self.coins >= bundle + keep:
 				self.buy("rookie", self.d.bundle_size, bundle)
-			while self.coins >= rookie + self.a.reserve:
+			while self.coins >= rookie + keep:
 				self.buy("rookie", 1, rookie)
 		# Stars: Champion Packs.
 		cs = self.d.packs["champion"]["price_stars"]
@@ -342,14 +552,84 @@ class Player:
 	def collection_done(self):
 		return all(c["owned"] for c in self.cards.values())
 
+	# ---- Daily Shop (shop.gd mirror)
+	def new_shop_day(self):
+		"""Shop.generate: the gift (claimed at once) and two card deals weighted toward the deck."""
+		sh = self.d.shop
+		gifts = sh.get("gifts", [])
+		x = self.rng.random() * sum(float(g.get("weight", 1)) for g in gifts)
+		for g in gifts:
+			x -= float(g.get("weight", 1))
+			if x <= 0:
+				self.grant_bundle({k: v for k, v in g.items() if k != "weight"}, "shop gift")
+				break
+		pool = [cid for cid, c in self.cards.items() if c["owned"] and
+			self.d.copies_to_max(self.d.card_rarity[cid], c["level"], c["copies"]) > 0]
+		weights = [float(sh.get("deck_weight", 4)) if cid in self.deck else 1.0 for cid in pool]
+		deals = []
+		for _ in range(int(sh.get("card_deals", 2))):
+			if not pool:
+				break
+			y = self.rng.random() * sum(weights)
+			pick = 0
+			for j, w in enumerate(weights):
+				y -= w
+				if y <= 0:
+					pick = j
+					break
+			cid = pool.pop(pick)
+			weights.pop(pick)
+			c = self.cards[cid]
+			r = self.d.card_rarity[cid]
+			nxt = self.d.copies[r][min(c["level"], self.d.max_level - 1)] - c["copies"]
+			cap = int(sh.get("max_copies", {}).get(r, 2))
+			n = max(1, min(max(1, nxt), max(1, min(cap, self.d.copies_to_max(r, c["level"], c["copies"])))))
+			deals.append((cid, n, n * int(sh.get("card_prices", {}).get(r, 100))))
+		self.shop_today = deals
+		self.shop_pack = True
+		self.shop_stars = True
+
+	def shop_deals(self):
+		sh = self.d.shop
+		keep = self.a.reserve
+		for deal in list(self.shop_today):
+			cid, n, price = deal
+			c = self.cards[cid]
+			if self.d.copies_to_max(self.d.card_rarity[cid], c["level"], c["copies"]) <= 0:
+				continue
+			if self.coins >= price + keep:
+				self.coins -= price
+				self.stats["coins_shop"] += price
+				self.stats["shop_deals"] += 1
+				self.grant(cid, n)
+				self.shop_today.remove(deal)
+		pd = sh.get("pack_deal", {})
+		price = round_price(self.d.packs[pd.get("pack", "pro")]["price_coins"] * (1 - float(pd.get("discount", 0.25))))
+		if self.shop_pack and self.coins >= price + keep:
+			self.shop_pack = False
+			self.coins -= price
+			self.stats["coins_shop"] += price
+			self.stats["shop_deals"] += 1
+			self.packs.append((pd.get("pack", "pro"), None))
+			self.pack_src["shop deals"] = self.pack_src.get("shop deals", 0) + 1
+		sd = sh.get("star_deal", {})
+		if self.shop_stars and self.stars >= int(sd.get("price_stars", 40)):
+			self.shop_stars = False
+			self.stars -= int(sd.get("price_stars", 40))
+			self.stats["shop_deals"] += 1
+			self.packs.append((sd.get("pack", "champion"), None))
+			self.pack_src["shop deals"] = self.pack_src.get("shop deals", 0) + 1
+
 	# ---- missions.gd mirror (Update 6)
 	def grant_reward(self, r, src):
-		self.coins += int(r.get("coins", 0))
+		self.earn(int(r.get("coins", 0)), "missions")
 		self.stats["coins_missions"] += int(r.get("coins", 0))
 		self.stars += int(r.get("stars", 0))
 		if r.get("pack"):
 			self.add_pack(r["pack"], src)
 		self.stats["missions"] += 1
+		if self.u9:
+			self.add_season_xp(int(self.d.season.get("xp", {}).get("mission", 80)))
 
 	def missions_after_game(self, mode, won):
 		rw = self.d.missions["rewards"]
@@ -374,9 +654,17 @@ class Player:
 
 	def new_day(self):
 		self.games_today = 0
+		self.won_today = False
 		self.day += 1
 		if self.day > 0 and self.day % 7 == 0 and not self.a.no_missions:
 			self.grant_reward(self.d.missions["rewards"]["weekly"], "missions")
+		if self.u9:
+			if self.day > 0 and self.day % 14 == 0:
+				self.end_season()
+			if self.d.login:   # the login calendar: one claim a day
+				self.grant_bundle(self.d.login[self.login_day % len(self.d.login)], "login calendar")
+				self.login_day += 1
+			self.new_shop_day()
 
 	def check_achievements(self, mode, won):
 		s = self.stats
@@ -390,7 +678,9 @@ class Player:
 			"missions_completed": s["missions"], "dailies_finished": s["dailies"], "daily_streak": self.day + 1 if s["dailies"] else 0,
 			"daily_wins": s["daily_wins"], "account_level": self.level, "bosses_defeated": s["wins_quick"] + 3 * s["wins_standard"],
 			"mastery_stars": s["games"] // 3, "cards_mastered": 1 if s["games"] > 60 else 0, "caught_stealing": s["games"] // 4,
-			"new_cards_owned": 0}
+			"new_cards_owned": 0, "wins_boss_rush": s["wins_boss_rush"], "boons_drafted": s["games"] // 2,
+			"best_win_streak": s["best_streak"], "shop_purchases": s["shop_deals"], "free_agents_signed": s["agents"],
+			"season_best_tier": max([s["season_tier"]] + self.season_results), "login_streak": self.day + 1 if self.u9 else 0}
 		for a in self.d.achievements:
 			if a["id"] not in self.achieved and stat.get(a["stat"], 0) >= a["goal"]:
 				self.achieved.add(a["id"])
@@ -405,13 +695,17 @@ class Player:
 			maxed[r] += c["level"] >= self.d.max_level
 		return {"hours": self.minutes / 60.0, "owned": owned, "maxed": maxed, "level": self.level, "coins": self.coins,
 			"division": self.division, "def_avg": statistics.mean(self.def_level[d] for d in self.team),
-			"card_levels": sum(c["level"] - 1 for c in self.cards.values()), **{k: v for k, v in self.stats.items()}}
+			"card_levels": sum(c["level"] - 1 for c in self.cards.values()), "defenders": len(self.unlocked),
+			"upgrade_coins_left": sum(sum(self.d.coins_up[c["level"]:self.d.max_level]) for c in self.cards.values() if c["owned"]),
+			**{k: v for k, v in self.stats.items()}}
 
 
 def run_player(data, args, seed):
 	rng = random.Random(seed)
 	p = Player(data, rng, args)
 	mix = [("quick", args.quick), ("standard", args.standard), ("endless", args.endless)]
+	if p.u9:
+		mix.append(("boss_rush", args.boss_rush))
 	total = sum(w for _, w in mix)
 	next_mark = 0.0
 	while p.minutes < args.hours * 60:
@@ -438,7 +732,7 @@ def run_player(data, args, seed):
 		if not args.u5 and not args.no_missions:
 			p.missions_after_game(mode, won)
 		p.stats["packs_opened"] += len(p.packs)
-		p.by_game.append((p.stats["packs_earned"], p.coins + p.stats["coins_upgrades"] + p.stats["coins_packs"] + p.stats["coins_gear"], p.minutes))
+		p.by_game.append((p.stats["packs_earned"], p.stats["coins_earned"] + data.start_coins, p.minutes))
 		p.open_packs()
 		p.spend()
 		p.open_packs()
@@ -465,24 +759,41 @@ def main():
 	ap.add_argument("--hours", type=float, default=20)
 	ap.add_argument("--players", type=int, default=200)
 	ap.add_argument("--difficulty", default="standard")
-	ap.add_argument("--win", type=float, default=0.65, help="win rate in Quick and Standard games")
+	ap.add_argument("--win", type=float, default=0.65, help="win rate in Quick, Standard and Boss Rush games")
 	ap.add_argument("--ranked-win", type=float, default=0.6)
-	ap.add_argument("--quick", type=float, default=0.5, help="share of games that are Quick Defense")
-	ap.add_argument("--standard", type=float, default=0.35)
+	ap.add_argument("--quick", type=float, default=0.45, help="share of games that are Quick Defense")
+	ap.add_argument("--standard", type=float, default=0.3)
 	ap.add_argument("--endless", type=float, default=0.15)
+	ap.add_argument("--boss-rush", type=float, default=0.1, help="share of games that are Boss Rush (Update 9)")
 	ap.add_argument("--policy", default="balanced", choices=["balanced", "bundles", "none"],
 		help="spare coins: balanced = bundles/packs above a reserve, bundles = every bundle affordable, none = no packs")
 	ap.add_argument("--reserve", type=int, default=600, help="coins kept for upgrades before buying packs or gear")
 	ap.add_argument("--day-minutes", type=float, default=60, help="minutes of play per calendar day (daily missions, Daily Challenge)")
 	ap.add_argument("--no-missions", action="store_true", help="leave out missions and the starter chain")
+	ap.add_argument("--no-agents", action="store_true", help="never sign free agents (they still join at their account level)")
+	ap.add_argument("--agent-lead", type=int, default=0, help="sign a free agent only while its account level is more than this many levels away")
+	ap.add_argument("--save-for-agents", action="store_true", help="keep the next free agent's price aside instead of buying packs")
+	ap.add_argument("--pity", default="", help="override the pity rules as JSON (tuning)")
+	ap.add_argument("--legendary-weights", default="", help="override Legendary weights per pack type as JSON (tuning)")
 	ap.add_argument("--u5", action="store_true", help="the Update 5 economy: no daily games, missions, level road or first-win bonus")
+	ap.add_argument("--u8", action="store_true", help="the Update 8 economy: none of the Update 9 systems and the Update 8 Legendary odds, "
+		"with the Update 9 cards (add --no-u9-cards and --quick 0.5 --standard 0.35 for the Update 8 projection itself)")
+	ap.add_argument("--no-u9-cards", action="store_true", help="leave the twelve Update 9 cards out")
 	ap.add_argument("--json", default="")
 	args = ap.parse_args()
-	data = Data()
+	if args.u8:
+		args.boss_rush = 0.0
+	data = Data(args)
+	if args.pity:
+		data.pity = json.loads(args.pity)
+	if args.legendary_weights:
+		for t, w in json.loads(args.legendary_weights).items():
+			data.packs[t]["weights"]["legendary"] = w
 	players = [run_player(data, args, 1000 + i) for i in range(args.players)]
 	tls = [p.timeline for p in players]
 	H = int(args.hours)
-	counts = {r: sum(1 for c in data.cards if c["rarity"] == r) for r in RARITIES}
+	counts = {r: sum(1 for c in data.card_ids if data.card_rarity[c] == r) for r in RARITIES}
+	n_cards = len(data.card_ids)
 
 	def med(h, key, sub=None):
 		vals = []
@@ -491,9 +802,11 @@ def main():
 			vals.append(s[key][sub] if sub else s[key])
 		return statistics.median(vals)
 
-	print("# Economy projection: %d players, %g h, %s difficulty, win %.0f %%, mix quick/standard/endless %g/%g/%g, policy %s\n" % (
-		args.players, args.hours, args.difficulty, args.win * 100, args.quick, args.standard, args.endless, args.policy))
-	print("| Hour | Games | Account lvl | Division | Team avg lvl | Packs earned | Packs bought | Cards owned | Card upgrades | Coins earned | Coins on upgrades / packs / gear | Coins held |")
+	u9 = not args.u8 and not args.u5
+	print("# Economy projection: %d players, %g h, %s difficulty, win %.0f %%, mix quick/standard/endless/boss rush %g/%g/%g/%g, policy %s, %d cards%s\n" % (
+		args.players, args.hours, args.difficulty, args.win * 100, args.quick, args.standard, args.endless, args.boss_rush if u9 else 0,
+		args.policy, n_cards, "" if u9 else " (Update 8 economy)"))
+	print("| Hour | Games | Account lvl | Division | Team avg lvl | Packs earned | Packs bought | Cards owned | Card upgrades | Coins earned | Coins on upgrades / packs / gear / shop / agents | Coins held |")
 	print("|---|---|---|---|---|---|---|---|---|---|---|---|")
 	rows = []
 	for h in [1, 2, 3, 5, 8, 12, 16, 20, 25, 30]:
@@ -502,20 +815,25 @@ def main():
 		owned = sum(med(h, "owned", r) for r in RARITIES)
 		row = (h, med(h, "games"), med(h, "level"), data.divisions[int(med(h, "division"))]["name"], med(h, "def_avg"),
 			med(h, "packs_earned"), med(h, "packs_bought"), owned, med(h, "upgrades"), med(h, "coins_earned"),
-			"%d / %d / %d" % (med(h, "coins_upgrades"), med(h, "coins_packs"), med(h, "coins_gear")), med(h, "coins"))
+			"%d / %d / %d / %d / %d" % (med(h, "coins_upgrades"), med(h, "coins_packs"), med(h, "coins_gear"), med(h, "coins_shop"),
+				med(h, "coins_agents")), med(h, "coins"))
 		rows.append(row)
-		print("| %d | %d | %d | %s | %.1f | %d | %d | %d / %d | %d | %d | %s | %d |" % (row[:7] + (owned, len(data.cards)) + row[8:]))
+		print("| %d | %d | %d | %s | %.1f | %d | %d | %d / %d | %d | %d | %s | %d |" % (row[:7] + (owned, n_cards) + row[8:]))
 	print("\n| Milestone | Median hour |")
 	print("|---|---|")
 	ms = {}
 	for r in RARITIES:
 		ms["all %s owned (%d)" % (r, counts[r])] = first_hour(tls, lambda s, r=r: s["owned"][r] >= counts[r])
-	ms["whole collection owned (%d)" % len(data.cards)] = first_hour(tls, lambda s: sum(s["owned"].values()) >= len(data.cards))
+	ms["whole collection owned (%d)" % n_cards] = first_hour(tls, lambda s: sum(s["owned"].values()) >= n_cards)
+	ms["first epic owned"] = first_hour(tls, lambda s: s["owned"]["epic"] >= 1)
+	ms["first legendary owned"] = first_hour(tls, lambda s: s["owned"]["legendary"] >= 1)
 	for r in RARITIES:
 		ms["first %s card at max level" % r] = first_hour(tls, lambda s, r=r: s["maxed"][r] >= 1)
 	ms["all commons at max level"] = first_hour(tls, lambda s: s["maxed"]["common"] >= counts["common"])
 	ms["team average level 5"] = first_hour(tls, lambda s: s["def_avg"] >= 5)
 	ms["team average level 10"] = first_hour(tls, lambda s: s["def_avg"] >= 10)
+	all_defs = len(data.defenders)
+	ms["all %d defenders" % all_defs] = first_hour(tls, lambda s: s["defenders"] >= all_defs)
 	for i, dv in enumerate(data.divisions[1:], 1):
 		ms["%s division" % dv["name"]] = first_hour(tls, lambda s, i=i: s["division"] >= i)
 	for k, v in ms.items():
@@ -536,8 +854,31 @@ def main():
 		for k, v in p.pack_src.items():
 			src[k] = src.get(k, 0) + v
 	print("Packs per hour by source: " + ", ".join("%s %.1f" % (k, v / len(players) / hours) for k, v in sorted(src.items())))
-	print("Rookie bundle: %d coins = %.1f h of coin income; Pro bundle %d coins." % (data.bundle_price("rookie"),
-		data.bundle_price("rookie") / (statistics.mean(s["coins_earned"] for s in last) / hours), data.bundle_price("pro")))
+	csrc = {}
+	for p in players:
+		for k, v in p.coin_src.items():
+			csrc[k] = csrc.get(k, 0) + v
+	print("Game coins per hour (the Update 8 'coins per hour'): %d; every source except extra copies (which recycle pack spending): %d." % (
+		sum(p.coin_src.get("games", 0) for p in players) / len(players) / hours,
+		sum(sum(v for k, v in p.coin_src.items() if k != "extra copies") for p in players) / len(players) / hours))
+	print("Coins per hour by source: " + ", ".join("%s %d" % (k, v / len(players) / hours) for k, v in sorted(csrc.items(), key=lambda kv: -kv[1])))
+	print("Coins spent per hour: upgrades %d, packs %d, gear %d, shop deals %d, free agents %d." % tuple(
+		statistics.mean(s[k] for s in last) / hours for k in ("coins_upgrades", "coins_packs", "coins_gear", "coins_shop", "coins_agents")))
+	income = sum(sum(v for k, v in p.coin_src.items() if k != "extra copies") for p in players) / len(players) / hours
+	print("Rookie bundle: %d coins = %.2f h of coin income (without extra-copy coins); Pro bundle %d coins." % (data.bundle_price("rookie"),
+		data.bundle_price("rookie") / income, data.bundle_price("pro")))
+	print("Coin cost of the card upgrades still open at the end: median %d coins." % statistics.median(s["upgrade_coins_left"] for s in last))
+	if u9:
+		seasons = [r for p in players for r in p.season_results]
+		t30 = [d for p in players for d in p.season_t30_day]
+		days = args.day_minutes
+		if seasons:
+			print("Season Pass (%g min a day): median tier at the end of a season %d; tier 30 reached in %.0f %% of seasons, median on day %s of 14." % (
+				days, statistics.median(seasons), 100.0 * sum(1 for r in seasons if r >= 30) / len(seasons),
+				("%.0f" % statistics.median(t30)) if t30 else "-"))
+		print("Free agents signed: %.1f per player (%.0f %% sign at least one); legendaries from pity per player: %.1f." % (
+			statistics.mean(p.stats["agents"] for p in players), 100.0 * sum(1 for p in players if p.stats["agents"] > 0) / len(players),
+			statistics.mean(p.stats["legendary_pity"] for p in players)))
 	if args.json:
 		json.dump({"milestones": ms, "rows": rows}, open(args.json, "w"), indent=1, default=str)
 
