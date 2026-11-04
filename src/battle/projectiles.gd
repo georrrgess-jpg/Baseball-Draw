@@ -15,7 +15,8 @@ const TRAIL_LEN := {"comet": 18, "fire": 16, "spiral": 24, "wobble": 22, "hook":
 ## [system, chance per 30 fps frame, size, life] per thrower trait, so every defender's
 ## throw reads in their own accent colour and flavour.
 const STYLE_M := {"precision": 6.5, "cannon_arm": 4.8, "heavy_hitter": 4.6, "fastball": 4.6}
-const STYLE_W := {"precision": 0.85, "cannon_arm": 1.45, "heavy_hitter": 1.2, "quick_hands": 0.95}
+const STYLE_W := {"precision": 0.85, "cannon_arm": 1.45, "heavy_hitter": 1.2, "quick_hands": 0.95, "long_stretch": 1.25,
+	"skipper": 1.05}
 const STYLE_FX := {
 	"fastball": ["ember", 0.6, 1.0, 0.7],
 	"home_guard": ["glow", 0.35, 0.45, 0.45],
@@ -26,6 +27,9 @@ const STYLE_FX := {
 	"static_charge": ["spark", 0.8, 0.7, 0.35],
 	"pickoff_artist": ["streak", 0.5, 0.6, 0.5],
 	"gap_shooter": ["magic", 0.55, 0.7, 0.6],
+	"long_stretch": ["glow", 0.4, 0.6, 0.5],
+	"pitch_framing": ["magic", 0.4, 0.55, 0.5],
+	"skipper": ["streak", 0.55, 0.55, 0.45],
 }
 
 class Ball:
@@ -444,7 +448,9 @@ func _arrive(b: Ball) -> void:
 			battle.vfx.dust(Vector3(b.end.x, 0, b.end.z), 0.4)
 		return
 	p["_dir"] = b.end - b.start
-	_start_bounce(b, hit(t, p, b.end))
+	var landed := hit(t, p, b.end)
+	if not p.get("_skipped", false):
+		_start_bounce(b, landed)
 
 
 ## Resolves a thrown ball against a runner. Returns false on a miss.
@@ -493,11 +499,70 @@ func hit(t: Enemy, p: Dictionary, at: Vector3) -> bool:
 			rp.is_ricochet = true
 			rp.erase("splash")
 			launch(at, nxt, 26.0, rp)
+	if float(p.get("skip", 0.0)) > 0.0 and not p.get("is_skip", false):
+		_skip(t, p, at)
 	if int(p.get("chain", 0)) > 0:
 		var cp0 := p.duplicate()
 		cp0.chained = [t]
 		hit_chain_continue(t, cp0, at)
 	return true
+
+
+## Skipper (Sid): the ball drops past the runner it hit, skips off the dirt along its line of
+## flight and hits one runner behind (within skip_range m) for `skip` x the damage.
+func skip_target(t: Enemy, dir: Vector3, r: float) -> Enemy:
+	var d := Vector3(dir.x, 0.0, dir.z)
+	if d.length_squared() < 0.0001:
+		return null
+	d = d.normalized()
+	var best: Enemy = null
+	var best_d := r
+	for e in battle.enemies:
+		if e == t or not e.targetable() or e.id == "decoy":
+			continue
+		var to := e.global_position - t.global_position
+		to.y = 0.0
+		var dist := to.length()
+		if dist > best_d:
+			continue
+		# Behind the target along the throw (a wide cone; runners on top of it always count).
+		if dist > 0.4 and to.normalized().dot(d) < 0.25:
+			continue
+		best_d = dist
+		best = e
+	return best
+
+
+func _skip(t: Enemy, p: Dictionary, at: Vector3) -> void:
+	var dir: Vector3 = p.get("_dir", Vector3.ZERO)
+	var src = p.get("source")
+	if dir.length_squared() < 0.0001 and is_instance_valid(src) and src is Node3D:
+		dir = at - (src as Node3D).global_position
+	var nxt := skip_target(t, dir, float(p.get("skip_range", 4.0)))
+	var d := Vector3(dir.x, 0.0, dir.z).normalized() if Vector3(dir.x, 0.0, dir.z).length_squared() > 0.0001 else Vector3.FORWARD
+	var gap := 1.6
+	if nxt:
+		gap = clampf(Field.v2(nxt.global_position).distance_to(Field.v2(t.global_position)) * 0.45, 0.5, 1.8)
+	var bounce := Vector3(at.x, 0.12, at.z) + d * gap
+	var sp := p.duplicate()
+	sp.damage = float(p.damage) * float(p.skip)
+	sp.is_skip = true
+	sp.crit = false
+	sp.arc_mult = 0.35
+	for k in ["splash", "ricochet", "chain", "fx", "_skipped", "_dir"]:
+		sp.erase(k)
+	p["_skipped"] = true
+	var col: Color = p.get("color", Color.WHITE)
+	# First leg: down to the dirt; then a low hop into the runner behind (or off along the line).
+	launch_at(at, bounce, 24.0, {"source": src, "color": col, "arc_mult": 0.25}, func(pos: Vector3) -> void:
+		battle.vfx.dust(Vector3(pos.x, 0.0, pos.z), 0.7)
+		battle.vfx.impact_ring(Vector3(pos.x, 0.08, pos.z), Vector3.UP, col, 0.7, 0.3)
+		if is_instance_valid(nxt) and nxt.targetable():
+			launch(pos, nxt, 22.0, sp)
+		else:
+			launch_at(pos, pos + d * 2.5 + Vector3(0, -0.1, 0), 16.0, {"source": src, "color": col, "arc_mult": 0.4},
+				func(p2: Vector3) -> void: battle.vfx.dust(Vector3(p2.x, 0.0, p2.z), 0.4)))
+	Audio.play("ball_hit", -14.0, 0.15, 60)
 
 
 func hit_chain_continue(t: Enemy, p: Dictionary, at: Vector3) -> void:

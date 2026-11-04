@@ -16,7 +16,7 @@
   "catcher": {
    "name": "Catcher",
    "zone": "home",
-   "bonus_text": "Behind the Plate: +15% damage, aura +50% radius"
+   "bonus_text": "Behind the Plate: +15% damage (Rico: Home Guard radius +50%)"
   },
   "infielder": {
    "name": "Infielder",
@@ -294,13 +294,13 @@
    "role": "infielder",
    "number": 25,
    "accent": "#A3D139",
-   "signature": "infield_fly",
+   "signature": "scoop_and_tag",
    "title": "The Big Scoop",
-   "bio": "Moose Malone plays first base like a brick wall with a butterfly net.",
+   "bio": "Moose Malone is the biggest glove in the league. Anything that comes near first base gets scooped, slowed down and swarmed.",
    "stats": {
-    "damage": 30,
+    "damage": 33,
     "interval": 1.0,
-    "range": 8.5,
+    "range": 9.5,
     "throw_speed": 26.0,
     "accuracy": 80,
     "special_power": 1.0,
@@ -309,14 +309,14 @@
    "trait": {
     "id": "long_stretch",
     "name": "Long Stretch",
-    "text": "Runners within 5m of him take +25% damage from everyone and are 10% slower."
+    "text": "Runners within 5m of him (the green ring) are 10% slower and take +25% damage from everyone."
    },
    "targeting": "first",
    "unlock": {
     "type": "level",
-    "value": 13,
+    "value": 15,
     "stars": 0,
-    "coins": 6000
+    "coins": 5000
    }
   },
   {
@@ -325,12 +325,12 @@
    "role": "catcher",
    "number": 7,
    "accent": "#D63AF9",
-   "signature": "tag_at_the_plate",
+   "signature": "signal_caller",
    "title": "The Strategist",
-   "bio": "Rosa Vega calls every pitch, every throw and, somehow, every runner's next move.",
+   "bio": "Rosa Vega reads runners like a scouting report. She flips her mask up, calls the play, and the whole team throws at her mark.",
    "stats": {
-    "damage": 26,
-    "interval": 0.9,
+    "damage": 28,
+    "interval": 0.85,
     "range": 12.0,
     "throw_speed": 25.0,
     "accuracy": 85,
@@ -340,14 +340,14 @@
    "trait": {
     "id": "pitch_framing",
     "name": "Pitch Framing",
-    "text": "Every 6s marks the most dangerous runner: it takes +35% damage, and its out gives +0.5 energy."
+    "text": "Every 6s she frames the most dangerous runner for 6s: it takes +35% damage from everyone, and its out gives +0.5 energy."
    },
-   "targeting": "strongest",
+   "targeting": "first",
    "unlock": {
     "type": "level",
-    "value": 16,
+    "value": 20,
     "stars": 0,
-    "coins": 8000
+    "coins": 7500
    }
   },
   {
@@ -356,9 +356,9 @@
    "role": "pitcher",
    "number": 51,
    "accent": "#5C6BC0",
-   "signature": "line_drive",
+   "signature": "worm_burner",
    "title": "Submarine",
-   "bio": "Sid Okafor throws from below his knees. Runners never see the ball coming up.",
+   "bio": "Sid \"Submarine\" Okafor throws from below his knees. His low skippers bounce off the dirt and keep on going.",
    "stats": {
     "damage": 27,
     "interval": 1.0,
@@ -371,12 +371,12 @@
    "trait": {
     "id": "skipper",
     "name": "Skipper",
-    "text": "Throws skip and pierce: they also hit one runner behind the target for 60% damage."
+    "text": "Throws skip off the dirt: after a hit, the ball carries on into one runner up to 4m behind the target for 60% damage."
    },
    "targeting": "first",
    "unlock": {
     "type": "level",
-    "value": 19,
+    "value": 25,
     "stars": 0,
     "coins": 10000
    }

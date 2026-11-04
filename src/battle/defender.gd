@@ -5,6 +5,18 @@ extends Node3D
 ## traits, run upgrades, position zone, synergies and temporary buffs.
 
 const RELEASE := {"throw": 0.30, "pitch": 0.85, "catch": 0.25, "special": 0.70}
+## Update 9 traits. Long Stretch (Moose): runners near him take more damage and are slowed.
+const STRETCH_RADIUS := 5.0
+const STRETCH_DAMAGE := 0.25
+const STRETCH_SLOW := 0.10
+## Pitch Framing (Rosa): every FRAME_EVERY seconds the most dangerous runner is marked.
+const FRAME_EVERY := 6.0
+const FRAME_TIME := 6.0
+const FRAME_DAMAGE := 0.35
+const FRAME_ENERGY := 0.5
+## Skipper (Sid): a hit skips on to one runner behind the target.
+const SKIP_MULT := 0.6
+const SKIP_RANGE := 4.0
 
 var battle: Battle
 var id := ""
@@ -65,6 +77,11 @@ var damage_dealt := 0.0
 var _hit_k := 0.0
 var _hit_dir := Vector3.ZERO
 var _model_scale := Vector3.ONE
+# Update 9 traits (see _setup_trait).
+var _aura_ring: MeshInstance3D       # Moose: Long Stretch ground ring
+var _aura_t := 0.0
+var frame_cd := 1.0                  # Rosa: seconds to the next Pitch Framing mark
+var framed: Dictionary = {}          # Rosa: Enemy -> [time left, marker node]
 
 
 func setup(p_battle: Battle, defender_id: String, uniform_colors: Dictionary) -> void:
@@ -106,6 +123,7 @@ func setup(p_battle: Battle, defender_id: String, uniform_colors: Dictionary) ->
 	_captain_badge.position = Vector3(0, model.height + 0.45, 0)
 	_captain_badge.visible = false
 	add_child(_captain_badge)
+	_setup_trait()
 
 
 func set_captain(v: bool) -> void:
@@ -259,6 +277,9 @@ func tick(delta: float) -> void:
 	_tick_hit(delta)
 	if _shadow:
 		_shadow.global_position = Vector3(global_position.x, 0.03, global_position.z)
+	match trait_id:
+		"long_stretch": _tick_long_stretch(delta)
+		"pitch_framing": _tick_framing(delta)
 	if stun_t > 0.0:
 		stun_t -= delta
 		if stun_t <= 0.0:
@@ -409,6 +430,9 @@ func _build_payload(t: Enemy, fastball: bool) -> Dictionary:
 		"gap_shooter":
 			if t.id in ["sprinter", "jumper"] or t.is_airborne():
 				dmg *= 1.4
+		"skipper":
+			p.skip = SKIP_MULT
+			p.skip_range = SKIP_RANGE
 	if t.is_boss or t.id == "captain":
 		dmg *= 1.0 + s_boss_damage
 	var crit_chance := s_crit + dyn_crit + t.crit_bonus()
@@ -481,6 +505,174 @@ func _tick_dash(delta: float) -> void:
 		_face(post, delta * 2.0)
 		var step := to.normalized() * minf(speed * delta, to.length())
 		global_position += Vector3(step.x, 0, step.y)
+
+
+# ---------------------------------------------------------------- Update 9 traits
+
+static var _diamond_mesh: ArrayMesh
+
+
+func _setup_trait() -> void:
+	var acc := Color(data.accent)
+	match trait_id:
+		"long_stretch":
+			# A solid ring in Moose's colour shows where runners are slowed and take extra damage.
+			_aura_ring = FieldBuilder.make_ring(STRETCH_RADIUS, Color(acc.lightened(0.1), 0.8), 0.035, 0.07, 0.0)
+			(_aura_ring.material_override as ShaderMaterial).set_shader_parameter("pulse", 0.6)
+			_aura_ring.name = "LongStretchRing"
+			add_child(_aura_ring)
+		"pitch_framing":
+			frame_cd = 1.0
+
+
+## Long Stretch: runners within STRETCH_RADIUS are slowed and take more damage from every
+## source (Enemy aura vulnerability). Short refreshed statuses, so the effect ends as soon as
+## a runner leaves the ring.
+func _tick_long_stretch(delta: float) -> void:
+	var active := not is_stunned()
+	if _aura_ring:
+		_aura_ring.visible = active
+	if not active:
+		return
+	_aura_t -= delta
+	if _aura_t > 0.0:
+		return
+	_aura_t = 0.1
+	var me := Field.v2(global_position)
+	for e: Enemy in battle.enemies:
+		if not e.alive or e.id == "decoy":
+			continue
+		if Field.v2(e.global_position).distance_to(me) > STRETCH_RADIUS:
+			continue
+		e.apply_slow("long_stretch", STRETCH_SLOW, 0.2)
+		e.apply_aura_vuln(STRETCH_DAMAGE, 0.2)
+
+
+func runners_in_stretch() -> Array[Enemy]:
+	var out: Array[Enemy] = []
+	if trait_id != "long_stretch":
+		return out
+	for e: Enemy in battle.enemies:
+		if e.alive and Field.v2(e.global_position).distance_to(Field.v2(global_position)) <= STRETCH_RADIUS:
+			out.append(e)
+	return out
+
+
+## Pitch Framing: every FRAME_EVERY s Rosa marks the most dangerous runner on the field.
+func _tick_framing(delta: float) -> void:
+	for e in framed.keys():
+		var rec: Array = framed[e]
+		rec[0] = float(rec[0]) - delta
+		var mk: Node3D = rec[1]
+		if not is_instance_valid(e) or not (e as Enemy).alive or float(rec[0]) <= 0.0:
+			if is_instance_valid(mk):
+				mk.queue_free()
+			framed.erase(e)
+			continue
+		var en := e as Enemy
+		if is_instance_valid(mk):
+			mk.global_position = Vector3(en.global_position.x, 0.0, en.global_position.z)
+			var gem: Node3D = mk.get_child(1)
+			var k := float(rec[0])
+			gem.position.y = en.height + 0.55 + 0.08 * sin(k * 5.0)
+			gem.rotation.y += delta * 3.0
+			# Fade out over the last half second.
+			mk.visible = k > 0.5 or fmod(k, 0.2) > 0.1
+	if is_stunned():
+		return
+	frame_cd -= delta
+	if frame_cd > 0.0:
+		return
+	var e := most_dangerous_runner()
+	if e == null:
+		frame_cd = 0.0
+		return
+	frame_cd = FRAME_EVERY
+	frame_runner(e)
+
+
+## The runner closest to scoring; bosses and elites count as a few metres closer.
+func most_dangerous_runner() -> Enemy:
+	var best: Enemy = null
+	var best_score := -INF
+	for e: Enemy in battle.enemies:
+		if not e.targetable() or e.id == "decoy" or framed.has(e):
+			continue
+		var score := -e.remaining()
+		if e.is_boss:
+			score += 8.0
+		elif e.affix != "" or e.id in ["captain", "slugger"]:
+			score += 4.0
+		if score > best_score:
+			best_score = score
+			best = e
+	return best
+
+
+## The Signal Caller status: +FRAME_DAMAGE damage taken for FRAME_TIME s, and CardEffects pays
+## FRAME_ENERGY when the runner is put out while signalled (no second refund here).
+func frame_runner(e: Enemy) -> void:
+	e.apply_signal(FRAME_TIME, FRAME_DAMAGE, FRAME_ENERGY)
+	var acc := Color(data.accent)
+	var mk: Node3D
+	if framed.has(e) and is_instance_valid(framed[e][1]):
+		mk = framed[e][1]
+	else:
+		mk = _make_frame_marker(acc)
+	framed[e] = [FRAME_TIME, mk]
+	mk.global_position = Vector3(e.global_position.x, 0.0, e.global_position.z)
+	# The call: a quick bolt from Rosa's glove to the runner and a tag over its head.
+	var from := model.glove_position() if model else global_position + Vector3(0, 1.2, 0)
+	battle.vfx.bolt(from, e.center(), acc.lightened(0.25), 0.07, 0.3, 1, 0.08, 2)
+	battle.vfx.text_popup(e.center() + Vector3(0, 1.0, 0), "FRAMED!", acc.lightened(0.35), 0.85, 0.9)
+	battle.vfx.shockwave(Vector3(e.global_position.x, 0.06, e.global_position.z), 1.6, acc, 0.35)
+	Audio.play("glove_catch", -12.0, 0.08, 80)
+
+
+func _make_frame_marker(acc: Color) -> Node3D:
+	var mk := Node3D.new()
+	mk.name = "FrameMark"
+	mk.top_level = true
+	add_child(mk)
+	var ring := FieldBuilder.make_ring(0.95, Color(acc, 0.95), 0.16, 0.16, 4.0)
+	(ring.material_override as ShaderMaterial).set_shader_parameter("spin", 2.0)
+	ring.position.y = 0.06
+	mk.add_child(ring)
+	var gem := MeshInstance3D.new()
+	gem.mesh = _diamond()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = acc.lightened(0.15)
+	m.emission_enabled = true
+	m.emission = acc
+	m.emission_energy_multiplier = 2.0
+	m.no_depth_test = true
+	m.render_priority = 6
+	gem.material_override = m
+	gem.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	gem.scale = Vector3(0.32, 0.46, 0.32)
+	mk.add_child(gem)
+	return mk
+
+
+static func _diamond() -> ArrayMesh:
+	if _diamond_mesh:
+		return _diamond_mesh
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var top := Vector3(0, 1, 0)
+	var bot := Vector3(0, -1, 0)
+	var ring := [Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0), Vector3(0, 0, -1)]
+	for i in 4:
+		var a: Vector3 = ring[i]
+		var b: Vector3 = ring[(i + 1) % 4]
+		for tri in [[top, b, a], [bot, a, b]]:
+			var n: Vector3 = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalized()
+			for v in tri:
+				st.set_normal(n)
+				st.add_vertex(v)
+	_diamond_mesh = st.commit()
+	return _diamond_mesh
 
 
 # ---------------------------------------------------------------- signature specials

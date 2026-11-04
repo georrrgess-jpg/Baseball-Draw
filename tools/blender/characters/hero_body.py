@@ -299,7 +299,69 @@ class BodyMixin:
                          nseg=12, cap0=None, cap1=None, up=n, ovals=[0.8, 0.8, 0.55])
         self.add("Wrist." + side, v, fc, mat, rigid=rig_)
 
-    def build_mitt(self, side, catcher=False):
+    def build_first_base_mitt(self, side):
+        """First baseman's mitt (Moose): one long, flat, rounded scoop with no
+        finger stalls, a separate thumb lobe, an open web, a laced rim and a
+        rolled heel - much longer than a fielder's glove."""
+        k = self.s * self.p["hand_scale"] * 0.92
+        W, f, n, t = self.hand_frame(side)
+        g = self.m["Glove"]
+        lace = self.m["Undershirt"]
+        rig_ = "hand." + side
+
+        def H(a, b, c):
+            return W + f * a * k + n * b * k + t * c * k
+        R = np.stack([t, n, f], 1)
+
+        def blob(name, c, r, mat, e1=2.4, e2=2.2, nu=16, nv=10):
+            v, fc = superellipsoid(c, r, R, nu=nu, nv=nv, e1=e1, e2=e2)
+            fc = orient_outward(v, fc, c)
+            return self.add(name, v, fc, mat, rigid=rig_)
+        # main scoop (fingers side), long and slightly tapered toward the tip
+        blob("Mitt", H(0.150, -0.008, -0.018), (0.088 * k, 0.040 * k, 0.175 * k), g, e1=2.3,
+             e2=2.1, nu=20, nv=14)
+        # pocket face: a flatter pad on the palm side
+        blob("MittPocket", H(0.165, 0.020, 0.010), (0.080 * k, 0.016 * k, 0.140 * k), g,
+             e1=2.6, e2=2.3, nu=16, nv=10)
+        # thumb lobe along the thumb side
+        v, fc = self.finger([H(0.020, -0.004, 0.062), H(0.075, 0.004, 0.096),
+                             H(0.165, 0.016, 0.120), H(0.245, 0.030, 0.118)], 0.040 * k, 0.034 * k,
+                            nseg=10)
+        self.add("MittThumb", v, fc, g, rigid=rig_)
+        # open web between the thumb lobe and the scoop (bars of lacing)
+        for i in range(5):
+            a_ = 0.205 + i * 0.026
+            v, fc = geo.tube([H(a_, 0.024, 0.050), H(a_ + 0.004, 0.030, 0.080),
+                              H(a_ + 0.008, 0.028, 0.112)], 0.0085 * k, nseg=5, up=n)
+            self.add("MittWebLace", v, fc, lace, rigid=rig_)
+        for cc in (0.050, 0.112):
+            v, fc = geo.tube([H(0.195, 0.026, cc), H(0.270, 0.032, cc), H(0.318, 0.026, cc * 0.9)],
+                             0.0105 * k, nseg=5, up=n)
+            self.add("MittWebBar", v, fc, g, rigid=rig_)
+        # laced rim around the scoop
+        ring = []
+        for a in np.linspace(-0.55 * math.pi, 0.55 * math.pi, 21):
+            ring.append(H(0.150 + 0.178 * math.cos(a), 0.004, -0.018 - 0.090 * math.sin(a)))
+        v, fc = geo.tube(geo.smooth_polyline(ring, 34), 0.0085 * k, nseg=5, up=n)
+        self.add("MittLace", v, fc, lace, rigid=rig_)
+        for a in np.linspace(-0.45 * math.pi, 0.45 * math.pi, 7):
+            p0 = H(0.150 + 0.160 * math.cos(a), 0.034, -0.018 - 0.078 * math.sin(a))
+            p1 = H(0.150 + 0.186 * math.cos(a), -0.020, -0.018 - 0.098 * math.sin(a))
+            v, fc = geo.tube([p0, p1], 0.0068 * k, nseg=4, up=n)
+            self.add("MittTie", v, fc, lace, rigid=rig_)
+        # rolled heel + wrist strap with an accent patch
+        v, fc = geo.tube([H(0.010, 0.016, 0.080), H(-0.012, 0.022, 0.030),
+                          H(-0.012, 0.022, -0.040), H(0.012, 0.016, -0.090)],
+                         0.026 * k, nseg=10, cap0='pole', cap1='pole', up=f)
+        self.add("MittHeel", v, fc, g, rigid=rig_)
+        blob("MittStrap", H(0.020, -0.036, -0.006), (0.074 * k, 0.015 * k, 0.026 * k), g,
+             e1=3.0, e2=2.4, nu=14, nv=8)
+        blob("MittPatch", H(0.020, -0.050, -0.006), (0.034 * k, 0.004 * k, 0.014 * k), lace,
+             e1=3.0, e2=2.4, nu=12, nv=6)
+
+    def build_mitt(self, side, catcher=False, first_base=False):
+        if first_base:
+            return self.build_first_base_mitt(side)
         k = self.s * self.p["hand_scale"] * 0.92
         W, f, n, t = self.hand_frame(side)
         g = self.m["Glove"]
@@ -385,7 +447,7 @@ class BodyMixin:
     # =====================================================================
     # pants (mirrored cage + Catmull-Clark)
     # =====================================================================
-    def build_pants(self, hem_drop=0.165, knee_pants=False):
+    def build_pants(self, hem_drop=0.165, knee_pants=False, knee_drop=0.025):
         s = self.s
         p = self.p
         pw, pd = p["pelvis_w"], p["pelvis_d"]
@@ -433,7 +495,7 @@ class BodyMixin:
             (hz - 0.31 * s, 0.006, tr * 1.20, tr * 1.14, tr * 1.22),
         ]
         if knee_pants:
-            hem_drop = 0.025
+            hem_drop = knee_drop
         else:
             stations += [(ks + 0.02 * s, 0.002, kr * 1.56, kr * 1.62, kr * 1.48),
                          (ks - 0.105 * s, 0.002, cr * 1.62, cr * 1.58, cr * 1.72)]

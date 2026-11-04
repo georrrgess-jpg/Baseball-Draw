@@ -1205,6 +1205,100 @@
   "seconds": 52.1,
   "tris": 19950
  },
+ "moose": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.042m@0.67s",
+     "Rarm:0.158m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.064m@0.90s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.068m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 2.068,
+  "id": "moose",
+  "kind": "defender",
+  "seconds": 84.1,
+  "tris": 19948
+ },
  "nova": {
   "anims": {
    "catch": {
@@ -1484,6 +1578,100 @@
   "seconds": 69.2,
   "tris": 19650
  },
+ "rosa": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.044m@0.67s",
+     "Rarm:0.131m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": [
+     "Rarm:0.054m@0.90s"
+    ]
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": [
+     "Rarm:0.057m@0.47s"
+    ]
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.757,
+  "id": "rosa",
+  "kind": "defender",
+  "seconds": 133.0,
+  "tris": 19906
+ },
  "runner": {
   "anims": {
    "celebrate": {
@@ -1574,6 +1762,96 @@
   "kind": "enemy",
   "seconds": 56.4,
   "tris": 11318
+ },
+ "sid": {
+  "anims": {
+   "catch": {
+    "frames": 37,
+    "length": 0.6,
+    "loop": false,
+    "warn": []
+   },
+   "celebrate": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   },
+   "defeat": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "hit": {
+    "frames": 22,
+    "length": 0.35,
+    "loop": false,
+    "warn": []
+   },
+   "idle": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "pitch": {
+    "frames": 85,
+    "length": 1.4,
+    "loop": false,
+    "warn": [
+     "Lleg:0.048m@0.67s",
+     "Rarm:0.033m@1.08s"
+    ]
+   },
+   "ready": {
+    "frames": 97,
+    "length": 1.6,
+    "loop": true,
+    "warn": []
+   },
+   "run": {
+    "frames": 43,
+    "length": 0.7,
+    "loop": true,
+    "warn": []
+   },
+   "special": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": false,
+    "warn": []
+   },
+   "stunned": {
+    "frames": 73,
+    "length": 1.2,
+    "loop": true,
+    "warn": []
+   },
+   "throw": {
+    "frames": 46,
+    "length": 0.75,
+    "loop": false,
+    "warn": []
+   },
+   "victory": {
+    "frames": 121,
+    "length": 2.0,
+    "loop": true,
+    "warn": []
+   },
+   "walk": {
+    "frames": 61,
+    "length": 1.0,
+    "loop": true,
+    "warn": []
+   }
+  },
+  "height": 1.995,
+  "id": "sid",
+  "kind": "defender",
+  "seconds": 156.7,
+  "tris": 17982
  },
  "slugger": {
   "anims": {

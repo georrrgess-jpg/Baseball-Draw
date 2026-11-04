@@ -785,17 +785,26 @@ def _throw_core(c, P, t, keys_t, stride_y=0.30, stride_lift=0.16, jump=0.0):
     # torso yaw (- = closed/turned right), pitch forward
     # anticipation: sink + coil further back (shoulders past the hips) before the
     # drive; follow-through: shoulders rotate through and the chest bends over
+    # Submarine (Sid): the body folds forward and tips toward the throwing side,
+    # the arm swings low and releases below the waist (same key times / events).
+    sub = c.style.get("throw_style") == "submarine"
     yaw_h = K(t, [(T0, 0), (Tg, -32), (Tc, -60), (Tr, 6), (Tf, 36), (Ts, 12), (Te, 0)])
     yaw_c = K(t, [(T0, 0), (Tg, -30), (Tc, -56), (Tr, 20), (Tf, 44), (Ts, 10), (Te, 0)])
-    fwd = K(t, [(T0, 18), (Tg, 8), (Tc, -8), (Tr, 18), (Tf, 40), (Ts, 22), (Te, 18)])
-    hz = K(t, [(T0, -0.13), (Tg, -0.15), (Tc, -0.12), (Tr, -0.13 + jump), (Tf, -0.17), (Ts, -0.145),
-               (Te, -0.13)])
+    if sub:
+        fwd = K(t, [(T0, 18), (Tg, 14), (Tc, 26), (Tr, 44), (Tf, 50), (Ts, 26), (Te, 18)])
+        roll = K(t, [(T0, 0), (Tg, -6), (Tc, -18), (Tr, -26), (Tf, -10), (Ts, -3), (Te, 0)])
+    else:
+        fwd = K(t, [(T0, 18), (Tg, 8), (Tc, -8), (Tr, 18), (Tf, 40), (Ts, 22), (Te, 18)])
+        roll = K(t, [(T0, 0), (Tc, -6), (Tr, 4), (Te, 0)])
+    hz = K(t, [(T0, -0.13), (Tg, -0.15), (Tc, -0.12 - 0.06 * sub), (Tr, -0.13 + jump - 0.07 * sub),
+               (Tf, -0.17 - 0.04 * sub), (Ts, -0.145), (Te, -0.13)])
     hy = K(t, [(T0, 0.045), (Tg, 0.05), (Tc, 0.04), (Tr, -0.06), (Tf, -0.10), (Ts, -0.02),
                (Te, 0.045)])
     hx = K(t, [(T0, 0), (Tg, -0.03), (Tc, -0.05), (Tr, 0.02), (Tf, 0.04), (Ts, 0.0), (Te, 0)])
-    c.torso(P, hips=(hx, hy, hz), hips_rot=(fwd * 0.5, K(t, [(T0, 0), (Tc, -6), (Tr, 4), (Te, 0)]), yaw_h),
-            spine=(fwd * 0.25, 0, (yaw_c - yaw_h) * 0.4),
-            chest=(fwd * 0.3, K(t, [(T0, 0), (Tc, -8), (Tr, 6), (Te, 0)]), (yaw_c - yaw_h) * 0.6),
+    c.torso(P, hips=(hx, hy, hz), hips_rot=(fwd * 0.5, roll * 0.5 if sub else roll, yaw_h),
+            spine=(fwd * 0.25, roll * 0.25 if sub else 0, (yaw_c - yaw_h) * 0.4),
+            chest=(fwd * 0.3, roll if sub else K(t, [(T0, 0), (Tc, -8), (Tr, 6), (Te, 0)]),
+                   (yaw_c - yaw_h) * 0.6),
             neck=(-fwd * 0.45, 0, -yaw_c * 0.45),
             head=(-fwd * 0.4, 0, -yaw_c * 0.5))
     # feet: right foot (back) pivots, left foot strides forward
@@ -851,21 +860,39 @@ def _throw_core(c, P, t, keys_t, stride_y=0.30, stride_lift=0.16, jump=0.0):
                   (Tr, (0.0, -0.55, 0.85)), (Tf, (0.3, -0.5, -0.8)), (Te, READY_R["fingers"])])
     palm = KV(t, [(T0, READY_R["palm"]), (Tg, (0.9, -0.2, 0.0)), (Tc, (0.2, 0.7, -0.4)),
                   (Tr, (0.15, -0.85, -0.45)), (Tf, (0.5, 0.3, 0.6)), (Te, READY_R["palm"])])
+    if sub:
+        # chest space (the chest is folded ~45 deg forward): the hand swings down
+        # and back, releases low in front of the knees, then sweeps up across
+        tgt = KV(t, [(T0, S + c.v(*READY_R["pos"])), (Tg, S + c.v(0.13, -0.24, -0.12)),
+                     (Tc - (Tc - Tg) * 0.4, S + c.v(-0.10, 0.12, -0.36)),
+                     (Tc, S + c.v(-0.20, 0.30, -0.30)),
+                     (Tr, S + c.v(0.00, -0.30, -0.46)),
+                     (Tf, S + c.v(0.30, -0.32, -0.12)),
+                     (Ts, S + c.v(0.23, -0.28, -0.37)), (Te, S + c.v(*READY_R["pos"]))])
+        pole = KV(t, [(T0, (-0.9, 0.5, -0.6)), (Tg, (-1, 0.3, -0.6)), (Tc, (-1, 0.2, 0.3)),
+                      (Tr, (-1, 0.3, 0.2)), (Tf, (-0.6, 0.2, -0.8)), (Te, (-0.9, 0.5, -0.6))])
+        fing = KV(t, [(T0, READY_R["fingers"]), (Tg, (0.4, -0.3, 0.5)), (Tc, (-0.2, 0.5, -0.8)),
+                      (Tr, (0.0, -0.6, -0.8)), (Tf, (0.3, -0.7, 0.4)), (Te, READY_R["fingers"])])
+        palm = KV(t, [(T0, READY_R["palm"]), (Tg, (0.9, -0.2, 0.0)), (Tc, (0.3, 0.8, 0.4)),
+                      (Tr, (0.1, -0.8, 0.55)), (Tf, (0.6, 0.4, 0.5)), (Te, READY_R["palm"])])
     c.arm(P, "R", tgt, pole=pole, fingers=fing, palm=palm)
     # glove arm: points at the target while cocking, tucks at release
     SL = c.S["L"]
+    # a long first baseman's mitt tucks lower and out to the side, clear of the head
+    bm = 1.0 if (c.style.get("big_mitt") or sub) else 0.0
     keysL = [
         (T0, SL + c.v(*READY_GL["pos"])),
         (Tg, SL + c.v(-0.22, -0.26, -0.12)),
         (Tc, SL + c.v(0.06, -0.46, 0.02)),       # glove arm reaches at the target
-        (Tr, SL + c.v(0.04, -0.08, -0.22)),      # ... and pulls into the chest
-        (Tf, SL + c.v(0.12, 0.05, -0.30)),
+        (Tr, SL + c.v(0.04 + 0.12 * bm, -0.08 - 0.06 * bm, -0.22 - 0.10 * bm)),  # ... and pulls in
+        (Tf, SL + c.v(0.12 + 0.12 * bm, 0.05 - 0.04 * bm, -0.30 - 0.08 * bm)),
         (Ts, SL + c.v(-0.08, -0.28, -0.38)),
         (Te, SL + c.v(*READY_GL["pos"])),
     ]
     gl = KV(t, keysL)
     gfing = KV(t, [(T0, READY_GL["fingers"]), (Tg, (-0.5, -0.2, 0.6)), (Tc, (0.1, -0.8, 0.5)),
-                   (Tr, (0.0, -0.3, 1.0)), (Tf, (0.2, 0.2, 1.0)), (Te, READY_GL["fingers"])])
+                   (Tr, (0.5 * bm, -0.3 - 0.3 * bm, 1.0 - 0.4 * bm)),
+                   (Tf, (0.2 + 0.6 * bm, 0.2 - 0.2 * bm, 1.0 - 0.3 * bm)), (Te, READY_GL["fingers"])])
     gpalm = KV(t, [(T0, READY_GL["palm"]), (Tg, (-0.6, -0.5, -0.4)), (Tc, (-0.9, 0.0, -0.4)),
                    (Tr, (-0.6, 0.6, -0.3)), (Tf, (-0.7, 0.5, 0.0)), (Te, READY_GL["palm"])])
     c.arm(P, "L", gl, pole=(0.9, 0.4, -0.7), fingers=gfing, palm=gpalm)
@@ -1017,16 +1044,19 @@ def clip_pitch(c, t):
                       (T["release"], (0.15, -0.85, -0.45)), (T["follow"], (0.5, 0.3, 0.6)),
                       (T["end"], (0.8, -0.5, 0.0))]))
     glove_set = SL + c.v(-0.20, -0.24, -0.15)
+    bm = 1.0 if c.style.get("big_mitt") else 0.0
     keysL = [(0, SL + c.v(0.0, -0.02, -0.52)), (T["set"], glove_set), (T["kick"], glove_set + c.v(0, 0, 0.02)),
              (T["stride"], SL + c.v(0.05, -0.44, -0.02)),
-             (T["release"], SL + c.v(0.06, -0.10, -0.24)),
-             (T["follow"], SL + c.v(0.12, 0.05, -0.30)),
+             (T["release"], SL + c.v(0.06 + 0.12 * bm, -0.10 - 0.06 * bm, -0.24 - 0.10 * bm)),
+             (T["follow"], SL + c.v(0.12 + 0.12 * bm, 0.05 - 0.04 * bm, -0.30 - 0.08 * bm)),
              (T["field"], SL + c.v(-0.05, -0.28, -0.34)),
              (T["end"], SL + c.v(-0.10, -0.32, -0.36))]
     c.arm(P, "L", KV(t, keysL), pole=(0.9, 0.4, -0.7),
           fingers=KV(t, [(0, (0, -0.2, -1)), (T["set"], (-0.5, -0.2, 0.6)), (T["kick"], (-0.5, -0.2, 0.6)),
-                         (T["stride"], (0.1, -0.8, 0.5)), (T["release"], (0.0, -0.3, 1.0)),
-                         (T["follow"], (0.2, 0.2, 1.0)), (T["end"], (-0.15, -0.35, 1.0))]),
+                         (T["stride"], (0.1, -0.8, 0.5)),
+                         (T["release"], (0.5 * bm, -0.3 - 0.3 * bm, 1.0 - 0.4 * bm)),
+                         (T["follow"], (0.2 + 0.6 * bm, 0.2 - 0.2 * bm, 1.0 - 0.3 * bm)),
+                         (T["end"], (-0.15, -0.35, 1.0))]),
           palm=KV(t, [(0, (-1, 0, 0)), (T["set"], (-0.6, -0.5, -0.4)), (T["kick"], (-0.6, -0.5, -0.4)),
                       (T["stride"], (-0.9, 0.0, -0.4)), (T["release"], (-0.6, 0.6, -0.3)),
                       (T["follow"], (-0.7, 0.5, 0.0)), (T["end"], (0.1, -1.0, -0.2))]))

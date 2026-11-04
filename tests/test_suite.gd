@@ -48,9 +48,11 @@ func _run() -> void:
 	test_upgrade_all()
 	test_deck_ai()
 	await test_menus()
+	await test_u9_screens()
 	test_update5_content()
 	test_update7_content()
 	test_update9_modes()
+	test_update9_models()
 	test_update9_cards_content()
 	await test_scouting()
 	await test_battle_systems()
@@ -955,6 +957,82 @@ func test_menus() -> void:
 	await get_tree().process_frame
 
 
+# ---------------------------------------------------------------- Update 9 (stream E1): hub, Play, Results
+
+func test_u9_screens() -> void:
+	section("update 9 screens")
+	# Shared helpers.
+	var parts := UITheme.reward_parts({"coins": 150})
+	ok(parts.size() == 1 and parts[0][0] == "coin" and parts[0][1] == "150", "reward_parts: coins")
+	parts = UITheme.reward_parts({"pack": "pro", "stars": 10})
+	ok(parts.size() == 2 and parts[0][0] == "gift" and parts[0][1] == "PRO" and parts[1][0] == "star", "reward_parts: pack + stars")
+	parts = UITheme.reward_parts({"type": "stars", "amount": 10})
+	ok(parts.size() == 1 and parts[0][0] == "star" and parts[0][1] == "10", "reward_parts: {type, amount}")
+	ok(UITheme.reward_parts("nonsense").is_empty() and UITheme.reward_parts({}).is_empty(), "reward_parts: empty shapes")
+	ok(UITheme.format_duration(3 * 86400 + 4 * 3600) == "3d 4h" and UITheme.format_duration(5 * 3600 + 12 * 60) == "5h 12m"
+		and UITheme.format_duration(125) == "2m 05s", "format_duration")
+	ok(MenuScreen.mode_locked_reason("standard") == "" and MenuScreen.mode_locked_reason("boss_rush") == "", "Standard and Boss Rush are open")
+	var rp_before := int(Profile.data.rp)
+	Profile.data.rp = 0
+	ok(MenuScreen.mode_locked_reason("ranked").begins_with("Unlocks at"), "the Promotion Challenge says what unlocks it")
+	Profile.data.rp = rp_before
+	# Hints: every screen's ids exist, including the new features.
+	var missing: Array = []
+	for sid in Hints.SCREENS.keys():
+		for hid in Hints.SCREENS[sid]:
+			if not Hints.HINTS.has(hid):
+				missing.append(hid)
+	for hid in Hints.FEATURE_ONLY:
+		if not Hints.HINTS.has(hid):
+			missing.append(hid)
+	ok(missing.is_empty(), "every listed hint has a text %s" % [missing])
+	for hid in ["menu_season", "menu_shop", "menu_login", "menu_streak", "battle_boons", "play_boss_rush", "shop_free_agents", "team_free_agents"]:
+		ok(Hints.HINTS.has(hid), "hint for %s" % hid)
+	# Flame chip: hot and cold.
+	var hot := UITheme.flame_chip(3, 0.3)
+	var cold := UITheme.flame_chip(0, 0.0)
+	ok(_find_text(hot, "3-WIN STREAK  ·  +30% COINS") and _find_text(cold, "NO WIN STREAK"), "the win streak flame shows the streak and bonus")
+	hot.free()
+	cold.free()
+	# Results: the Update 9 reward sections.
+	var res: Control = load("res://src/ui/results_screen.gd").new()
+	res.result = {"won": true, "mode": "endless", "difficulty": "standard", "arena": "steel_yard", "coins": 500, "xp": 200, "rp": 30,
+		"levels": 0, "innings_cleared": 11, "outs": 90, "runs": 3, "run_limit": 3, "score": 8000, "mvp": "",
+		"defender_xp": {}, "packs": [], "stats": {"cards_played": 4, "timeline": []},
+		"streak": 2, "streak_bonus_coins": 40, "first_win_today_coins": 0, "season_xp": 160, "season_tiers": [],
+		"boons": [], "milestones": [5, 10], "milestone_coins": 450, "overflow_coins": 0}
+	add_child(res)
+	await get_tree().process_frame
+	var chips: Node = res.find_child("CoinBonuses", true, false)
+	ok(chips != null and chips.get_child_count() == 2, "results: only the bonuses that paid are listed (streak, milestones)")
+	ok(res.find_child("SeasonXP", true, false) != null and res.find_child("Milestones", true, false) != null, "results: season XP and milestones")
+	ok(res.find_child("BoonsTaken", true, false) == null and res.find_child("PromotionReward", true, false) == null, "results: no boons or promotion block when there are none")
+	# The counter race: counters are bound to their panels; a panel out of the tree stops counting.
+	var counter: Control = res.find_child("Counter_COINS", true, false)
+	var value: Label = counter.find_child("Value", true, false) if counter else null
+	ok(value != null and value.text == "+0", "the coin counter starts at 0")
+	await _wait(2.05)   # T_COINS 1.7 + 0.15 fade-in: counting now
+	var mid_text := value.text if value else ""
+	var parent := counter.get_parent()
+	parent.remove_child(counter)
+	await _wait(1.0)
+	ok(value.text == mid_text, "a counter taken off screen mid-count stops (its tween is killed: %s)" % mid_text)
+	counter.free()
+	await _wait(0.6)
+	ok(is_instance_valid(res), "the results screen survives a counter freed mid-animation")
+	res.queue_free()
+	await get_tree().process_frame
+	# Old-style result (no Update 9 keys): no new sections, nothing breaks.
+	var old: Control = load("res://src/ui/results_screen.gd").new()
+	old.result = {"won": false, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "coins": 50, "xp": 40, "rp": 3,
+		"levels": 0, "innings_cleared": 1, "outs": 10, "runs": 5, "run_limit": 5, "score": 300, "defender_xp": {}, "packs": [], "stats": {}}
+	add_child(old)
+	await get_tree().process_frame
+	ok(old.find_child("CoinBonuses", true, false) == null and old.find_child("SeasonXP", true, false) == null, "results without Update 9 keys stay as before")
+	old.queue_free()
+	await get_tree().process_frame
+
+
 # ---------------------------------------------------------------- Update 8: scouting book, combo hints
 
 func test_scouting() -> void:
@@ -1126,6 +1204,9 @@ func test_battle_systems() -> void:
 	await _test_update8_battle()
 	_clear()
 	await _test_update9_battle()
+	_clear()
+	await _test_update9_defenders()
+	_clear()
 	await _test_update9_cards_battle()
 	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
@@ -2454,6 +2535,187 @@ func _test_update9_draft() -> void:
 	battle.set_state(st0)
 
 
+# ---------------------------------------------------------------- Update 9: new defenders (Stream A)
+
+const U9_DEFENDERS := ["moose", "rosa", "sid"]
+const U9_CLIPS := ["idle", "run", "hit", "stunned", "defeat", "celebrate", "ready", "throw", "pitch", "catch",
+	"special", "victory", "walk"]
+
+
+## Moose, Rosa and Sid: real models (not the placeholders) with every defender clip at the shared
+## lengths, portraits and data.
+func test_update9_models() -> void:
+	section("update 9 defenders: models and data")
+	var lengths := {"idle": 2.0, "run": 0.7, "throw": 0.75, "pitch": 1.4, "catch": 0.6, "special": 1.2, "victory": 2.0}
+	var heights := {}
+	for id in U9_DEFENDERS + ["bruno", "ace"]:
+		ok(CharacterModel.has_model(id), "%s has a model" % id)
+		var cm := CharacterModel.new()
+		add_child(cm)
+		cm.setup(id, {"base": "idle"})
+		heights[id] = cm.height
+		if id in U9_DEFENDERS:
+			var missing: Array = U9_CLIPS.filter(func(c: String) -> bool: return not cm.has_anim(c))
+			ok(missing.is_empty(), "%s model has every defender clip (missing %s)" % [id, missing])
+			var off := []
+			for c in lengths:
+				if absf(cm.anim_length(c) - float(lengths[c])) > 0.04:
+					off.append("%s %.2f" % [c, cm.anim_length(c)])
+			ok(off.is_empty(), "%s clip lengths match the other defenders (%s)" % [id, off])
+			ok(DB.portrait(id) != null, "%s has a portrait" % id)
+		cm.free()
+	ok(float(heights.moose) > float(heights.bruno), "Moose is the biggest defender (%.2f vs Bruno %.2f m)" % [heights.moose, heights.bruno])
+	for pair in [["moose", "bruno"], ["rosa", "rico"], ["sid", "nova"]]:
+		ok(FileAccess.get_md5("res://assets/models/characters/%s.glb" % pair[0]) != FileAccess.get_md5("res://assets/models/characters/%s.glb" % pair[1]),
+			"%s has its own model (not the %s placeholder)" % pair)
+	var want := {"moose": ["infielder", "long_stretch", 15, 5000, "scoop_and_tag"],
+		"rosa": ["catcher", "pitch_framing", 20, 7500, "signal_caller"], "sid": ["pitcher", "skipper", 25, 10000, "worm_burner"]}
+	for id in want:
+		var d := DB.defender(id)
+		var w: Array = want[id]
+		ok(d.role == w[0] and d.trait.id == w[1] and int(d.unlock.value) == w[2] and int(d.unlock.get("coins", 0)) == w[3],
+			"%s: %s, %s, unlock at level %d or %d coins" % [id, w[0], w[1], w[2], w[3]])
+		ok(d.signature == w[4] and DB.cards.has(w[4]) and String(DB.card(w[4]).get("linked", "")) == id,
+			"%s's signature card is %s" % [id, w[4]])
+		ok(String(d.get("bio", "")).length() > 30 and String(d.get("title", "")) != "" and String(d.trait.get("text", "")).length() > 30,
+			"%s has a title, bio and trait text" % id)
+
+
+func _defender(id: String) -> Defender:
+	for df in battle.defenders:
+		if df.id == id:
+			return df
+	return null
+
+
+## Long Stretch, Pitch Framing and Skipper in a live battle (defenders hold their throws).
+func _test_update9_defenders() -> void:
+	section("update 9 defenders: Long Stretch, Pitch Framing, Skipper (battle)")
+	var route := battle.routes[0]
+	_hold_fire(true)
+	await _wait(0.1)
+
+	# --- Long Stretch (Moose): runners within 5 m take +25 % damage and are 10 % slower.
+	battle.swap_defender(_defender("jax"), "moose")
+	var moose := _defender("moose")
+	ok(moose != null and moose.trait_id == "long_stretch", "Moose joins the field")
+	_hold_fire(true)
+	var near := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var far := battle.spawn_enemy("runner", route, route.length * 0.15, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	moose.place(near.global_position + Vector3(3.0, 0, 0))
+	await _wait(0.3)
+	var far_d := Field.v2(far.global_position).distance_to(Field.v2(moose.global_position))
+	ok(near.slows.has("long_stretch") and is_equal_approx(float(near.slows.long_stretch[0]), 0.10)
+		and absf(near.current_speed() / near.base_speed - 0.9) < 0.01, "Long Stretch slows a runner 3 m away by 10 %% (speed x%.2f)" % (near.current_speed() / near.base_speed))
+	ok(absf(near.aura_vuln - 0.25) < 0.001 and near.aura_vuln_t > 0.0, "Long Stretch gives it +25 %% damage taken (%.2f)" % near.aura_vuln)
+	ok(far_d > 5.0 and not far.slows.has("long_stretch") and far.aura_vuln_t <= 0.0, "a runner %.1f m away is not affected" % far_d)
+	var dn := battle.deal_damage(near, 100.0, {"kind": "throw"})
+	var dfar := battle.deal_damage(far, 100.0, {"kind": "throw"})
+	ok(absf(dn / dfar - 1.25) < 0.01, "a runner in Moose's ring takes +25 %% damage from any source (%.0f vs %.0f)" % [dn, dfar])
+	ok(moose._aura_ring != null and moose._aura_ring.visible and absf(moose._aura_ring.scale.x - 5.0) < 0.01, "Moose shows a 5 m ring")
+	# The ring adds to a card's mark instead of replacing it.
+	near.apply_mark(2.0, 0.3)
+	var dm := battle.deal_damage(near, 100.0, {"kind": "throw"})
+	ok(absf(dm / dfar - 1.55) < 0.01, "Moose's ring stacks with a card mark (%.0f)" % dm)
+	moose.stun(1.0)
+	await _wait(0.45)
+	ok(not moose._aura_ring.visible and not near.slows.has("long_stretch") and near.aura_vuln_t <= 0.0, "a stunned Moose has no ring")
+	moose.cleanse()
+	moose.place(near.global_position + Vector3(30.0, 0, 0))
+	await _wait(0.45)
+	ok(not near.slows.has("long_stretch") and near.aura_vuln_t <= 0.0, "leaving the ring ends the slow and the extra damage")
+	battle.swap_defender(moose, "jax")
+	_clear()
+	await _wait(0.1)
+
+	# --- Pitch Framing (Rosa): every 6 s the most dangerous runner is marked for 6 s (+35 % damage).
+	battle.swap_defender(_defender("rico"), "rosa")
+	var rosa := _defender("rosa")
+	ok(rosa != null and rosa.trait_id == "pitch_framing", "Rosa joins the field")
+	_hold_fire(true)
+	rosa.frame_cd = 100.0
+	var back := battle.spawn_enemy("runner", route, route.length * 0.3, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var lead := battle.spawn_enemy("runner", route, route.length * 0.6, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var mid := battle.spawn_enemy("runner", route, route.length * 0.45, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	ok(rosa.most_dangerous_runner() == lead, "the most dangerous runner is the one closest to scoring")
+	rosa.frame_cd = 0.0
+	await _wait(0.15)
+	ok(rosa.framed.has(lead) and absf(lead.signal_amt - 0.35) < 0.001 and lead.signal_t > 5.5 and absf(lead.signal_refund - 0.5) < 0.001,
+		"Pitch Framing signals the lead runner for 6 s at +35 %% with a 0.5 energy refund (%.2f, %.1f s)" % [lead.signal_amt, lead.signal_t])
+	ok(not rosa.framed.has(back) and back.signal_t <= 0.0 and rosa.frame_cd > 5.5, "only one runner per call; the next call is 6 s away (%.1f)" % rosa.frame_cd)
+	var mk: Node3D = rosa.framed[lead][1] if rosa.framed.has(lead) else null
+	ok(mk != null and mk.visible and mk.get_child_count() == 2 and Field.v2(mk.global_position).distance_to(Field.v2(lead.global_position)) < 0.3,
+		"a framed runner wears Rosa's marker")
+	var dl := battle.deal_damage(lead, 100.0, {"kind": "throw"})
+	var db := battle.deal_damage(back, 100.0, {"kind": "throw"})
+	ok(absf(dl / db - 1.35) < 0.01, "a framed runner takes +35 %% damage (%.0f vs %.0f)" % [dl, db])
+	rosa.frame_cd = 0.0
+	await _wait(0.15)
+	ok(rosa.framed.has(mid) and not rosa.framed.has(back), "the next call picks the most dangerous runner not yet framed")
+	# The refund is paid once by CardEffects (battle.runner_out, or its on_out fallback).
+	battle.cards.infinite_energy = false
+	battle.cards.energy = 2.0
+	var e0: float = battle.cards.energy
+	battle.combo_timer = 0.0   # no double/triple-play energy from earlier outs
+	battle.deal_damage(lead, 1.0e7, {"kind": "throw"})
+	var gain := battle.cards.energy - e0
+	ok(gain >= 0.499 and gain < 0.6, "an out on a framed runner refunds 0.5 energy, once (%.2f)" % gain)
+	e0 = battle.cards.energy
+	battle.combo_timer = 0.0
+	battle.deal_damage(back, 1.0e7, {"kind": "throw"})
+	ok(battle.cards.energy - e0 < 0.1, "an out on an unframed runner refunds nothing (%.2f)" % (battle.cards.energy - e0))
+	battle.cards.infinite_energy = true
+	await _wait(0.1)
+	ok(not rosa.framed.has(lead) and (not is_instance_valid(mk) or mk.is_queued_for_deletion()), "the marker goes away with the out")
+	battle.swap_defender(rosa, "rico")
+	_clear()
+	await _wait(0.1)
+
+	# --- Skipper (Sid): a hit skips on to one runner behind the target (within 4 m) for 60 %.
+	battle.swap_defender(_defender("ace"), "sid")
+	var sid := _defender("sid")
+	ok(sid != null and sid.trait_id == "skipper", "Sid joins the field")
+	_hold_fire(true)
+	var tgt := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var behind := battle.spawn_enemy("runner", route, route.length * 0.5 - 2.0, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var beyond := battle.spawn_enemy("runner", route, route.length * 0.5 - 9.0, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	var p: Dictionary = sid._build_payload(tgt, false)
+	ok(is_equal_approx(float(p.get("skip", 0.0)), 0.6), "Sid's throws carry the skip (60 %)")
+	var line := behind.global_position - tgt.global_position
+	p.damage = 100.0
+	p.crit = false
+	p.accuracy = 999.0
+	p["_dir"] = line
+	var ht := tgt.hp
+	var hb := behind.hp
+	var hy := beyond.hp
+	var dmg0 := sid.damage_dealt
+	ok(battle.projectiles.hit(tgt, p, tgt.center()), "Sid's throw hits")
+	await _wait(0.9)
+	ok(absf((ht - tgt.hp) - 100.0) < 0.5, "the target takes the full hit (%.0f)" % (ht - tgt.hp))
+	ok(absf((hb - behind.hp) - 60.0) < 0.5, "the ball skips on into the runner 2 m behind for 60 %% (%.0f)" % (hb - behind.hp))
+	ok(is_equal_approx(hy, beyond.hp), "a runner %.1f m behind is out of the skip's reach" % Field.v2(beyond.global_position).distance_to(Field.v2(tgt.global_position)))
+	ok(sid.damage_dealt - dmg0 > 159.0, "skip damage is credited to Sid (%.0f)" % (sid.damage_dealt - dmg0))
+	# Thrown the other way, nothing is behind the target: no skip hit.
+	var p2: Dictionary = sid._build_payload(tgt, false)
+	p2.damage = 100.0
+	p2.crit = false
+	p2.accuracy = 999.0
+	p2["_dir"] = -line
+	hb = behind.hp
+	battle.projectiles.hit(tgt, p2, tgt.center())
+	await _wait(0.9)
+	ok(is_equal_approx(hb, behind.hp), "no skip hit on a runner in front of the target")
+	ok(battle.projectiles.skip_target(tgt, line, 4.0) == behind and battle.projectiles.skip_target(tgt, -line, 4.0) == null,
+		"skip_target looks behind the target only")
+	battle.swap_defender(sid, "ace")
+	battle.apply_formation(battle.run.formation)
+	_hold_fire(false)
+
+
 # ---------------------------------------------------------------- Update 9 (stream E2): Team, Shop, Season, Packs, level road
 
 func test_u9_e2_screens() -> void:
@@ -2836,18 +3098,19 @@ func _test_u9_free_agents() -> void:
 	var by_id := {}
 	for fa in fas:
 		by_id[fa.id] = fa
-	ok(by_id.has("moose") and int(by_id.moose.price) == 6000 and int(by_id.moose.level) == 13, "Moose: 6,000 coins or level 13")
-	ok(by_id.has("rosa") and int(by_id.rosa.price) == 8000 and by_id.has("sid") and int(by_id.sid.price) == 10000, "Rosa 8,000, Sid 10,000 coins")
+	ok(by_id.has("moose") and int(by_id.moose.price) == 5000 and int(by_id.moose.level) == 15, "Moose: 5,000 coins or level 15")
+	ok(by_id.has("rosa") and int(by_id.rosa.price) == 7500 and int(by_id.rosa.level) == 20 and by_id.has("sid") and int(by_id.sid.price) == 10000
+		and int(by_id.sid.level) == 25, "Rosa 7,500 coins or level 20, Sid 10,000 coins or level 25")
 	ok(fas.all(func(f: Dictionary) -> bool: return f.has("signed") and not bool(f.signed)), "nobody is signed on a new profile")
-	Profile.data.coins = 5999
-	ok(not Shop.sign_agent("moose") and int(Profile.data.coins) == 5999 and not Profile.is_defender_unlocked("moose"), "signing needs the full price")
+	Profile.data.coins = 4999
+	ok(not Shop.sign_agent("moose") and int(Profile.data.coins) == 4999 and not Profile.is_defender_unlocked("moose"), "signing needs the full price")
 	Profile.data.coins = 7000
 	var sig := str(DB.defender("moose").get("signature", ""))
 	if sig != "":
 		Profile.data.cards[sig].owned = false
-	ok(Shop.sign_agent("moose") and int(Profile.data.coins) == 1000 and Profile.is_defender_unlocked("moose"), "signing Moose: 6,000 coins, on the team now")
+	ok(Shop.sign_agent("moose") and int(Profile.data.coins) == 2000 and Profile.is_defender_unlocked("moose"), "signing Moose: 5,000 coins, on the team now")
 	ok(sig == "" or Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "signature" and pk.get("card", "") == sig), "signing brings the signature pack")
-	ok(not Shop.sign_agent("moose") and int(Profile.data.coins) == 1000, "a signed defender cannot be signed again")
+	ok(not Shop.sign_agent("moose") and int(Profile.data.coins) == 2000, "a signed defender cannot be signed again")
 	ok(not Shop.sign_agent("ace") and not Shop.sign_agent("nope"), "only free agents can be signed")
 	ok(Profile.stat("free_agents_signed") == 1.0 and Profile.data.achievements.has("free_agent"), "signing counts (Front Office)")
 	ok(bool(Shop.free_agents().filter(func(f: Dictionary) -> bool: return f.id == "moose")[0].signed), "free_agents() shows Moose as signed")

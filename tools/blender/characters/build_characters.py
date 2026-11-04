@@ -92,7 +92,7 @@ def defender_materials(cfg):
                 Metal=P["metal"], Mouth=P["mouth"], Sole=P["sole"])
     if cfg.get("gear"):
         cols["Gear"] = cfg["accent"]
-    if cfg.get("sunglasses"):
+    if cfg.get("sunglasses") or cfg.get("goggles"):
         cols["Visor"] = cfg["accent"]
     if cfg.get("brow_col"):
         cols["Brow"] = cfg["brow_col"]
@@ -100,6 +100,9 @@ def defender_materials(cfg):
     mats["EyeHighlight"] = M.make("EyeHighlight", "#FFFFFF", "#FFFFFF", 1.5, rough=0.2)
     if cfg.get("sunglasses"):
         mats["Visor"] = M.make("Visor", cfg["accent"], rough=0.12, metal=0.45)
+    elif cfg.get("goggles"):
+        # light, glassy lenses so the goggles read against the dark hair
+        mats["Visor"] = M.make("Visor", lighten(cfg["accent"], 0.5), rough=0.06, metal=0.35)
     if cfg.get("gear"):
         mats["Gear"] = M.make("Gear", cfg["accent"], rough=0.3, metal=0.15)
     return mats
@@ -116,8 +119,12 @@ def build_defender(cid):
     parts = hb.build()
     tot, rows = hero.report(parts)
     print("TRIS", cid, tot, rows[:12])
-    return finish(cid, "defender", sk, arm, parts, style={"idle": cfg.get("idle", "relaxed")},
-                  hero_parts=True)
+    style = {"idle": cfg.get("idle", "relaxed")}
+    if cfg.get("mitt") == "first_base":
+        style["big_mitt"] = True
+    if cfg.get("throw_style"):
+        style["throw_style"] = cfg["throw_style"]
+    return finish(cid, "defender", sk, arm, parts, style=style, hero_parts=True)
 
 
 # ---------------------------------------------------------------------------
