@@ -48,6 +48,7 @@ func _run() -> void:
 	test_upgrade_all()
 	test_deck_ai()
 	await test_menus()
+	await test_u9_screens()
 	test_update5_content()
 	test_update7_content()
 	await test_scouting()
@@ -948,6 +949,82 @@ func test_menus() -> void:
 		texts.append((l as Label).text)
 	ok("TRIPLE PLAY" in texts and "BEST CARD PLAY" in texts and "MVP" in texts, "results shows the three highlights")
 	res.queue_free()
+	await get_tree().process_frame
+
+
+# ---------------------------------------------------------------- Update 9 (stream E1): hub, Play, Results
+
+func test_u9_screens() -> void:
+	section("update 9 screens")
+	# Shared helpers.
+	var parts := UITheme.reward_parts({"coins": 150})
+	ok(parts.size() == 1 and parts[0][0] == "coin" and parts[0][1] == "150", "reward_parts: coins")
+	parts = UITheme.reward_parts({"pack": "pro", "stars": 10})
+	ok(parts.size() == 2 and parts[0][0] == "gift" and parts[0][1] == "PRO" and parts[1][0] == "star", "reward_parts: pack + stars")
+	parts = UITheme.reward_parts({"type": "stars", "amount": 10})
+	ok(parts.size() == 1 and parts[0][0] == "star" and parts[0][1] == "10", "reward_parts: {type, amount}")
+	ok(UITheme.reward_parts("nonsense").is_empty() and UITheme.reward_parts({}).is_empty(), "reward_parts: empty shapes")
+	ok(UITheme.format_duration(3 * 86400 + 4 * 3600) == "3d 4h" and UITheme.format_duration(5 * 3600 + 12 * 60) == "5h 12m"
+		and UITheme.format_duration(125) == "2m 05s", "format_duration")
+	ok(MenuScreen.mode_locked_reason("standard") == "" and MenuScreen.mode_locked_reason("boss_rush") == "", "Standard and Boss Rush are open")
+	var rp_before := int(Profile.data.rp)
+	Profile.data.rp = 0
+	ok(MenuScreen.mode_locked_reason("ranked").begins_with("Unlocks at"), "the Promotion Challenge says what unlocks it")
+	Profile.data.rp = rp_before
+	# Hints: every screen's ids exist, including the new features.
+	var missing: Array = []
+	for sid in Hints.SCREENS.keys():
+		for hid in Hints.SCREENS[sid]:
+			if not Hints.HINTS.has(hid):
+				missing.append(hid)
+	for hid in Hints.FEATURE_ONLY:
+		if not Hints.HINTS.has(hid):
+			missing.append(hid)
+	ok(missing.is_empty(), "every listed hint has a text %s" % [missing])
+	for hid in ["menu_season", "menu_shop", "menu_login", "menu_streak", "battle_boons", "play_boss_rush", "shop_free_agents", "team_free_agents"]:
+		ok(Hints.HINTS.has(hid), "hint for %s" % hid)
+	# Flame chip: hot and cold.
+	var hot := UITheme.flame_chip(3, 0.3)
+	var cold := UITheme.flame_chip(0, 0.0)
+	ok(_find_text(hot, "3-WIN STREAK  ·  +30% COINS") and _find_text(cold, "NO WIN STREAK"), "the win streak flame shows the streak and bonus")
+	hot.free()
+	cold.free()
+	# Results: the Update 9 reward sections.
+	var res: Control = load("res://src/ui/results_screen.gd").new()
+	res.result = {"won": true, "mode": "endless", "difficulty": "standard", "arena": "steel_yard", "coins": 500, "xp": 200, "rp": 30,
+		"levels": 0, "innings_cleared": 11, "outs": 90, "runs": 3, "run_limit": 3, "score": 8000, "mvp": "",
+		"defender_xp": {}, "packs": [], "stats": {"cards_played": 4, "timeline": []},
+		"streak": 2, "streak_bonus_coins": 40, "first_win_today_coins": 0, "season_xp": 160, "season_tiers": [],
+		"boons": [], "milestones": [5, 10], "milestone_coins": 450, "overflow_coins": 0}
+	add_child(res)
+	await get_tree().process_frame
+	var chips: Node = res.find_child("CoinBonuses", true, false)
+	ok(chips != null and chips.get_child_count() == 2, "results: only the bonuses that paid are listed (streak, milestones)")
+	ok(res.find_child("SeasonXP", true, false) != null and res.find_child("Milestones", true, false) != null, "results: season XP and milestones")
+	ok(res.find_child("BoonsTaken", true, false) == null and res.find_child("PromotionReward", true, false) == null, "results: no boons or promotion block when there are none")
+	# The counter race: counters are bound to their panels; a panel out of the tree stops counting.
+	var counter: Control = res.find_child("Counter_COINS", true, false)
+	var value: Label = counter.find_child("Value", true, false) if counter else null
+	ok(value != null and value.text == "+0", "the coin counter starts at 0")
+	await _wait(2.05)   # T_COINS 1.7 + 0.15 fade-in: counting now
+	var mid_text := value.text if value else ""
+	var parent := counter.get_parent()
+	parent.remove_child(counter)
+	await _wait(1.0)
+	ok(value.text == mid_text, "a counter taken off screen mid-count stops (its tween is killed: %s)" % mid_text)
+	counter.free()
+	await _wait(0.6)
+	ok(is_instance_valid(res), "the results screen survives a counter freed mid-animation")
+	res.queue_free()
+	await get_tree().process_frame
+	# Old-style result (no Update 9 keys): no new sections, nothing breaks.
+	var old: Control = load("res://src/ui/results_screen.gd").new()
+	old.result = {"won": false, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "coins": 50, "xp": 40, "rp": 3,
+		"levels": 0, "innings_cleared": 1, "outs": 10, "runs": 5, "run_limit": 5, "score": 300, "defender_xp": {}, "packs": [], "stats": {}}
+	add_child(old)
+	await get_tree().process_frame
+	ok(old.find_child("CoinBonuses", true, false) == null and old.find_child("SeasonXP", true, false) == null, "results without Update 9 keys stay as before")
+	old.queue_free()
 	await get_tree().process_frame
 
 

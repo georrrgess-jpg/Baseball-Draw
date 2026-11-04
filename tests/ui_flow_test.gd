@@ -132,6 +132,10 @@ func _run() -> void:
 		await _test_multi_packs()
 		_finish()
 		return
+	if "--ui-test-section=u9screens" in OS.get_cmdline_user_args():
+		await _test_u9_hub_play_results()
+		_finish()
+		return
 	Profile.data.flags["battle_help"] = true
 	Profile.data.flags["battle_tutorial_done"] = true
 	var cfg := Session.new_run_config("quick")
@@ -354,8 +358,194 @@ func _run() -> void:
 	await _test_navigation()
 	await _test_scouting()
 	await _test_title()
+	await _test_u9_hub_play_results()
 	await _test_tutorial()
 	_finish()
+
+
+## Update 9 screens (stream E1): the hub's new elements (quick mode switch, Season tier bar, win
+## streak flame, login calendar, Shop tile), keyboard focus on the hub and Play, the Play screen's
+## mode cards (Boss Rush included) with records and payouts, the stadium carousel, and the Results
+## sections for the new reward keys.
+func _test_u9_hub_play_results() -> void:
+	Profile.data.flags["tutorial_done"] = true
+	if (Profile.data.history as Array).is_empty():   # the hub waits for a finished game for some tiles
+		Profile.add_history({"won": true, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "inning": 3, "score": 100, "outs": 30, "runs": 0, "date": Time.get_datetime_string_from_system()})
+	var saved_run: Variant = Profile.data.current_run
+	Profile.data.current_run = null
+	var last_mode := str(Profile.data.flags.get("last_mode", "standard"))
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(1.2)
+	var hub: Node = get_tree().current_scene
+	for n in ["PlayButton", "ModeSwitch", "SeasonBar", "StreakFlame", "LoginPanel", "DailyPanel", "MissionsWidget", "ShopTile", "ScoutingBookTile"]:
+		var c: Control = hub.find_child(n, true, false)
+		_check(c != null and c.is_visible_in_tree(), "hub shows %s" % n)
+	# Badges are corner bubbles that never cover a tile's label.
+	var covered: Array = []
+	for bd in hub.find_children("CornerBadge", "PanelContainer", true, false):
+		var host: Button = bd.get_parent() as Button
+		if host and host.text != "":
+			var label_y := host.get_global_rect().position.y + (host.size.y - host.get_theme_font_size("font_size")) * 0.5
+			if (bd as Control).get_global_rect().end.y > label_y + 2.0:
+				covered.append(host.text)
+	_check(covered.is_empty(), "hub badges sit above the tile labels %s" % [covered])
+	# Quick mode switch: Boss Rush changes what PLAY opens with.
+	var chip: Button = hub.find_child("Mode_boss_rush", true, false)
+	_check(chip != null, "the quick mode switch offers Boss Rush")
+	if chip and not chip.disabled:
+		await _click(_button_center(chip))
+		await _wait(0.3)
+		_check(str(Profile.data.flags.get("last_mode", "")) == "boss_rush" and chip.button_pressed, "picking Boss Rush on the switch selects it")
+		var hero: Button = hub.find_child("PlayButton", true, false)
+		var sub_ok := false
+		for l in hero.find_children("*", "Label", true, false):
+			if str((l as Label).text).begins_with("Boss Rush"):
+				sub_ok = true
+		_check(sub_ok, "PLAY shows the picked mode")
+		# Keyboard: the first arrow press focuses PLAY, Enter opens the Play screen on Boss Rush.
+		_mouse_move(Vector2(960, 1000))
+		await _wait(0.2)
+		get_viewport().gui_release_focus()
+		await _key_event(KEY_DOWN)
+		_check(get_viewport().gui_get_focus_owner() == hero, "an arrow key focuses PLAY on the hub (%s)" % get_viewport().gui_get_focus_owner())
+		await _key_event(KEY_ENTER)
+		_check(await _wait_scene("play_menu"), "Enter on PLAY opens the Play screen")
+		await _wait(0.8)
+		var pm0: Node = get_tree().current_scene
+		_check(str(pm0.get("mode_id")) == "boss_rush", "Play opens on the mode picked on the hub (%s)" % pm0.get("mode_id"))
+		Router.goto("main_menu")
+		await _wait_scene("main_menu")
+		await _wait(1.0)
+		hub = get_tree().current_scene
+	# Season tier bar opens the Season screen; the Shop tile opens the Shop.
+	for pair in [["SeasonBar", "season"], ["ShopTile", "shop"]]:
+		var b: Button = hub.find_child(pair[0], true, false)
+		if b == null:
+			continue
+		await _click(_button_center(b))
+		_check(await _wait_scene(pair[1]), "%s opens %s" % [pair[0], pair[1]])
+		Router.goto("main_menu")
+		await _wait_scene("main_menu")
+		await _wait(1.0)
+		hub = get_tree().current_scene
+	# Play: every mode has a big card; Boss Rush can be picked; records and payouts are shown.
+	Router.goto("play_menu")
+	await _wait_scene("play_menu")
+	await _wait(0.8)
+	var pm: Node = get_tree().current_scene
+	var cards: Dictionary = pm.get("_mode_buttons")
+	_check(cards.has("boss_rush") and cards.has("daily") and cards.has("endless") and cards.has("ranked") and cards.has("practice")
+		and cards.has("standard") and cards.has("quick"), "Play has a card for every mode %s" % [cards.keys()])
+	var br: Button = cards.get("boss_rush")
+	if br:
+		var texts: Array = []
+		for l in br.find_children("*", "Label", true, false):
+			texts.append((l as Label).text)
+		_check("BOSS RUSH" in texts and texts.any(func(t: String) -> bool: return t.contains("Pro Pack")), "the Boss Rush card names the mode and what a win pays %s" % [texts])
+		_check(texts.any(func(t: String) -> bool: return t.begins_with("Best") or t == "No record yet"), "the Boss Rush card shows your record")
+		await _click(_button_center(br))
+		await _wait(0.4)
+		_check(str(pm.get("mode_id")) == "boss_rush" and br.button_pressed, "clicking the Boss Rush card selects it")
+	var practice: Button = cards.get("practice")
+	if practice:
+		await _click(_button_center(practice))
+		await _wait(0.4)
+		var veteran: Button = pm.find_child("Diff_veteran", true, false)
+		_check(veteran != null and veteran.disabled, "Practice locks the difficulty")
+		await _click(_button_center(cards["standard"]))
+		await _wait(0.4)
+	var vet: Button = pm.find_child("Diff_veteran", true, false)
+	var diff_before := str(Profile.data.difficulty)
+	if vet:
+		await _click(_button_center(vet))
+		await _wait(0.3)
+		_check(str(Profile.data.difficulty) == "veteran" and vet.button_pressed, "a difficulty button selects it")
+		var std_texts: Array = []
+		for l in (cards["standard"] as Button).find_children("*", "Label", true, false):
+			std_texts.append((l as Label).text)
+		_check(std_texts.any(func(t: String) -> bool: return t.contains("Champion Pack")), "the Standard card's payout follows the difficulty (Veteran: Champion Pack)")
+		var d0: Button = pm.find_child("Diff_" + diff_before, true, false)
+		if d0:
+			await _click(_button_center(d0))
+			await _wait(0.3)
+	# Stadium carousel: one big preview, thumbnails for unlocked stadiums, text rows for locked ones.
+	var unlocked: Array = Profile.data.arenas_unlocked
+	_check(pm.find_children("ArenaPreview", "", true, false).size() == 1, "the stadium panel shows one big preview")
+	var locked_tiles := 0
+	for b in _all_buttons(pm):
+		if b.name.begins_with("Arena_") and not b.name.trim_prefix("Arena_") in unlocked:
+			locked_tiles += 1
+	_check(locked_tiles == 0, "locked stadiums are not shown as tiles")
+	if unlocked.size() < DB.arena_order.size():
+		_check(pm.find_child("LockedArenas", true, false) != null, "locked stadiums are listed with their unlock text")
+	if unlocked.size() >= 2:
+		var before := str(Profile.data.arena)
+		var nxt: Button = pm.find_child("ArenaNext", true, false)
+		await _click(_button_center(nxt))
+		await _wait(0.3)
+		_check(str(Profile.data.arena) != before and str(Profile.data.arena) in unlocked, "the carousel's ▶ picks the next stadium")
+		Profile.data.arena = before
+	var streak_box: Control = pm.find_child("StreakBonus", true, false)
+	_check(streak_box != null and streak_box.find_child("StreakFlame", true, false) != null, "Play shows the win streak bonus")
+	# Keyboard: the first arrow press focuses START; arrows then move between buttons.
+	_mouse_move(Vector2(960, 1060))
+	get_viewport().gui_release_focus()
+	await _key_event(KEY_DOWN)
+	var start: Button = pm.get("_start")
+	_check(get_viewport().gui_get_focus_owner() == start, "an arrow key focuses START on the Play screen")
+	await _key_event(KEY_UP)
+	var f := get_viewport().gui_get_focus_owner()
+	_check(f != null and f != start, "arrow keys move the focus on from START (%s)" % (f.name if f else "none"))
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	# Results: the new reward sections.
+	var res: Control = load("res://src/ui/results_screen.gd").new()
+	res.result = {"won": true, "mode": "standard", "difficulty": "standard", "arena": "steel_yard", "coins": 600, "xp": 300, "rp": 60,
+		"levels": 0, "innings_cleared": 9, "outs": 120, "runs": 1, "run_limit": 3, "score": 9000, "mvp": "ace",
+		"defender_xp": {"ace": {"xp": 40, "levels": 0, "level": 2, "level_before": 2, "xp_before": 10, "xp_after": 50, "rewards": [], "outs": 9}},
+		"packs": [{"type": "pro", "source": "test"}], "stats": {"cards_played": 10, "timeline": []},
+		"streak": 3, "streak_bonus_coins": 90, "first_win_today_coins": 200, "season_xp": 160, "season_tiers": [],
+		"boons": Boons.all().slice(0, 2).map(func(b: Dictionary) -> String: return str(b.get("id", ""))),
+		"milestones": [5, 10], "milestone_coins": 450, "overflow_coins": 80, "promoted": true, "promotion_reward": {"coins": 300, "stars": 10, "pack": "pro"}}
+	get_tree().current_scene.add_child(res)
+	await _wait(5.0)
+	var chips: Control = res.find_child("CoinBonuses", true, false)
+	_check(chips != null and chips.get_child_count() == 4, "Results list the streak, first-win, milestone and extra-copy coins")
+	_check(res.find_child("SeasonXP", true, false) != null, "Results show the season XP bar")
+	_check(res.find_child("Milestones", true, false) != null, "Results show the Endless milestones")
+	_check(res.find_child("PromotionReward", true, false) != null, "Results show the promotion reward")
+	if not Boons.all().is_empty():
+		_check(res.find_child("BoonsTaken", true, false) != null, "Results list the boons drafted")
+	var coin_l: Label = res.find_child("Counter_COINS", true, false).find_child("Value", true, false) if res.find_child("Counter_COINS", true, false) else null
+	_check(coin_l != null and coin_l.text == "+600", "the coin counter finishes on the coins earned (%s)" % (coin_l.text if coin_l else "none"))
+	# Nothing is cut off at 1080p: the panels' content fits without scrolling.
+	var cut: Array = []
+	for sc in res.find_children("*", "ScrollContainer", true, false):
+		var inner: Control = (sc as ScrollContainer).get_child(0)
+		if inner and inner.get_combined_minimum_size().y > (sc as Control).size.y + 1.0:
+			cut.append("%s %d>%d" % [(sc as Control).get_parent().name, inner.get_combined_minimum_size().y, (sc as Control).size.y])
+	_check(cut.is_empty(), "every Results column fits on screen %s" % [cut])
+	res.queue_free()
+	await _wait(0.3)
+	Profile.data.current_run = saved_run
+	Profile.data.flags["last_mode"] = last_mode
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+## Presses and releases a key (for the built-in ui_* focus actions).
+func _key_event(code: Key) -> void:
+	var k := InputEventKey.new()
+	k.keycode = code
+	k.physical_keycode = code
+	k.pressed = true
+	Input.parse_input_event(k)
+	await _wait(0.05)
+	var k2 := k.duplicate() as InputEventKey
+	k2.pressed = false
+	Input.parse_input_event(k2)
+	await _wait(0.15)
 
 
 func _find_button_prefix(root: Node, text: String) -> Button:
