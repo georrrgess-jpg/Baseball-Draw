@@ -1533,6 +1533,9 @@ func show_draft(offers: Array) -> void:
 	d.battle = battle
 	d.offers = offers.duplicate()
 	_draft = d
+	d.tree_exited.connect(func() -> void:
+		if _draft == d:
+			_draft = null)
 	root.add_child(d)
 
 

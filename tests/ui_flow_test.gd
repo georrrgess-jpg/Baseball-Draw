@@ -1535,8 +1535,9 @@ func _test_draft() -> void:
 	var draft: Node = null
 	for i in 40:
 		await _wait(0.1)
-		draft = hud.get("_draft")
-		if draft and is_instance_valid(draft):
+		var d1: Variant = hud.get("_draft")
+		if d1 != null and is_instance_valid(d1):
+			draft = d1
 			break
 	_check(draft != null and is_instance_valid(draft) and (draft.get("cards") as Array).size() == 3, "the draft overlay shows three boon cards")
 	if draft == null or not is_instance_valid(draft):
@@ -1587,8 +1588,9 @@ func _test_draft() -> void:
 	draft = null
 	for i in 40:
 		await _wait(0.1)
-		draft = hud.get("_draft")
-		if draft and is_instance_valid(draft):
+		var d2: Variant = hud.get("_draft")
+		if d2 != null and is_instance_valid(d2):
+			draft = d2
 			break
 	await _wait(1.2)
 	offers = battle.draft_offers.duplicate()
