@@ -50,6 +50,7 @@ func _run() -> void:
 	await test_menus()
 	test_update5_content()
 	test_update7_content()
+	test_update9_models()
 	await test_scouting()
 	await test_battle_systems()
 	print("==== %d checks, %d failed ====" % [checks, failures])
@@ -1121,6 +1122,8 @@ func test_battle_systems() -> void:
 	_clear()
 	await _test_update8_battle()
 	_clear()
+	await _test_update9_defenders()
+	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
 	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
@@ -2025,3 +2028,184 @@ func test_update7_content() -> void:
 	for id in NEW_CARDS_U7:
 		ok(seen.has(id), "packs can contain %s" % id)
 	Profile.reset_profile()
+
+
+# ---------------------------------------------------------------- Update 9: new defenders (Stream A)
+
+const U9_DEFENDERS := ["moose", "rosa", "sid"]
+const U9_CLIPS := ["idle", "run", "hit", "stunned", "defeat", "celebrate", "ready", "throw", "pitch", "catch",
+	"special", "victory", "walk"]
+
+
+## Moose, Rosa and Sid: real models (not the placeholders) with every defender clip at the shared
+## lengths, portraits and data.
+func test_update9_models() -> void:
+	section("update 9 defenders: models and data")
+	var lengths := {"idle": 2.0, "run": 0.7, "throw": 0.75, "pitch": 1.4, "catch": 0.6, "special": 1.2, "victory": 2.0}
+	var heights := {}
+	for id in U9_DEFENDERS + ["bruno", "ace"]:
+		ok(CharacterModel.has_model(id), "%s has a model" % id)
+		var cm := CharacterModel.new()
+		add_child(cm)
+		cm.setup(id, {"base": "idle"})
+		heights[id] = cm.height
+		if id in U9_DEFENDERS:
+			var missing: Array = U9_CLIPS.filter(func(c: String) -> bool: return not cm.has_anim(c))
+			ok(missing.is_empty(), "%s model has every defender clip (missing %s)" % [id, missing])
+			var off := []
+			for c in lengths:
+				if absf(cm.anim_length(c) - float(lengths[c])) > 0.04:
+					off.append("%s %.2f" % [c, cm.anim_length(c)])
+			ok(off.is_empty(), "%s clip lengths match the other defenders (%s)" % [id, off])
+			ok(DB.portrait(id) != null, "%s has a portrait" % id)
+		cm.free()
+	ok(float(heights.moose) > float(heights.bruno), "Moose is the biggest defender (%.2f vs Bruno %.2f m)" % [heights.moose, heights.bruno])
+	for pair in [["moose", "bruno"], ["rosa", "rico"], ["sid", "nova"]]:
+		ok(FileAccess.get_md5("res://assets/models/characters/%s.glb" % pair[0]) != FileAccess.get_md5("res://assets/models/characters/%s.glb" % pair[1]),
+			"%s has its own model (not the %s placeholder)" % pair)
+	var want := {"moose": ["infielder", "long_stretch", 13, 6000], "rosa": ["catcher", "pitch_framing", 16, 8000],
+		"sid": ["pitcher", "skipper", 19, 10000]}
+	for id in want:
+		var d := DB.defender(id)
+		var w: Array = want[id]
+		ok(d.role == w[0] and d.trait.id == w[1] and int(d.unlock.value) == w[2] and int(d.unlock.get("coins", 0)) == w[3],
+			"%s: %s, %s, unlock at level %d or %d coins" % [id, w[0], w[1], w[2], w[3]])
+		ok(String(d.get("bio", "")).length() > 30 and String(d.get("title", "")) != "" and String(d.trait.get("text", "")).length() > 30,
+			"%s has a title, bio and trait text" % id)
+
+
+func _defender(id: String) -> Defender:
+	for df in battle.defenders:
+		if df.id == id:
+			return df
+	return null
+
+
+## Long Stretch, Pitch Framing and Skipper in a live battle (defenders hold their throws).
+func _test_update9_defenders() -> void:
+	section("update 9 defenders: Long Stretch, Pitch Framing, Skipper (battle)")
+	var route := battle.routes[0]
+	_hold_fire(true)
+	await _wait(0.1)
+
+	# --- Long Stretch (Moose): runners within 5 m take +25 % damage and are 10 % slower.
+	battle.swap_defender(_defender("jax"), "moose")
+	var moose := _defender("moose")
+	ok(moose != null and moose.trait_id == "long_stretch", "Moose joins the field")
+	_hold_fire(true)
+	var near := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var far := battle.spawn_enemy("runner", route, route.length * 0.15, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	moose.place(near.global_position + Vector3(3.0, 0, 0))
+	await _wait(0.3)
+	var far_d := Field.v2(far.global_position).distance_to(Field.v2(moose.global_position))
+	ok(near.slows.has("long_stretch") and is_equal_approx(float(near.slows.long_stretch[0]), 0.10)
+		and absf(near.current_speed() / near.base_speed - 0.9) < 0.01, "Long Stretch slows a runner 3 m away by 10 %% (speed x%.2f)" % (near.current_speed() / near.base_speed))
+	ok(absf(near.mark_amt - 0.25) < 0.001 and near.mark_t > 0.0, "Long Stretch marks it for +25 %% damage (%.2f)" % near.mark_amt)
+	ok(far_d > 5.0 and not far.slows.has("long_stretch") and far.mark_t <= 0.0, "a runner %.1f m away is not affected" % far_d)
+	var dn := battle.deal_damage(near, 100.0, {"kind": "throw"})
+	var dfar := battle.deal_damage(far, 100.0, {"kind": "throw"})
+	ok(absf(dn / dfar - 1.25) < 0.01, "a runner in Moose's ring takes +25 %% damage from any source (%.0f vs %.0f)" % [dn, dfar])
+	ok(moose._aura_ring != null and moose._aura_ring.visible and absf(moose._aura_ring.scale.x - 5.0) < 0.01, "Moose shows a 5 m ring")
+	# A stronger mark runs out on its own clock, then Moose's takes over.
+	near.apply_mark(0.3, 0.6)
+	await _wait(0.7)
+	ok(absf(near.mark_amt - 0.25) < 0.001, "a stronger card mark is not kept alive by Moose's ring (%.2f)" % near.mark_amt)
+	moose.stun(1.0)
+	await _wait(0.45)
+	ok(not moose._aura_ring.visible and not near.slows.has("long_stretch") and near.mark_t <= 0.0, "a stunned Moose has no ring")
+	moose.cleanse()
+	moose.place(near.global_position + Vector3(30.0, 0, 0))
+	await _wait(0.45)
+	ok(not near.slows.has("long_stretch") and near.mark_t <= 0.0, "leaving the ring ends the slow and the mark")
+	battle.swap_defender(moose, "jax")
+	_clear()
+	await _wait(0.1)
+
+	# --- Pitch Framing (Rosa): every 6 s the most dangerous runner is marked for 6 s (+35 % damage).
+	battle.swap_defender(_defender("rico"), "rosa")
+	var rosa := _defender("rosa")
+	ok(rosa != null and rosa.trait_id == "pitch_framing", "Rosa joins the field")
+	_hold_fire(true)
+	rosa.frame_cd = 100.0
+	var back := battle.spawn_enemy("runner", route, route.length * 0.3, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var lead := battle.spawn_enemy("runner", route, route.length * 0.6, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var mid := battle.spawn_enemy("runner", route, route.length * 0.45, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	ok(rosa.most_dangerous_runner() == lead, "the most dangerous runner is the one closest to scoring")
+	rosa.frame_cd = 0.0
+	await _wait(0.15)
+	ok(rosa.framed.has(lead) and absf(lead.mark_amt - 0.35) < 0.001 and lead.mark_t > 5.5,
+		"Pitch Framing marks the lead runner for 6 s at +35 %% (%.2f, %.1f s)" % [lead.mark_amt, lead.mark_t])
+	ok(not rosa.framed.has(back) and back.mark_t <= 0.0 and rosa.frame_cd > 5.5, "only one runner per call; the next call is 6 s away (%.1f)" % rosa.frame_cd)
+	var mk: Node3D = rosa.framed[lead][1] if rosa.framed.has(lead) else null
+	ok(mk != null and mk.visible and mk.get_child_count() == 2 and Field.v2(mk.global_position).distance_to(Field.v2(lead.global_position)) < 0.3,
+		"a framed runner wears Rosa's marker")
+	var dl := battle.deal_damage(lead, 100.0, {"kind": "throw"})
+	var db := battle.deal_damage(back, 100.0, {"kind": "throw"})
+	ok(absf(dl / db - 1.35) < 0.01, "a framed runner takes +35 %% damage (%.0f vs %.0f)" % [dl, db])
+	rosa.frame_cd = 0.0
+	await _wait(0.15)
+	ok(rosa.framed.has(mid) and not rosa.framed.has(back), "the next call picks the most dangerous runner not yet framed")
+	if battle.has_signal("runner_out"):
+		battle.cards.infinite_energy = false
+		battle.cards.energy = 2.0
+		var e0: float = battle.cards.energy
+		battle.deal_damage(lead, 1.0e7, {"kind": "throw"})
+		await _wait(0.05)
+		ok(battle.cards.energy - e0 >= 0.499 and rosa.frame_refunds == 1, "an out on a framed runner refunds 0.5 energy (%.2f)" % (battle.cards.energy - e0))
+		e0 = battle.cards.energy
+		battle.deal_damage(back, 1.0e7, {"kind": "throw"})
+		await _wait(0.05)
+		ok(battle.cards.energy - e0 < 0.45 and rosa.frame_refunds == 1, "an out on an unframed runner refunds nothing")
+		battle.cards.infinite_energy = true
+	else:
+		print("  (battle.runner_out not present yet: Pitch Framing's energy refund is not tested)")
+		battle.deal_damage(lead, 1.0e7, {"kind": "throw"})
+	await _wait(0.1)
+	ok(not rosa.framed.has(lead) and (not is_instance_valid(mk) or mk.is_queued_for_deletion()), "the marker goes away with the out")
+	battle.swap_defender(rosa, "rico")
+	_clear()
+	await _wait(0.1)
+
+	# --- Skipper (Sid): a hit skips on to one runner behind the target (within 4 m) for 60 %.
+	battle.swap_defender(_defender("ace"), "sid")
+	var sid := _defender("sid")
+	ok(sid != null and sid.trait_id == "skipper", "Sid joins the field")
+	_hold_fire(true)
+	var tgt := battle.spawn_enemy("runner", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var behind := battle.spawn_enemy("runner", route, route.length * 0.5 - 2.0, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	var beyond := battle.spawn_enemy("runner", route, route.length * 0.5 - 9.0, {"lateral": 0.0, "hp_mult": 40.0, "speed_mult": 0.01})
+	await _wait(0.1)
+	var p: Dictionary = sid._build_payload(tgt, false)
+	ok(is_equal_approx(float(p.get("skip", 0.0)), 0.6), "Sid's throws carry the skip (60 %)")
+	var line := behind.global_position - tgt.global_position
+	p.damage = 100.0
+	p.crit = false
+	p.accuracy = 999.0
+	p["_dir"] = line
+	var ht := tgt.hp
+	var hb := behind.hp
+	var hy := beyond.hp
+	var dmg0 := sid.damage_dealt
+	ok(battle.projectiles.hit(tgt, p, tgt.center()), "Sid's throw hits")
+	await _wait(0.9)
+	ok(absf((ht - tgt.hp) - 100.0) < 0.5, "the target takes the full hit (%.0f)" % (ht - tgt.hp))
+	ok(absf((hb - behind.hp) - 60.0) < 0.5, "the ball skips on into the runner 2 m behind for 60 %% (%.0f)" % (hb - behind.hp))
+	ok(is_equal_approx(hy, beyond.hp), "a runner %.1f m behind is out of the skip's reach" % Field.v2(beyond.global_position).distance_to(Field.v2(tgt.global_position)))
+	ok(sid.damage_dealt - dmg0 > 159.0, "skip damage is credited to Sid (%.0f)" % (sid.damage_dealt - dmg0))
+	# Thrown the other way, nothing is behind the target: no skip hit.
+	var p2: Dictionary = sid._build_payload(tgt, false)
+	p2.damage = 100.0
+	p2.crit = false
+	p2.accuracy = 999.0
+	p2["_dir"] = -line
+	hb = behind.hp
+	battle.projectiles.hit(tgt, p2, tgt.center())
+	await _wait(0.9)
+	ok(is_equal_approx(hb, behind.hp), "no skip hit on a runner in front of the target")
+	ok(battle.projectiles.skip_target(tgt, line, 4.0) == behind and battle.projectiles.skip_target(tgt, -line, 4.0) == null,
+		"skip_target looks behind the target only")
+	battle.swap_defender(sid, "ace")
+	battle.apply_formation(battle.run.formation)
+	_hold_fire(false)

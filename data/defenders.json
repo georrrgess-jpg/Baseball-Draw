@@ -296,7 +296,7 @@
    "accent": "#A3D139",
    "signature": "infield_fly",
    "title": "The Big Scoop",
-   "bio": "Moose Malone plays first base like a brick wall with a butterfly net.",
+   "bio": "Moose Malone is the biggest glove in the league. Anything that comes near first base gets scooped, slowed down and swarmed.",
    "stats": {
     "damage": 30,
     "interval": 1.0,
@@ -309,7 +309,7 @@
    "trait": {
     "id": "long_stretch",
     "name": "Long Stretch",
-    "text": "Runners within 5m of him take +25% damage from everyone and are 10% slower."
+    "text": "Runners within 5m of him (the green ring) are 10% slower and take +25% damage from everyone."
    },
    "targeting": "first",
    "unlock": {
@@ -327,7 +327,7 @@
    "accent": "#D63AF9",
    "signature": "tag_at_the_plate",
    "title": "The Strategist",
-   "bio": "Rosa Vega calls every pitch, every throw and, somehow, every runner's next move.",
+   "bio": "Rosa Vega reads runners like a scouting report. She flips her mask up, calls the play, and the whole team throws at her mark.",
    "stats": {
     "damage": 26,
     "interval": 0.9,
@@ -340,7 +340,7 @@
    "trait": {
     "id": "pitch_framing",
     "name": "Pitch Framing",
-    "text": "Every 6s marks the most dangerous runner: it takes +35% damage, and its out gives +0.5 energy."
+    "text": "Every 6s she frames the most dangerous runner for 6s: it takes +35% damage from everyone, and its out gives +0.5 energy."
    },
    "targeting": "strongest",
    "unlock": {
@@ -358,7 +358,7 @@
    "accent": "#5C6BC0",
    "signature": "line_drive",
    "title": "Submarine",
-   "bio": "Sid Okafor throws from below his knees. Runners never see the ball coming up.",
+   "bio": "Sid \"Submarine\" Okafor throws from below his knees. His low skippers bounce off the dirt and keep on going.",
    "stats": {
     "damage": 27,
     "interval": 1.0,
@@ -371,7 +371,7 @@
    "trait": {
     "id": "skipper",
     "name": "Skipper",
-    "text": "Throws skip and pierce: they also hit one runner behind the target for 60% damage."
+    "text": "Throws skip off the dirt: after a hit, the ball carries on into one runner up to 4m behind the target for 60% damage."
    },
    "targeting": "first",
    "unlock": {
