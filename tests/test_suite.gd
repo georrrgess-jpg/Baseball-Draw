@@ -2060,7 +2060,7 @@ const NEW_CARDS_U9 := ["scouting_report", "sprinkler_system", "sweet_spot", "ral
 func test_update9_cards_content() -> void:
 	section("update 9 cards (data)")
 	var expect := {"scouting_report": ["common", "control", 2], "sprinkler_system": ["common", "defense", 2],
-		"sweet_spot": ["uncommon", "offense", 3], "rally_monkey": ["uncommon", "utility", 2], "second_wind": ["rare", "utility", 3],
+		"sweet_spot": ["uncommon", "offense", 3], "rally_monkey": ["uncommon", "utility", 2], "second_wind": ["rare", "utility", 2],
 		"money_ball": ["rare", "utility", 2], "scoop_and_tag": ["rare", "defense", 4], "signal_caller": ["rare", "utility", 3],
 		"hidden_ball_trick": ["epic", "control", 4], "worm_burner": ["epic", "offense", 5], "fireworks_night": ["legendary", "offense", 7],
 		"ground_rule_double": ["legendary", "utility", 6]}
@@ -2107,7 +2107,7 @@ func _test_update9_cards_battle() -> void:
 	var lv := 1
 	var cs := battle.cards
 	_hold_fire(true)
-	await _wait(0.1)
+	await _gwait(0.1)
 	var spawn := func(id: String, rt: Route, d: float, hp := 40.0) -> Enemy:
 		return battle.spawn_enemy(id, rt, d, {"lateral": 0.0, "hp_mult": hp, "speed_mult": 0.01})
 
@@ -2115,12 +2115,12 @@ func _test_update9_cards_battle() -> void:
 	var r1: Enemy = spawn.call("runner", route, route.length * 0.5)
 	var r2: Enemy = spawn.call("runner", other, other.length * 0.4)
 	var sp: Enemy = spawn.call("sprinter", route, route.length * 0.3)
-	await _wait(0.1)
+	await _gwait(0.1)
 	battle.effects.execute("scouting_report", lv, {"enemy": r1, "point": r1.global_position, "valid": true})
-	await _wait(0.05)
+	await _gwait(0.05)
 	ok(r1.scout_t > 0.0 and r2.scout_t > 0.0 and sp.scout_t <= 0.0, "scouting report scouts every runner of the type and no other")
 	var late: Enemy = spawn.call("runner", other, 3.0)
-	await _wait(0.1)
+	await _gwait(0.1)
 	ok(late.scout_t > 0.0, "a runner of the scouted type that spawns later is scouted too")
 	var dealt := battle.deal_damage(r2, 100.0, {"kind": "throw"})
 	var plain := battle.deal_damage(sp, 100.0, {"kind": "throw"})
@@ -2128,32 +2128,32 @@ func _test_update9_cards_battle() -> void:
 	# Enemy.apply_aura_vuln (for defender auras): +25 % while refreshed, gone shortly after.
 	sp.apply_aura_vuln(0.25)
 	var in_aura := battle.deal_damage(sp, 100.0, {"kind": "throw"})
-	await _wait(0.4)
+	await _gwait(0.4)
 	var after_aura := battle.deal_damage(sp, 100.0, {"kind": "throw"})
 	ok(absf(in_aura - 125.0) < 0.5 and absf(after_aura - 100.0) < 0.5, "an aura vulnerability adds 25%% while refreshed (%.1f, then %.1f)" % [in_aura, after_aura])
 	_clear()
-	await _wait(0.2)
+	await _gwait(0.2)
 
 	# Sprinkler System: runners on the soaked stretch are 30 % slower and roll to slip.
 	var wet: Enemy = spawn.call("runner", route, route.length * 0.5)
 	var dry: Enemy = spawn.call("runner", route, route.length * 0.5 - 14.0)
-	await _wait(0.1)
+	await _gwait(0.1)
 	battle.effects.execute("sprinkler_system", lv, {"point": wet.global_position, "valid": true})
-	await _wait(0.1)
+	await _gwait(0.1)
 	ok(wet.slows.has("sprinkler") and absf(float(wet.slows.sprinkler[0]) - 0.3) < 0.001 and not dry.slows.has("sprinkler"),
 		"sprinkler slows runners on the wet stretch only")
 	ok(wet.soak_t > 0.0 and absf(wet.slip_chance - 0.3) < 0.001 and absf(wet.slip_time - 0.6) < 0.001, "wet runners have a 30% chance to slip for 0.6 s")
 	var sure: Enemy = spawn.call("runner", other, other.length * 0.5)
 	sure.apply_soak(2.0, 1.0, 0.6)
-	await _wait(0.65)
+	await _gwait(0.65)
 	ok(sure.stun_t > 0.0, "a certain slip stuns the runner")
 	_clear()
-	await _wait(0.2)
+	await _gwait(0.2)
 
 	# Sweet Spot: every throw is a crit while it lasts.
 	var tgt: Enemy = spawn.call("runner", route, route.length * 0.5)
 	battle.effects.execute("sweet_spot", lv, {"valid": true})
-	await _wait(0.05)
+	await _gwait(0.05)
 	var crits := 0
 	for df in battle.defenders:
 		for i in 5:
@@ -2161,7 +2161,7 @@ func _test_update9_cards_battle() -> void:
 				crits += 1
 	ok(crits == battle.defenders.size() * 5, "sweet spot: every throw crits (%d of %d)" % [crits, battle.defenders.size() * 5])
 	_clear()
-	await _wait(0.1)
+	await _gwait(0.1)
 
 	# Rally Monkey: +3 energy, or +5 and a card after a run scored this inning (clutch).
 	cs.infinite_energy = false
@@ -2188,18 +2188,18 @@ func _test_update9_cards_battle() -> void:
 	cs.cooldowns["power_throw"] = 10.0
 	var interval0 := df0.effective_interval()
 	battle.effects.execute("second_wind", lv, {"defender": df0, "valid": true})
-	await _wait(0.05)
+	await _gwait(0.05)
 	ok(cs.cooldown_left(sig) <= 0.0 and cs.cooldown_left("power_throw") > 0.0, "second wind recharges %s's signature card (%s) and nothing else" % [df0.id, sig])
 	ok(absf(df0.dyn_speed - 0.5) < 0.01 and df0.effective_interval() < interval0 * 0.7, "second wind: +50%% attack speed (%.2f, %.2f -> %.2f s)" % [df0.dyn_speed, interval0, df0.effective_interval()])
 	ok(battle.defenders[1].dyn_speed < 0.01, "second wind boosts only the chosen defender")
 	cs.cooldowns.clear()
 	_clear()
-	await _wait(0.1)
+	await _gwait(0.1)
 
 	# Money Ball: outs pay double coins (through Battle's coin-bonus hook when it has one).
 	var m1: Enemy = spawn.call("runner", route, route.length * 0.5)
 	var m2: Enemy = spawn.call("runner", route, route.length * 0.4)
-	await _wait(0.05)
+	await _gwait(0.05)
 	battle.combo_timer = 0.0
 	var c0 := battle.run.coins
 	m1.die({})
@@ -2212,65 +2212,65 @@ func _test_update9_cards_battle() -> void:
 	ok(base > 0 and absi(doubled - base * 2) <= 1, "money ball doubles the coins for an out (%d -> %d)%s" % [base, doubled,
 		" via add_out_coin_bonus" if battle.has_method("add_out_coin_bonus") else ""])
 	_clear()
-	await _wait(0.1)
+	await _gwait(0.1)
 
 	# Scoop & Tag: damage, knockback and stun; non-boss runners under 30 % are out; bosses never.
 	var pt := route.position_at(route.length * 0.5)
 	var full: Enemy = spawn.call("runner", route, route.length * 0.5)
 	var hurt: Enemy = spawn.call("runner", route, route.length * 0.5 + 0.6)
 	var boss: Enemy = battle.spawn_enemy("iron_slugger", route, route.length * 0.5 - 0.6, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01})
-	await _wait(0.1)
+	await _gwait(0.1)
 	hurt.hp = hurt.max_hp * 0.25
 	boss.hp = boss.max_hp * 0.1
 	var h_full := full.hp
 	var d_full := full.d
 	var power := float(battle.effects.caster_info("scoop_and_tag").power)
 	battle.effects.execute("scoop_and_tag", lv, {"point": pt, "valid": true})
-	await _wait(0.9)
+	await _gwait(0.9)
 	ok(not hurt.alive and boss.alive, "scoop & tag tags out the hurt runner, never the boss")
 	ok(absf((h_full - full.hp) - DB.card_param("scoop_and_tag", "damage", lv) * power) < 1.0 and full.d < d_full - 0.5,
 		"scoop & tag hits for %.0f and knocks back (%.0f, %.1f m)" % [DB.card_param("scoop_and_tag", "damage", lv) * power, h_full - full.hp, d_full - full.d])
 	ok(full.stun_t > 0.0 or full.d < d_full - 0.5, "scoop & tag stuns")
 	_clear()
-	await _wait(0.2)
+	await _gwait(0.2)
 
 	# Signal Caller: the 3 lead runners take +40 % and refund 1 energy when put out.
 	var row: Array = []
 	for i in 4:
 		row.append(spawn.call("runner", route, route.length * 0.3 + i * 3.0))
-	await _wait(0.1)
+	await _gwait(0.1)
 	battle.effects.execute("signal_caller", lv, {"valid": true})
-	await _wait(1.0)
+	await _gwait(1.0)
 	ok(row[3].signal_t > 0.0 and row[2].signal_t > 0.0 and row[1].signal_t > 0.0 and row[0].signal_t <= 0.0, "signal caller marks the 3 lead runners")
 	var sd := battle.deal_damage(row[3], 100.0, {"kind": "throw"})
 	ok(absf(sd - 140.0) < 0.5, "signalled runners take +40%% damage (%.1f)" % sd)
 	cs.energy = 0.0
 	battle.combo_timer = 0.0   # no triple-play energy in the way
 	row[2].die({})
-	await _wait(0.05)
+	await _gwait(0.05)
 	ok(absf(cs.energy - 1.0) < 0.05, "an out on a signalled runner refunds 1 energy (%.2f)" % cs.energy)
 	cs.energy = 0.0
 	battle.combo_timer = 0.0
 	row[0].die({})
-	await _wait(0.05)
+	await _gwait(0.05)
 	ok(cs.energy < 0.05, "an out on an unmarked runner refunds nothing")
 	_clear()
-	await _wait(0.2)
+	await _gwait(0.2)
 
 	# Hidden Ball Trick: after the reveal the strongest non-boss runner is out; bosses lose 15 %.
 	var small: Enemy = spawn.call("runner", route, route.length * 0.6)
 	var big: Enemy = spawn.call("armored", route, route.length * 0.3)
 	var hb: Enemy = battle.spawn_enemy("iron_slugger", other, other.length * 0.3, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01})
-	await _wait(0.1)
+	await _gwait(0.1)
 	var hb0 := hb.hp
 	battle.effects.execute("hidden_ball_trick", lv, {"valid": true})
-	await _wait(0.6)
+	await _gwait(0.6)
 	ok(big.alive, "the hidden ball trick waits for its reveal")
-	await _wait(DB.card_param("hidden_ball_trick", "reveal", lv))
+	await _gwait(DB.card_param("hidden_ball_trick", "reveal", lv))
 	ok(not big.alive and small.alive, "the strongest runner (not the lead one) is tagged out")
 	ok(absf((hb0 - hb.hp) - hb.max_hp * 0.15) < 1.0, "a boss loses 15%% of its max health (%.0f of %.0f)" % [hb0 - hb.hp, hb.max_hp])
 	_clear()
-	await _wait(0.2)
+	await _gwait(0.2)
 
 	# Worm Burner: every runner on the stretch behind the landing spot takes damage and trips;
 	# a runner ahead of it and one on another path don't; the path stays slick.
@@ -2280,7 +2280,7 @@ func _test_update9_cards_battle() -> void:
 		on_path.append(spawn.call("runner", route, d_land - off))
 	var ahead: Enemy = spawn.call("runner", route, d_land + 6.0)
 	var off_path: Enemy = spawn.call("runner", other, 4.0)
-	await _wait(0.1)
+	await _gwait(0.1)
 	var hp_on: Array = on_path.map(func(en: Enemy) -> float: return en.hp)
 	var h_ahead := ahead.hp
 	var h_off := off_path.hp
@@ -2288,11 +2288,11 @@ func _test_update9_cards_battle() -> void:
 	battle.effects.execute("worm_burner", lv, {"point": route.position_at(d_land), "valid": true})
 	var tripped := 0
 	for i in 20:
-		await _wait(0.1)
+		await _gwait(0.1)
 		for en in on_path:
 			if en.stun_t > 0.0:
 				tripped = maxi(tripped, 1)
-	await _wait(0.4)
+	await _gwait(0.4)
 	var hits := 0
 	for i in on_path.size():
 		if absf((float(hp_on[i]) - on_path[i].hp) - DB.card_param("worm_burner", "damage", lv) * wpow) < 1.0:
@@ -2303,43 +2303,43 @@ func _test_update9_cards_battle() -> void:
 	var slick := battle.effects.active_item("wet")
 	ok(not slick.is_empty() and slick.key == "slick" and on_path[0].slows.has("slick"), "worm burner leaves a slick that slows runners")
 	_clear()
-	await _wait(0.2)
+	await _gwait(0.2)
 
 	# Fireworks Night: 14 rockets of 70 (plus splashes) over 4 s, then a finale on the crowd.
 	var crowd: Array = []
 	for i in 5:
 		crowd.append(spawn.call("runner", route, route.length * 0.5 + i * 0.5, 80.0))
-	await _wait(0.1)
+	await _gwait(0.1)
 	var imp0 := float(battle.run.card_impact.get("fireworks_night", {}).get("damage", 0.0))
 	battle.effects.execute("fireworks_night", lv, {"valid": true})
-	await _wait(DB.card_param("fireworks_night", "time", lv) + 1.1)
+	await _gwait(DB.card_param("fireworks_night", "time", lv) + 1.1)
 	var fw := float(battle.run.card_impact.get("fireworks_night", {}).get("damage", 0.0)) - imp0
 	var least := DB.card_param("fireworks_night", "rockets", lv) * DB.card_param("fireworks_night", "damage", lv) + 5.0 * DB.card_param("fireworks_night", "finale_damage", lv)
 	ok(fw >= least - 1.0, "fireworks night deals at least %.0f (%.0f)" % [least, fw])
 	ok(crowd.all(func(en: Enemy) -> bool: return en.stun_t > 0.0), "the finale stuns the crowd")
 	_clear()
-	await _wait(0.2)
+	await _gwait(0.2)
 
 	# Ground Rule Double: the next 2 cards this inning are cast twice; a third isn't; charges end with the inning.
 	var gr: Enemy = spawn.call("runner", route, route.length * 0.5)
-	await _wait(0.1)
+	await _gwait(0.1)
 	battle.effects.execute("ground_rule_double", lv, {"valid": true})
 	ok(cs.double_casts_left(battle.run.inning) == 2, "ground rule double arms 2 casts (and doesn't use one itself)")
 	var g0 := gr.hp
 	battle.effects.execute("bean_ball", lv, {"enemy": gr, "point": gr.global_position, "valid": true})
-	await _wait(0.6)
+	await _gwait(0.6)
 	var once := g0 - gr.hp
-	await _wait(CardEffects.ECHO_DELAY + 1.0)
+	await _gwait(CardEffects.ECHO_DELAY + 1.0)
 	var twice := g0 - gr.hp
 	var bb := DB.card_param("bean_ball", "damage", lv)
 	ok(absf(once - bb) < 1.0 and absf(twice - 2.0 * bb) < 1.0, "a doubled card goes off twice (%.0f, then %.0f)" % [once, twice])
 	ok(cs.double_casts_left(battle.run.inning) == 1, "one cast-twice charge left")
 	battle.effects.execute("bean_ball", lv, {"enemy": gr, "point": gr.global_position, "valid": true})
 	ok(cs.double_casts_left(battle.run.inning) == 0, "the second card uses the last charge")
-	await _wait(CardEffects.ECHO_DELAY + 1.6)
+	await _gwait(CardEffects.ECHO_DELAY + 1.6)
 	var g1 := gr.hp
 	battle.effects.execute("bean_ball", lv, {"enemy": gr, "point": gr.global_position, "valid": true})
-	await _wait(CardEffects.ECHO_DELAY + 1.6)
+	await _gwait(CardEffects.ECHO_DELAY + 1.6)
 	ok(absf((g1 - gr.hp) - bb) < 1.0, "the third card is cast once (%.0f)" % (g1 - gr.hp))
 	cs.grant_double_casts(2, battle.run.inning)
 	ok(cs.double_casts_left(battle.run.inning + 1) == 0, "cast-twice charges run out when the inning ends")
@@ -2347,3 +2347,9 @@ func _test_update9_cards_battle() -> void:
 	cs.infinite_energy = true
 	_clear()
 	_hold_fire(false)
+
+
+## Waits `sec` seconds of game time (the battle's clock): under heavy load the engine advances
+## game time slower than the wall clock, so card timings are checked against game time.
+func _gwait(sec: float) -> void:
+	await get_tree().create_timer(sec, false, false, false).timeout

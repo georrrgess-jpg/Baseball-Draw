@@ -2365,7 +2365,8 @@ func signal_caller(caster: Node3D, marked: Array, dur: float) -> void:
 			vfx.ribbon(vfx.arc_points(from, c, 3.0, 14), body("amber", 1.3), 0.16, 0.55)
 			vfx.ribbon(vfx.arc_points(from, c, 3.0, 14), pal("amber", 0), 0.06, 0.45)
 			punch(c, "amber", 1.2, 12, 1.2)
-			vfx.text_popup(c + Vector3(0, 2.4, 0), str(i + 1), Color(1.0, 0.85, 0.45), 1.5, 1.1))
+			# Staggered heights, so the numbers of a bunched pack don't overlap.
+			vfx.text_popup(c + Vector3(0, 2.4 + i * 0.9, 0), str(i + 1), Color(1.0, 0.85, 0.45), 1.5, 1.1))
 		_live_ring(en.global_position, en, 1.05, Color(SIGNAL, 0.95), dur, alive, 6.0, 2.0)
 		_follow_glyph(en, 2, 1.15, SIGNAL, dur, alive, 1.3)
 
@@ -2394,9 +2395,11 @@ func hidden_ball_start(victim: Node3D, bosses: Array, reveal: float) -> void:
 			var o: Object = wr.get_ref()
 			return o != null and o.alive
 		_live_ring(en.global_position, en, 1.3, Color(TRICK, 0.95), reveal + 0.3, alive, 10.0, 3.0)
-		_follow_glyph(en, 1, 1.4, Color(0.85, 0.7, 1.0), reveal + 0.2, alive, 1.4)
+		# A big "?" well above the health bars (they stack up over a crowd).
+		_follow_glyph(en, 1, 2.3, Color(0.88, 0.74, 1.0), reveal + 0.2, alive, 2.8)
 		var c: Vector3 = en.center()
 		punch(c, "indigo", 1.1, 10, 0.0, false)
+		vfx.sphere_pulse(c, 1.6, Color(TRICK, 0.6), 0.4)
 		vfx.emit("smoke", c, 6, Color(0.2, 0.1, 0.35, 0.7), 1.5, 0.6, 1.0, 1.4, 1.0)
 		# A spotlight cone that tracks the runner during the reveal.
 		vfx.every_frame(reveal, func(k: float) -> void:
