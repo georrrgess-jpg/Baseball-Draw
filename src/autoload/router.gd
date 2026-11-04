@@ -221,6 +221,9 @@ func _select_tab(n: Node, tab: String) -> bool:
 func _loading_tip() -> String:
 	var tips := [
 		"Curveball marks runners: Heat Wave burns them for +50%.",
+		"Press Space between waves to call the next wave early for +1 energy and bonus coins.",
+		"Beat a boss in Standard Siege, Endless or Boss Rush to draft a boon for the rest of the game.",
+		"Win streaks pay up to +50% coins, and your first win each day pays double.",
 		"Defenders in their home zone get a position bonus. Check the placement ring!",
 		"Frost Field turns slowed runners into critical-hit targets.",
 		"Jax's Cannon Arm cuts through armored runners.",

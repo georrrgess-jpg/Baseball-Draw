@@ -1281,7 +1281,7 @@ func _test_navigation() -> void:
 		_check(not Hints.is_showing() and Router.current == "packs", "Esc closes the hint first and stays on the screen")
 	Hints.force_enabled = false
 	# 4. Esc returns to the main menu from every menu screen.
-	for scene in ["play_menu", "packs", "deck_builder", "card_upgrades", "roster", "progression", "settings"]:
+	for scene in ["play_menu", "packs", "deck_builder", "card_upgrades", "roster", "progression", "settings", "shop", "season"]:
 		Router.goto(scene)
 		if not await _wait_scene(scene):
 			_check(false, "%s opens" % scene)

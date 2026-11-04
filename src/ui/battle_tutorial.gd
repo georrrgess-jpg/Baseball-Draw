@@ -268,7 +268,7 @@ func _tip(id: String, data: Variant = null) -> void:
 			tip = {"title": "RUN SCORED!", "text": "A runner reached home plate. The blue dome over the plate is a [b]Base Shield[/b] — each one blocks a run. Keep runners away from home!",
 				"target": func() -> Variant: return _rect(hud._top_runs)}
 		"break":
-			tip = {"title": "WAVE CLEARED!", "text": "Take a breath. Move defenders if you like, then start the next wave. Starting early earns [color=#F5B82E]bonus coins[/color].",
+			tip = {"title": "WAVE CLEARED!", "text": "Take a breath. Move defenders if you like, then start the next wave. Starting early ([color=#F5B82E]NEXT WAVE NOW[/color] or Space) earns +1 energy and [color=#F5B82E]bonus coins[/color].",
 				"target": func() -> Variant: return _rect(hud._start_btn)}
 		"dugout":
 			tip = {"title": "THE DUGOUT", "text": "After every inning, spend the coins you earned on [b]upgrades[/b] for the rest of this game. Then press [b]NEXT INNING[/b].",
