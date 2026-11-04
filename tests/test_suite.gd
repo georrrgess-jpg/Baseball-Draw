@@ -2357,16 +2357,26 @@ func _test_u9_pity_overflow() -> void:
 	var res := Profile.open_pack(Profile.data.packs.size() - 1)
 	ok(res.cards.any(func(c: Dictionary) -> bool: return DB.rarity_index(c.rarity) >= DB.rarity_index("epic")) and int(Profile.data.pity.epic) == 0,
 		"the 10th pack without an Epic has one")
+	ok(Profile.pity_counts("rookie", "epic") and Profile.pity_counts("pro", "epic") and Profile.pity_counts("champion", "epic")
+		and not Profile.pity_counts("signature", "epic"), "every regular pack counts towards the Epic guarantee")
+	ok(Profile.pity_counts("pro", "legendary") and Profile.pity_counts("champion", "legendary") and not Profile.pity_counts("rookie", "legendary"),
+		"Pro and Champion Packs count towards the Legendary guarantee")
+	ok(Profile.pity_pack_names("legendary") == "Pro or Champion Packs" and Profile.pity_pack_names("epic") == "packs", "pity pack names for the Packs screen")
 	Profile.data.pity.legendary = 29
 	Profile.add_pack("rookie", "test")
 	res = Profile.open_pack(Profile.data.packs.size() - 1)
-	ok(res.cards.any(func(c: Dictionary) -> bool: return c.rarity == "legendary") and str(res.pity) == "legendary", "the 30th pack without a Legendary has one")
+	var natural: bool = res.cards.any(func(c: Dictionary) -> bool: return c.rarity == "legendary")
+	ok(str(res.pity) != "legendary" and int(Profile.data.pity.legendary) == (0 if natural else 29), "a Rookie Pack does not trigger the Legendary guarantee")
+	Profile.data.pity.legendary = 29
+	Profile.add_pack("pro", "test")
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(res.cards.any(func(c: Dictionary) -> bool: return c.rarity == "legendary") and str(res.pity) == "legendary", "the 30th Pro Pack without a Legendary has one")
 	ok(int(Profile.data.pity.legendary) == 0 and int(Profile.data.pity.epic) == 0, "a Legendary resets both counters")
 	# Over many packs, the gaps never exceed the guarantees.
 	var gap_e := 0
-	var gap_l := 0
 	var worst_e := 0
-	var worst_l := 0
+	var leg0 := int(Profile.data.pity.legendary)
+	var leg_moved := false
 	for i in 90:
 		Profile.add_pack("rookie", "test")
 		res = Profile.open_pack(Profile.data.packs.size() - 1)
@@ -2374,11 +2384,20 @@ func _test_u9_pity_overflow() -> void:
 		for c in res.cards:
 			best = maxi(best, DB.rarity_index(c.rarity))
 		gap_e = 0 if best >= DB.rarity_index("epic") else gap_e + 1
-		gap_l = 0 if best >= DB.rarity_index("legendary") else gap_l + 1
 		worst_e = maxi(worst_e, gap_e)
-		worst_l = maxi(worst_l, gap_l)
-	ok(worst_e <= 9 and worst_l <= 29, "90 Rookie Packs: at most 9 in a row without an Epic (%d), 29 without a Legendary (%d)" % [worst_e, worst_l])
+		leg_moved = leg_moved or int(Profile.data.pity.legendary) > leg0
+	ok(worst_e <= 9, "90 Rookie Packs: at most 9 in a row without an Epic (%d)" % worst_e)
+	ok(not leg_moved, "Rookie Packs leave the Legendary counter alone")
 	ok(Profile.pity_left("epic") == 10 - int(Profile.data.pity.epic), "pity_left counts down")
+	var gap_l := 0
+	var worst_l := 0
+	for i in 70:
+		Profile.add_pack("pro", "test")
+		res = Profile.open_pack(Profile.data.packs.size() - 1)
+		var has_l: bool = res.cards.any(func(c: Dictionary) -> bool: return c.rarity == "legendary")
+		gap_l = 0 if has_l else gap_l + 1
+		worst_l = maxi(worst_l, gap_l)
+	ok(worst_l <= 29 and Profile.pity_left("legendary") == 30 - int(Profile.data.pity.legendary), "70 Pro Packs: at most 29 in a row without a Legendary (%d)" % worst_l)
 	var pe := int(Profile.data.pity.epic)
 	Profile.add_pack("signature", "test", "heat_wave")
 	Profile.open_pack(Profile.data.packs.size() - 1)

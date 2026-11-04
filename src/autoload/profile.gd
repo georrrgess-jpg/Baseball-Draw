@@ -647,13 +647,14 @@ func _open_one(index: int) -> Dictionary:
 	data.packs.remove_at(index)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([data.created, int(data.packs_opened), pk.type])
-	var counts := pity_counts(str(pk.type)) and str(pk.get("card", "")) == ""
+	var regular := str(pk.get("card", "")) == "" and str(pk.type) != "signature"
+	var counts_e := regular and pity_counts(str(pk.type), "epic")
+	var counts_l := regular and pity_counts(str(pk.type), "legendary")
 	var forced := ""
-	if counts:
-		if int(data.pity.get("legendary", 0)) >= pity_limit("legendary") - 1:
-			forced = "legendary"
-		elif int(data.pity.get("epic", 0)) >= pity_limit("epic") - 1:
-			forced = "epic"
+	if counts_l and int(data.pity.get("legendary", 0)) >= pity_limit("legendary") - 1:
+		forced = "legendary"
+	elif counts_e and int(data.pity.get("epic", 0)) >= pity_limit("epic") - 1:
+		forced = "epic"
 	var ids := roll_pack(str(pk.type), rng, str(pk.get("card", "")), forced)
 	var cards: Array = []
 	var overflow := 0
@@ -669,9 +670,16 @@ func _open_one(index: int) -> Dictionary:
 			continue
 		var is_new := grant_card(cid, copies)
 		cards.append({"id": cid, "rarity": rarity, "new": is_new, "copies": 0 if is_new else copies})
-	if counts:
-		data.pity.epic = 0 if best >= DB.rarity_index("epic") else int(data.pity.get("epic", 0)) + 1
-		data.pity.legendary = 0 if best >= DB.rarity_index("legendary") else int(data.pity.get("legendary", 0)) + 1
+	# Pulling the rarity from any regular pack resets its counter; only the counting pack types advance it.
+	if regular:
+		if best >= DB.rarity_index("epic"):
+			data.pity.epic = 0
+		elif counts_e:
+			data.pity.epic = int(data.pity.get("epic", 0)) + 1
+		if best >= DB.rarity_index("legendary"):
+			data.pity.legendary = 0
+		elif counts_l:
+			data.pity.legendary = int(data.pity.get("legendary", 0)) + 1
 	if overflow > 0:
 		data.coins = int(data.coins) + overflow
 		bump_stat("overflow_coins", float(overflow))
@@ -982,14 +990,29 @@ func pity_limit(rarity: String) -> int:
 
 
 ## Packs left until the pity guarantee for `rarity` ("epic" or "legendary") kicks in: 1 means the next
-## pack that counts (see pity_counts) is guaranteed one.
+## pack that counts (see pity_counts / pity_pack_names) is guaranteed one.
 func pity_left(rarity: String) -> int:
 	return maxi(1, pity_limit(rarity) - int(data.get("pity", {}).get(rarity, 0)))
 
 
-## True when opening a pack of `type` advances the pity counters.
-func pity_counts(type: String) -> bool:
-	return type in (pack_rules().pity.get("counts", ["rookie", "pro", "champion"]) as Array)
+## True when opening a pack of `type` advances the pity counter of `rarity` (data/packs.json pity.counts:
+## every pack for the Epic guarantee, Pro and Champion Packs for the Legendary one). Signature packs never do.
+func pity_counts(type: String, rarity := "epic") -> bool:
+	var c: Variant = pack_rules().pity.get("counts", ["rookie", "pro", "champion"])
+	if typeof(c) == TYPE_DICTIONARY:
+		c = (c as Dictionary).get(rarity, [])
+	return typeof(c) == TYPE_ARRAY and type in (c as Array)
+
+
+## "Pro or Champion Packs": the packs that count towards `rarity`'s guarantee, for the Packs screen.
+func pity_pack_names(rarity: String) -> String:
+	var names: Array = []
+	for t in DB.pack_order:
+		if pity_counts(t, rarity):
+			names.append(str(DB.pack(t).get("name", t)).replace(" Pack", ""))
+	if names.size() >= 3:
+		return "packs"
+	return " or ".join(names) + " Packs"
 
 
 ## Coins one extra copy of a max-level card of `rarity` turns into.
