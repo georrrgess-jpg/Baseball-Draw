@@ -41,7 +41,7 @@ HERO_BASE = dict(
 
 # head-wear height above the crown (fraction of the head height)
 TOP_EXTRA = {"cap": 0.075, "cap_back": 0.075, "visor": 0.10, "headband": 0.0,
-             "catcher": 0.12}
+             "catcher": 0.12, "catcher_up": 0.075, "none": 0.0}
 
 FACE_DEFAULT = dict(
     width=1.0, jaw=0.6, jaw_w=1.0, chin=1.0, chin_w=1.0, cheek=1.0, brow=1.0,
@@ -115,7 +115,8 @@ class Hero(HeadMixin, BodyMixin, WearMixin):
         self.build_brows(m["Hair"] if not cfg.get("brow_col") else m["Brow"])
         mouth_surf = None
         if cfg.get("beard") or cfg.get("full_beard"):
-            beard = self.build_beard(full=bool(cfg.get("full_beard")))
+            beard = self.build_beard(full=bool(cfg.get("full_beard")),
+                                     bulk_k=cfg.get("beard_bulk", 1.0))
             if cfg.get("full_beard"):
                 mouth_surf = geo.Surface(beard)
         self.build_mouth(mouth_surf)
@@ -125,14 +126,19 @@ class Hero(HeadMixin, BodyMixin, WearMixin):
             self.build_sunglasses()
         # hair + head-wear
         self.build_hair(cfg.get("hair_style", "short"), m["Hair"], hw)
-        if hw in ("cap", "cap_back"):
-            self.build_cap(yaw=180.0 if hw == "cap_back" else 0.0, emblem=cfg.get("emblem"))
+        if hw in ("cap", "cap_back", "catcher_up"):
+            self.build_cap(yaw=0.0 if hw == "cap" else 180.0, emblem=cfg.get("emblem"),
+                           plain=(hw == "catcher_up"))
+            if hw == "catcher_up":
+                self.build_raised_mask()
         elif hw == "visor":
             self.build_visor(getattr(self, "bob_fn", None) or self.head_sdf(0.03))
         elif hw == "headband":
             self.build_headband()
         elif hw == "catcher":
             self.build_catcher_helmet()
+        if cfg.get("goggles"):
+            self.build_goggles()
         # body
         self.build_neck()
         self.build_torso()
@@ -154,8 +160,11 @@ class Hero(HeadMixin, BodyMixin, WearMixin):
             if cfg.get("wristbands"):
                 self.build_wristband(sd, m["Undershirt"])
         self.build_hand("R", m["Skin"])
-        self.build_mitt("L", catcher=(cfg.get("mitt") == "catcher"))
-        self.build_pants(knee_pants=gear)
+        self.build_mitt("L", catcher=(cfg.get("mitt") == "catcher"),
+                        first_base=(cfg.get("mitt") == "first_base"))
+        # high socks: knee-length pants over long striped socks (Sid)
+        self.build_pants(knee_pants=gear or bool(cfg.get("high_socks")),
+                         knee_drop=0.025 if gear else 0.085)
         self.build_pant_stripes()
         self.build_belt()
         self.build_socks(stripes=not gear)

@@ -1,6 +1,7 @@
 """Character definitions (colours, proportions, outfit pieces)."""
 
-DEFENDER_IDS = ["ace", "rico", "maya", "jax", "kai", "bruno", "nova", "dex", "hana"]
+DEFENDER_IDS = ["ace", "rico", "maya", "jax", "kai", "bruno", "nova", "dex", "hana", "moose", "rosa",
+                "sid"]
 ENEMY_IDS = ["runner", "sprinter", "armored", "jumper", "swarmer", "trickster", "captain",
              "slugger", "base_stealer"]
 BOSS_IDS = ["iron_slugger", "phantom_captain", "grand_slammer"]
@@ -111,6 +112,51 @@ DEFENDERS = {
                   hand_scale=1.2),
         face=dict(jaw=0.0, jaw_w=0.9, chin=0.8, nose=0.72, nose_w=0.85, eye=1.1, brow=0.55,
                   brow_thick=0.8, mouth="open", smile=0.85, width=0.95, brow_angle=0.2),
+    ),
+    # Update 9 free agents.  Moose: the biggest body on the team, a huge beard
+    # and a long first baseman's mitt; long accent sleeves.
+    "moose": dict(
+        height=2.07,
+        name="Moose", number=25, accent="#A3D139", skin="#C98B62", hair="#3B2416",
+        iris="#4A3020", hair_style="short", headwear="cap", emblem="diamond",
+        body=dict(muscle=1.5, chest_w=0.248, chest_d=0.172, waist_w=0.212, waist_d=0.170,
+                  pelvis_w=0.200, pelvis_d=0.148, sh_half=0.272, arm_r=0.075, forearm_r=0.070,
+                  wrist_r=0.042, thigh_r=0.124, calf_r=0.080, neck_r=0.084, belly=0.75,
+                  hand_scale=1.5, head=0.285, hip_half=0.114),
+        face=dict(jaw=1.15, jaw_w=1.14, chin=1.0, nose=1.3, nose_w=1.35, brow=1.25,
+                  brow_thick=1.4, width=1.08, mouth="grin", smile=0.8, ear=1.1,
+                  brow_angle=0.4, eye_open=0.9),
+        full_beard=True, beard_bulk=1.25, mitt="first_base",
+    ),
+    # Rosa: athletic catcher, backwards skull cap with the mask pushed up on
+    # top, a braid, chest protector, shin guards and a catcher's mitt.
+    "rosa": dict(
+        height=1.745, female=True, top_extra=0.0,
+        name="Rosa", number=7, accent="#D63AF9", skin="#C68A5E", hair="#1A100C",
+        iris="#4A2A18", hair_style="braid", headwear="catcher_up", emblem=None,
+        body=dict(muscle=0.98, chest_w=0.168, chest_d=0.118, waist_w=0.124, waist_d=0.095,
+                  pelvis_w=0.158, pelvis_d=0.114, sh_half=0.200, arm_r=0.049, forearm_r=0.044,
+                  wrist_r=0.028, thigh_r=0.096, calf_r=0.061, neck_r=0.050, head=0.305,
+                  hand_scale=1.22),
+        face=dict(jaw=0.15, jaw_w=0.92, chin=0.9, nose=0.8, nose_w=0.9, eye=1.04, brow=0.7,
+                  brow_thick=1.0, brow_angle=-0.15, mouth="smile", smile=0.35, smirk=0.65,
+                  width=0.96, eye_open=0.9),
+        gear=True, mitt="catcher",
+        mask=dict(angle=-82.0, pivot_y=0.06, pivot_z=-0.02),
+    ),
+    # Sid "Submarine": lanky and long-limbed, a high-top fade with goggles
+    # pushed up on the forehead, knee pants over high striped socks.
+    "sid": dict(
+        height=1.995, idle="hip", top_extra=0.22,
+        name="Sid", number=51, accent="#5C6BC0", skin="#4E2E1E", hair="#0E0A08",
+        iris="#3A2414", hair_style="flattop", headwear="none", emblem=None,
+        body=dict(muscle=0.82, chest_w=0.160, chest_d=0.110, waist_w=0.116, waist_d=0.090,
+                  pelvis_w=0.140, pelvis_d=0.104, sh_half=0.198, arm_r=0.044, forearm_r=0.039,
+                  wrist_r=0.027, thigh_r=0.082, calf_r=0.052, neck_r=0.052, upper_arm=0.325,
+                  forearm=0.305, thigh=0.435, shin=0.425, head=0.285, hand_scale=1.3),
+        face=dict(jaw=0.55, chin=1.15, nose=1.0, nose_w=1.2, mouth="smile", smile=0.55,
+                  smirk=0.4, eye_open=0.86, brow_angle=0.25, cheek=0.9, ear=1.05),
+        goggles=True, high_socks=True, throw_style="submarine",
     ),
 }
 

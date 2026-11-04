@@ -145,7 +145,7 @@ class WearMixin:
         front = sdf.ellipsoid(P(0, -0.09, 0.19), (0.31 * w * h + g, 0.34 * h + g, 0.34 * h + g))
         return sdf.blend(dome, 0.12 * h, front)
 
-    def build_cap(self, yaw=0.0, emblem=None):
+    def build_cap(self, yaw=0.0, emblem=None, plain=False):
         h = self.h
         m = self.m
         fn = self.cap_sdf()
@@ -162,7 +162,8 @@ class WearMixin:
         crown, grid = self.shell("CapCrown", m["Cap"], fn, phis, z_lo, nrows=11, apex=True,
                                  edge="lip", row_bias=0.85)
         # panel seams (subtle raised lines)
-        for ph in (yaw + 34, yaw - 34, yaw + 110, yaw - 110):
+        # (plain: no seams or button - a raised catcher's mask covers the top)
+        for ph in (() if plain else (yaw + 34, yaw - 34, yaw + 110, yaw - 110)):
             if ang_dist(ph, oc) < 30:
                 continue
             pts = [self.surface_at(fn, ph, z) for z in np.linspace(z_lo(ph) + 0.03, 0.50, 7)]
@@ -170,11 +171,12 @@ class WearMixin:
             v, f = geo.tube(pts, 0.0065 * h, nseg=4, cap0='pole', cap1='pole')
             self.add("CapSeam", v, f, m["Cap"], rigid="head")
         # button on top (accent: readable from above)
-        top, _ = geo.project_rays(fn, self.head_center(), A([[0, 0, 1.0]]), 1.2 * h)
-        v, f = superellipsoid(top[0] + A([0, 0, 0.006 * h]), (0.05 * h, 0.05 * h, 0.022 * h),
-                              nu=12, nv=6)
-        f = orient_outward(v, f, top[0])
-        self.add("CapButton", v, f, m["Undershirt"], rigid="head")
+        if not plain:
+            top, _ = geo.project_rays(fn, self.head_center(), A([[0, 0, 1.0]]), 1.2 * h)
+            v, f = superellipsoid(top[0] + A([0, 0, 0.006 * h]), (0.05 * h, 0.05 * h, 0.022 * h),
+                                  nu=12, nv=6)
+            f = orient_outward(v, f, top[0])
+            self.add("CapButton", v, f, m["Undershirt"], rigid="head")
         # snapback strap across the opening
         sph = np.linspace(oc - 26, oc + 26, 9)
         base = A([[self.surface_at(fn, ph, cap_rim(ph) + z) for z in (0.0, 0.02, 0.04)]
@@ -379,11 +381,13 @@ class WearMixin:
 
     def build_hair(self, style, mat, headwear):
         h = self.h
-        cap = headwear in ("cap", "cap_back")
+        cap = headwear in ("cap", "cap_back", "catcher_up")
         if style == "none":
             return
         if style == "bob":
             return self.build_bob(mat)
+        if style == "flattop":
+            return self.build_flattop(mat)
         if style in ("buzz",):
             if headwear == "catcher":
                 return self.hair_base("short", mat, under_cap=True, grow=0.012)
@@ -416,6 +420,10 @@ class WearMixin:
             for sx in (1, -1):
                 T(mat, sx * 66, 0.08, 0.17, 0.045, -82, curl=0.05, flat=0.5, lean=sx * -10)
             self.build_ponytail(mat)
+        elif style == "braid":
+            for sx in (1, -1):
+                T(mat, sx * 64, 0.06, 0.20, 0.048, -84, curl=0.05, flat=0.5, lean=sx * -8)
+            self.build_braid(mat)
         elif style == "curly":
             self.build_curls(mat)
 
@@ -527,12 +535,12 @@ class WearMixin:
     # =====================================================================
     # face extras
     # =====================================================================
-    def build_beard(self, full=False):
+    def build_beard(self, full=False, bulk_k=1.0):
         h = self.h
         P = self.P
         m = self.m
         base = self.head_sdf(0.0)
-        t0, t1 = (0.016, 0.032) if not full else (0.03, 0.07)
+        t0, t1 = (0.016, 0.032) if not full else (0.03, 0.07 * bulk_k)
         oz = self.o[2]
 
         def fn0(Pts):
@@ -542,7 +550,10 @@ class WearMixin:
         fn0.bbox = base.bbox
         fn = fn0
         if full:
-            bulk = sdf.ellipsoid(P(0, -0.20, -0.47), (0.27 * h, 0.21 * h, 0.25 * h))
+            b = bulk_k - 1.0
+            bulk = sdf.ellipsoid(P(0, -0.20 - 0.04 * b, -0.47 - 0.16 * b),
+                                 (0.27 * (1 + 0.25 * b) * h, 0.21 * (1 + 0.45 * b) * h,
+                                  0.25 * (1 + 0.9 * b) * h))
             fn = sdf.blend(fn0, 0.12 * h, bulk)
         self.beard_fn = fn
         if full:
@@ -786,3 +797,158 @@ class WearMixin:
                                   e1=2.6, e2=2.4)
             f = orient_outward(v, f, fc - A([0, 0, 0.02]))
             self.add("FootFlap." + side, v, f, m["Gear"], rigid="foot." + side)
+
+    # =====================================================================
+    # Update 9: braid, flat-top, goggles, catcher's mask pushed up
+    # =====================================================================
+    def build_braid(self, mat):
+        """A thick three-strand braid from under the cap down the back of the
+        neck (Rosa): plaits alternate left / right along the curve, with a
+        hair tie in the accent colour and a short tuft at the end."""
+        h = self.h
+        P = self.P
+        pts = [P(0, 0.33, -0.10), P(0, 0.47, -0.15), P(0.01, 0.58, -0.25), P(0.025, 0.64, -0.38),
+               P(0.04, 0.65, -0.52), P(0.05, 0.62, -0.66), P(0.055, 0.585, -0.76)]
+        pts = geo.smooth_polyline(pts, 40)
+        T, U, V = geo.transport_frames(pts, A([1.0, 0, 0]))
+        # root: a smooth gathered bun of hair the plaits start from
+        v, f = superellipsoid(pts[3], (0.105 * h, 0.085 * h, 0.095 * h), nu=10, nv=6)
+        f = orient_outward(v, f, pts[3])
+        self.add("BraidRoot", v, f, mat, rigid="head")
+        n_pl = 6
+        i0, i1 = 5, 34
+        idx = np.linspace(i0, i1, n_pl).astype(int)
+        for k, i in enumerate(idx):
+            t = k / (n_pl - 1)
+            r = (0.070 - 0.026 * t) * h
+            side = 1.0 if k % 2 == 0 else -1.0
+            c = pts[i] + U[i] * side * r * 0.42
+            # each plait leans across the braid axis
+            ax = unit(T[i] + U[i] * side * 0.55)
+            sd = unit(np.cross(ax, V[i]))
+            R = np.stack([sd, V[i], ax], 1)
+            v, f = superellipsoid(c, (r * 0.95, r * 0.80, r * 1.45), R, nu=8, nv=6, e1=2.2,
+                                  e2=2.2)
+            f = orient_outward(v, f, c)
+            self.add("BraidPlait", v, f, mat, rigid="head")
+        # tie + end tuft
+        c = pts[i1 + 1]
+        ring = [c + (U[i1 + 1] * math.cos(a) + V[i1 + 1] * math.sin(a)) * 0.040 * h
+                for a in np.linspace(0, 2 * np.pi, 10, endpoint=False)]
+        v, f = geo.tube(ring, 0.017 * h, nseg=5, closed_path=True, up=T[i1 + 1])
+        self.add("HairTie", v, f, self.m["Undershirt"], rigid="head")
+        tip = pts[-1] + T[-1] * 0.06 * h
+        v, f = geo.tube([pts[i1 + 1], pts[-2], tip], [0.040 * h, 0.036 * h, 0.010 * h], nseg=8,
+                        up=(1, 0, 0), cap0='pole', cap1='pole')
+        self.add("BraidTuft", v, f, mat, rigid="head")
+
+    def flattop_sdf(self, grow=0.02):
+        h = self.h
+        P = self.P
+        w = self.f["width"]
+        top = sdf.box(P(0, 0.07, 0.535), (0.300 * w * h, 0.360 * h, 0.215 * h), rnd=0.07 * h)
+        return sdf.blend(self.head_sdf(grow), 0.07 * h, top)
+
+    def build_flattop(self, mat):
+        """High-top fade (Sid): short at the sides, a tall flat block on top."""
+        fn = self.flattop_sdf()
+        self.flattop_fn = fn
+        lo = periodic(HAIRLINE["short"])
+        phis = np.linspace(0, 360, 48, endpoint=False)
+        obj, grid = self.shell("Hair", mat, fn, phis, lo, nrows=16, apex=True)
+        return obj
+
+    def build_goggles(self):
+        """Sport goggles pushed up on the forehead, strap around the head (Sid)."""
+        h = self.h
+        m = self.m
+        fn = self.flattop_sdf(0.03) if getattr(self, "flattop_fn", None) else self.head_sdf(0.03)
+        c0 = self.head_center()
+
+        def z_lo(ph):
+            return 0.20 + 0.05 * math.cos(math.radians(ph))
+        phis = np.linspace(0, 360, 44, endpoint=False)
+        base = A([[self.surface_at(fn, ph, z_lo(ph) + dz) for dz in (0.0, 0.035, 0.07)]
+                  for ph in phis])
+        nrm = unit(base - c0)
+        th = A([0.008, 0.015, 0.008]) * h
+        top = base + nrm * th[None, :, None]
+        inner = base - nrm * 0.006 * h
+        rows = [inner[:, 0], top[:, 0], top[:, 1], top[:, 2], inner[:, 2]]
+        grid = np.stack(rows, 1)
+        verts = list(grid.reshape(-1, 3))
+        faces = self.grid_faces(len(phis), len(rows), closed=True)
+        faces = orient_outward(verts, faces, c0)
+        self.add("GoggleStrap", verts, faces, m["Undershirt"], rigid="head")
+        # two lens cups on the forehead + bridge
+        for sx in (1, -1):
+            ph = sx * 21.0
+            p = self.surface_at(fn, ph, z_lo(ph) + 0.035)
+            n = unit(p - c0)
+            n = unit(n + A([0, 0, 0.35]))
+            u = unit(np.cross(A([0, 0, 1.0]), n))
+            v = unit(np.cross(n, u))
+            R = np.stack([u, v, n], 1)
+            cup = p + n * 0.030 * h
+            vv, ff = superellipsoid(cup, (0.122 * h, 0.088 * h, 0.048 * h), R, nu=18, nv=8,
+                                    e1=2.6, e2=2.2)
+            ff = orient_outward(vv, ff, cup)
+            self.add("GoggleCup", vv, ff, m["Belt"], rigid="head")
+            lens = cup + n * 0.030 * h
+            vv, ff = superellipsoid(lens, (0.104 * h, 0.072 * h, 0.026 * h), R, nu=18, nv=6,
+                                    e1=2.6, e2=2.0)
+            ff = orient_outward(vv, ff, lens - n * 0.05 * h)
+            self.add("GoggleLens", vv, ff, m["Visor"], rigid="head")
+        pl = self.surface_at(fn, 0, z_lo(0) + 0.035)
+        nb = unit(pl - c0)
+        v, f = geo.tube([pl + nb * 0.04 * h + A([0.05 * h, 0, 0]), pl + nb * 0.055 * h,
+                         pl + nb * 0.04 * h - A([0.05 * h, 0, 0])], 0.016 * h, nseg=6)
+        self.add("GoggleBridge", v, f, m["Belt"], rigid="head")
+
+    def build_raised_mask(self):
+        """Traditional catcher's mask pushed up onto the top of the head over a
+        backwards skull cap (Rosa): accent bars in a padded frame, rotated up
+        about the ear axis from the face position."""
+        h = self.h
+        m = self.m
+        cfg = self.cfg.get("mask", {})
+        ang = math.radians(cfg.get("angle", -82.0))
+        piv = self.P(0, cfg.get("pivot_y", 0.06), cfg.get("pivot_z", -0.02))
+        lift = A(cfg.get("lift", (0.0, 0.0, 0.0))) * h
+        ca, sa = math.cos(ang), math.sin(ang)
+
+        def X(p):
+            q = A(p) - piv
+            y = q[1] * ca - q[2] * sa
+            z = q[1] * sa + q[2] * ca
+            return piv + A([q[0], y, z]) + lift
+        cage = self.head_sdf(0.17)
+        bars = []
+        for ph in (-14, 14):
+            bars.append([self.surface_at(cage, ph, z) for z in np.linspace(0.20, -0.50, 7)])
+        for z, span in ((0.0, 56), (-0.17, 54), (-0.34, 46), (-0.48, 30)):
+            bars.append([self.surface_at(cage, ph, z) for ph in np.linspace(-span, span, 9)])
+        for pts in bars:
+            pts = [X(p) for p in geo.smooth_polyline(pts, max(2, len(pts)))]
+            v, f = geo.tube(pts, 0.022 * h, nseg=5, cap0="pole", cap1="pole")
+            self.add("MaskBar", v, f, m["Gear"], rigid="head")
+        # padded frame: top pad + side pads + chin pad
+        frame = [self.surface_at(cage, ph, z) for ph, z in
+                 ((-58, -0.30), (-60, -0.05), (-52, 0.15), (-30, 0.24), (0, 0.26), (30, 0.24),
+                  (52, 0.15), (60, -0.05), (58, -0.30))]
+        frame = [X(p) for p in geo.smooth_polyline(frame, 16)]
+        v, f = geo.tube(frame, 0.050 * h, nseg=6, cap0="pole", cap1="pole", ovals=[0.55] * 16)
+        self.add("MaskPad", v, f, m["Belt"], rigid="head")
+        chin = [X(p) for p in geo.smooth_polyline(
+            [self.surface_at(cage, ph, -0.52) for ph in (-34, -12, 12, 34)], 10)]
+        v, f = geo.tube(chin, 0.040 * h, nseg=6, cap0='pole', cap1='pole', ovals=[0.6] * 10)
+        self.add("MaskPad", v, f, m["Belt"], rigid="head")
+        # straps from the frame sides around the back of the cap
+        fn = self.cap_sdf(0.012) if getattr(self, "cap_fn", None) is not None else self.head_sdf(0.06)
+        for sx in (1, -1):
+            a = frame[0] if sx < 0 else frame[-1]
+            pts = [a] + [self.surface_at(fn, sx * ph, 0.10) for ph in (100, 130, 160, 180)]
+            pts = geo.smooth_polyline(pts, 12)
+            v, f = geo.tube(pts, 0.016 * h, nseg=4, cap0="pole", cap1="pole", ovals=[0.4] * 12,
+                            up=(0, 0, 1))
+            self.add("MaskStrap", v, f, m["Belt"], rigid="head")
