@@ -26,6 +26,10 @@ var cooldowns: Dictionary = {}   # card id -> seconds left
 var infinite_energy := false
 var played_this_run := 0
 var rng := RandomNumberGenerator.new()
+## Ground Rule Double: cards still to be cast twice, and the inning they belong to (they run
+## out when the inning ends).
+var double_left := 0
+var double_inning := -1
 
 
 func setup(deck_ids: Array, start_energy: float, seed_value: int) -> void:
@@ -141,6 +145,37 @@ func commit(index: int, cooldown_scale := 1.0) -> String:
 	hand_changed.emit()
 	energy_changed.emit()
 	return id
+
+
+## Ground Rule Double: the next `n` cards played in `inning` are cast twice (a new grant
+## replaces what is left of an old one).
+func grant_double_casts(n: int, inning: int) -> void:
+	double_left = maxi(n, 0)
+	double_inning = inning
+	hand_changed.emit()
+
+
+## Cards left to cast twice in `inning` (0 once that inning is over).
+func double_casts_left(inning: int) -> int:
+	return double_left if inning == double_inning else 0
+
+
+## Uses up one cast-twice charge for a card played in `inning`. True when the card echoes.
+func take_double_cast(inning: int) -> bool:
+	if double_casts_left(inning) <= 0:
+		return false
+	double_left -= 1
+	hand_changed.emit()
+	return true
+
+
+## Second Wind: takes a card off cooldown wherever it is (hand, deck or discard).
+func reset_cooldown(id: String) -> bool:
+	if not cooldowns.has(id):
+		return false
+	cooldowns.erase(id)
+	hand_changed.emit()
+	return true
 
 
 func add_energy(n: float) -> void:
