@@ -457,16 +457,17 @@ static func reward_picture(r: Dictionary, h := 92.0) -> Control:
 	var pk := _main_pack(r)
 	if str(r.get("uniform", "")) != "":
 		var u: Dictionary = DB.uniforms.get(str(r.uniform), {})
-		var cols: Dictionary = u.get("colors", {})
-		var sw := PanelContainer.new()
-		var jersey := Color(str(cols.get("Jersey", "#C8102E")))
-		var trim := Color(str(cols.get("JerseyTrim", "#F5B82E")))
-		sw.add_theme_stylebox_override("panel", UITheme.panel_style(jersey, trim, 4, 14, 6))
-		sw.custom_minimum_size = Vector2(h * 0.85, h * 0.85)
-		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var ic := UITheme.icon_rect("special", h * 0.5, trim)
-		sw.add_child(ic)
-		holder.add_child(sw)
+		var jer := JerseyIcon.new()
+		jer.colors = u.get("colors", {})
+		jer.custom_minimum_size = Vector2(h * 0.84, h * 0.78)
+		holder.add_child(jer)
+		if pk != "":   # the uniform comes with a pack: a small pack in the corner
+			var pa := PackArt.new(pk)
+			pa.custom_minimum_size = Vector2(h * 0.3, h * 0.46)
+			pa.size = pa.custom_minimum_size
+			pa.position = Vector2(h * 0.84 - h * 0.24, h * 0.78 - h * 0.36)
+			pa.rotation = deg_to_rad(8.0)
+			jer.add_child(pa)
 	elif pk != "":
 		var pa := PackArt.new(pk, str(r.get("card", "")) if pk == "signature" else "")
 		pa.custom_minimum_size = Vector2(h * 0.65, h)
@@ -599,3 +600,39 @@ func _restore_focus(t: int) -> void:
 	var b: Button = tier_buttons.get(t)
 	if b and is_instance_valid(b):
 		b.grab_focus()
+
+
+
+## A baseball jersey drawn in a uniform's colours (Season Pass uniform rewards).
+class JerseyIcon extends Control:
+	var colors: Dictionary = {}
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		var body := Color(str(colors.get("Jersey", "#C8102E")))
+		var trim := Color(str(colors.get("JerseyTrim", "#F5B82E")))
+		var num := Color(str(colors.get("Number", "#F4F1EA")))
+		# Shirt silhouette: shoulders, short sleeves, a V neck.
+		var pts := PackedVector2Array([
+			Vector2(w * 0.36, h * 0.04), Vector2(w * 0.5, h * 0.2), Vector2(w * 0.64, h * 0.04),
+			Vector2(w * 0.86, h * 0.12), Vector2(w * 1.0, h * 0.4), Vector2(w * 0.82, h * 0.48),
+			Vector2(w * 0.78, h * 0.36), Vector2(w * 0.78, h * 0.98), Vector2(w * 0.22, h * 0.98),
+			Vector2(w * 0.22, h * 0.36), Vector2(w * 0.18, h * 0.48), Vector2(0.0, h * 0.4),
+			Vector2(w * 0.14, h * 0.12)])
+		draw_colored_polygon(pts, body)
+		var outline := pts.duplicate()
+		outline.append(pts[0])
+		draw_polyline(outline, trim, maxf(2.0, w * 0.035), true)
+		# Button placket and the number.
+		draw_line(Vector2(w * 0.5, h * 0.2), Vector2(w * 0.5, h * 0.96), Color(trim, 0.8), maxf(1.5, w * 0.02))
+		var f := UITheme.font_display()
+		var fs := int(h * 0.32)
+		var t := "30"
+		var ts := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		var at := Vector2(w * 0.5 - ts.x * 0.5, h * 0.66)
+		draw_string_outline(f, at, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(2, fs / 8), trim)
+		draw_string(f, at, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, num)
