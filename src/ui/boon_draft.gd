@@ -60,8 +60,17 @@ func _ready() -> void:
 		cards[i].focus_neighbor_left = cards[posmod(i - 1, cards.size())].get_path()
 		cards[i].focus_neighbor_right = cards[posmod(i + 1, cards.size())].get_path()
 
-	var foot := UITheme.label("Click a card or press 1 / 2 / 3.  Boons last for the rest of this game.", UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
-	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# The hint sits on a dark pill so it reads over the dimmed hand below.
+	var foot := PanelContainer.new()
+	var fs := UITheme.panel_style(Color(0.02, 0.03, 0.06, 0.9), Color(1, 1, 1, 0.12), 1, 16, 8)
+	fs.content_margin_left = 18
+	fs.content_margin_right = 18
+	foot.add_theme_stylebox_override("panel", fs)
+	foot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fl := UITheme.label("Click a card or press 1 / 2 / 3.  Boons last for the rest of this game.", UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
+	fl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	foot.add_child(fl)
 	_box.add_child(foot)
 	_reveal(title, sub, foot)
 	Audio.ui("ui_slide")
