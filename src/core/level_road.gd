@@ -46,7 +46,7 @@ static func reward(level: int) -> Dictionary:
 	return out
 
 
-## "Nova joins the team · Pro Pack · 150 coins"
+## "Nova joins the team · Pro Pack · 225 coins"
 static func reward_text(level: int, short := false) -> String:
 	var r := reward(level)
 	var parts: Array = []

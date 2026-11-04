@@ -96,7 +96,8 @@ func _ready() -> void:
 	Profile.achievement_unlocked.connect(_on_achievement)
 	Profile.notice.connect(func(t: String) -> void: toast(t, "info"))
 	Profile.level_up.connect(func(l: int) -> void:
-		toast("Account level %d!  +100 coins" % l, "level")
+		var c := int(LevelRoad.reward(l).coins)
+		toast("Account level %d!" % l + ("  +%s coins" % UITheme.format_int(c) if c > 0 else ""), "level")
 		Audio.play("level_up"))
 
 

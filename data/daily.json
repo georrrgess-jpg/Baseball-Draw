@@ -17,5 +17,5 @@
     {"id": "glass_cannon", "name": "Glass Cannon", "text": "Defenders +25% damage, runners +20% speed.", "damage": 0.25, "enemy_speed": 0.2},
     {"id": "hot_streak", "name": "Hot Streak", "text": "Card cooldowns 30% shorter.", "card_cooldown": -0.3}
   ],
-  "rewards": {"first_coins": 150, "first_pack": "rookie", "win_pack": "pro"}
+  "rewards": {"first_coins": 225, "first_pack": "rookie", "win_pack": "pro"}
 }

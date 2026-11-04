@@ -1,5 +1,5 @@
 {
-  "_comment": "Missions (Update 6). Three daily missions (one per tier) and one weekly mission are drawn from these pools, deterministically per day/week and profile (src/core/missions.gd). 'event' is the progress key: a Profile stat (bumped live during games: total_outs, cards_played, double_plays, boss_*, packs_opened, cards_upgraded ...) or an end-of-game event sent by Rewards.apply (win, win_diff:<difficulty>, cards_<category>, outs_by:<defender>, max_combo, daily_played, caught_stealing, clean_innings, games_played, endless_inning). 'max' events count the best single game instead of adding up. '{n}' is the goal, '{who}' the defender, '{diff}' the difficulty. Rewards are sized against the Update 5 economy (about 3,200 coins and 10 packs per hour of play, tools/balance/economy.py): a full day of missions is worth about 350 coins and a Rookie Pack (about 17 % of an hour's income), the weekly mission a Pro Pack and 20 stars.",
+  "_comment": "Missions (Update 6). Three daily missions (one per tier) and one weekly mission are drawn from these pools, deterministically per day/week and profile (src/core/missions.gd). 'event' is the progress key: a Profile stat (bumped live during games: total_outs, cards_played, double_plays, boss_*, packs_opened, cards_upgraded ...) or an end-of-game event sent by Rewards.apply (win, win_diff:<difficulty>, cards_<category>, outs_by:<defender>, max_combo, daily_played, caught_stealing, clean_innings, games_played, endless_inning). 'max' events count the best single game instead of adding up. '{n}' is the goal, '{who}' the defender, '{diff}' the difficulty. Rewards are sized against the Update 5 economy (about 3,200 coins and 10 packs per hour of play, tools/balance/economy.py): a full day of missions is worth about 525 coins (+50 % in the coin boost) and a Rookie Pack (about 17 % of an hour's income), the weekly mission a Pro Pack and 20 stars.",
   "daily": [
     {"id": "play_offense", "tier": 1, "event": "cards_offense", "goal": [5, 8], "text": "Play {n} Offense cards"},
     {"id": "play_control", "tier": 1, "event": "cards_control", "goal": [4, 6], "text": "Play {n} Control cards"},
@@ -31,18 +31,18 @@
     {"id": "w_bosses", "event": "boss_*", "goal": [6, 8], "text": "Defeat {n} bosses this week"}
   ],
   "rewards": {
-    "1": {"coins": 100},
-    "2": {"coins": 150},
-    "3": {"coins": 100, "pack": "rookie"},
+    "1": {"coins": 150},
+    "2": {"coins": 225},
+    "3": {"coins": 150, "pack": "rookie"},
     "weekly": {"pack": "pro", "stars": 20}
   },
   "rerolls_per_day": 1,
   "difficulty_by_level": [[1, "rookie"], [4, "standard"], [15, "veteran"], [30, "legend"]],
   "starter": [
-    {"id": "s_cards", "event": "cards_played", "goal": 3, "text": "Play 3 ability cards in a game", "hint": "Click a card in your hand, then click a target on the field.", "reward": {"coins": 150}},
-    {"id": "s_win", "event": "win", "goal": 1, "text": "Win a game", "hint": "Quick Defense on Rookie is the gentlest start.", "reward": {"pack": "rookie", "coins": 100}},
+    {"id": "s_cards", "event": "cards_played", "goal": 3, "text": "Play 3 ability cards in a game", "hint": "Click a card in your hand, then click a target on the field.", "reward": {"coins": 225}},
+    {"id": "s_win", "event": "win", "goal": 1, "text": "Win a game", "hint": "Quick Defense on Rookie is the gentlest start.", "reward": {"pack": "rookie", "coins": 150}},
     {"id": "s_pack", "event": "packs_opened", "goal": 1, "text": "Open a card pack", "hint": "Main menu → Card Packs.", "reward": {"pack": "rookie"}},
-    {"id": "s_upgrade", "event": "cards_upgraded", "goal": 1, "text": "Upgrade a card", "hint": "Cards & Deck → Upgrade Cards. Duplicates from packs pay for upgrades.", "reward": {"pack": "rookie", "coins": 150}},
+    {"id": "s_upgrade", "event": "cards_upgraded", "goal": 1, "text": "Upgrade a card", "hint": "Cards & Deck → Upgrade Cards. Duplicates from packs pay for upgrades.", "reward": {"pack": "rookie", "coins": 225}},
     {"id": "s_daily", "event": "daily_played", "goal": 1, "text": "Try the Daily Challenge", "hint": "Main menu → PLAY DAILY. A new challenge every day.", "reward": {"pack": "pro"}}
   ]
 }

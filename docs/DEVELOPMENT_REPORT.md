@@ -749,3 +749,32 @@ so the hand didn't seem to hold it. During the swing the bat also passed through
 * Script check: 88 scripts, 0 failed. System suite: 2,047 checks, 0 failed.
 
 ![Siege Slugger before / after](screenshots/slugger_bat_fix.jpg)
+
+## 17. Coin boost: +50 % coins from every source
+
+Every way the player earns coins now pays 50 % more. Prices are unchanged: packs, bundles, card upgrades and
+gear. In-game coins for dugout upgrades are also unchanged, so battle difficulty doesn't move.
+
+| Source | Before | After |
+|---|---|---|
+| End of game | 35 % of in-game coins + 15 per inning + 100 for a win | 52.5 % + 22.5 per inning + 150 for a win |
+| First win ever | 150 | 225 |
+| Daily Challenge, first game of the day | 150 | 225 |
+| Daily missions (tier 1 / 2 / 3) | 100 / 150 / 100 + pack | 150 / 225 / 150 + pack |
+| Starter missions | 150, 100, 150 | 225, 150, 225 |
+| Account level road | 100 per level, 150–250 on milestones | 150 per level, 225–375 on milestones |
+| Defender levels 2 / 5 / 8 | 100 / 250 / 400 | 150 / 375 / 600 |
+
+The mode, difficulty and arena reward multipliers still apply on top. The account level-up message now shows
+the real amount for that level; before, it always said "+100 coins".
+
+**Economy projection** (`tools/balance/economy.py`, 300 players, 20 hours):
+
+| | Before | After |
+|---|---|---|
+| Coins per hour | 3,079 | 4,638 |
+| Coins after the first 10 games | 9,488 | 14,570 |
+| Packs bought with coins per hour | 3.0 | 11.7 |
+| First rare card at max level | 13.0 h | 10.2 h |
+| All commons at max level | 16.3 h | 11.0 h |
+| Rookie bundle (1,800 coins) | 0.6 h of income | 0.4 h of income |

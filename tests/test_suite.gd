@@ -305,7 +305,7 @@ func test_economy() -> void:
 	r.outs_total = 160
 	r.stats.outs_by = {r.team[0]: 40}
 	var res := Rewards.apply(r, true)
-	ok(int(res.coins) == 179, "Quick win coins = (720 x 0.35 + 3 x 15 + 100) x 0.45 = 179 (%d)" % int(res.coins))
+	ok(int(res.coins) == 268, "Quick win coins = (720 x 0.525 + 3 x 22.5 + 150) x 0.45 = 268 (%d)" % int(res.coins))
 	ok(int(res.xp) == 284, "Quick win XP = (160 x 2 + 3 x 30 + 220) x 0.45 = 284 (%d)" % int(res.xp))
 	var game_packs: Array = res.packs.filter(func(pk: Dictionary) -> bool: return str(pk.source).begins_with("Quick Defense"))
 	ok(game_packs.size() == 1 and game_packs[0].type == "rookie", "a Quick Defense game gives one Rookie Pack (%d)" % game_packs.size())
@@ -708,8 +708,8 @@ func test_missions() -> void:
 	ok((s.fresh as Array).any(func(f: Dictionary) -> bool: return f.id == "outs"), "a finished mission is queued for the Results screen")
 	var coins := int(Profile.data.coins)
 	var rw := Missions.claim("daily", 0)
-	ok(int(rw.get("coins", 0)) == 100 and int(Profile.data.coins) == coins + 100, "claiming a tier 1 mission pays 100 coins")
-	ok(Missions.claim("daily", 0).is_empty() and int(Profile.data.coins) == coins + 100, "a mission is claimed only once")
+	ok(int(rw.get("coins", 0)) == 150 and int(Profile.data.coins) == coins + 150, "claiming a tier 1 mission pays 150 coins")
+	ok(Missions.claim("daily", 0).is_empty() and int(Profile.data.coins) == coins + 150, "a mission is claimed only once")
 	ok(Profile.stat("missions_completed") == 1.0 and int(s.completed) == 1, "claims count as completed missions")
 	Profile.bump_stat("total_outs", 10)
 	ok(int(s.daily[0].progress) == 5, "a claimed mission stops counting")

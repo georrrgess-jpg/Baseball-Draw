@@ -3,15 +3,15 @@ extends RefCounted
 ## Converts a finished run into permanent progression: coins, account XP,
 ## defender XP, card packs, rank points, records, stats and history.
 
-# Tuned with tools/balance/economy.py (Update 5): about 7-9 packs and 2,000-2,500 coins per hour of play,
-# the whole collection in ~15-20 hours, the team at level 10 after ~12 hours.
-const COIN_SHARE := 0.35           # of the coins earned during the run
-const COINS_PER_INNING := 15
-const WIN_COINS := 100
+# Tuned with tools/balance/economy.py (Update 5), then every coin reward raised by 50 % (coin boost):
+# about 4,600 coins per hour of play. Prices are unchanged.
+const COIN_SHARE := 0.525          # of the coins earned during the run
+const COINS_PER_INNING := 22.5
+const WIN_COINS := 150
 const DEFENDER_XP_SHARE := 0.3     # of the account XP, for every defender on the team
 const DEFENDER_XP_PER_OUT := 1
 # First-hour pacing (Update 6): the first win ever pays a Pro Pack and coins on top.
-const FIRST_WIN_COINS := 150
+const FIRST_WIN_COINS := 225
 const FIRST_WIN_PACK := "pro"
 
 

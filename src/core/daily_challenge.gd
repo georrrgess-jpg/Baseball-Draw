@@ -212,7 +212,7 @@ static func current_streak() -> int:
 
 
 static func rewards() -> Dictionary:
-	return data().get("rewards", {"first_coins": 150, "first_pack": "rookie", "win_pack": "pro"})
+	return data().get("rewards", {"first_coins": 225, "first_pack": "rookie", "win_pack": "pro"})
 
 
 ## Records a finished daily game (called by Rewards.apply) and grants the daily bonus:
