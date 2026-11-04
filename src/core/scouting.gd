@@ -76,6 +76,16 @@ const TAG_LABELS := {
 	"pierce": "pierces armor", "percent": "max-health damage", "slow": "slows / stops", "fast_bonus": "extra vs fast runners",
 	"aoe": "splash damage", "multi_hit": "many hits", "burst": "big hit", "sure_hit": "can't be dodged", "run_stop": "stops a run",
 	"boss": "boss counter", "single": "targets the runner", "cleanse": "shakes off stuns", "stun": "stuns", "block": "blocks the path",
+	"vulnerable": "takes extra damage",
+}
+
+## Counter tags given by hand, for cards whose params don't describe what they counter (they
+## replace the derived tags). "vulnerable": the runners take extra damage from everything.
+const CARD_TAGS := {
+	"scouting_report": ["vulnerable", "boss"],
+	"signal_caller": ["vulnerable", "boss"],
+	"hidden_ball_trick": ["run_stop", "burst", "sure_hit", "percent", "boss"],
+	"fireworks_night": ["aoe", "multi_hit", "sure_hit", "stun"],
 }
 
 static var _tags_cache := {}
@@ -277,6 +287,11 @@ static func stat_rows(key: String) -> Array:
 static func card_tags(card_id: String) -> Array[String]:
 	if _tags_cache.has(card_id):
 		return _tags_cache[card_id]
+	if CARD_TAGS.has(card_id):
+		var given: Array[String] = []
+		given.assign(CARD_TAGS[card_id])
+		_tags_cache[card_id] = given
+		return given
 	var c := DB.card(card_id)
 	var p: Dictionary = c.get("params", {})
 	var role := str(c.get("role", ""))
@@ -350,14 +365,14 @@ static func needs(key: String) -> Dictionary:
 	if float(e.get("evasion", 0)) >= 0.5:
 		_add(w, {"sure_hit": 3, "aoe": 1})
 	if int(e.get("group", 1)) > 1:
-		_add(w, {"aoe": 3, "multi_hit": 2})
+		_add(w, {"aoe": 3, "multi_hit": 2, "vulnerable": 3})
 	if int(e.get("runs", 1)) >= 2:
 		_add(w, {"run_stop": 1.5})
 	if not bool(e.get("boss", false)) and float(e.get("hp", 0)) >= 250.0:
-		_add(w, {"burst": 2, "percent": 1.5, "stun": 1})
+		_add(w, {"burst": 2, "percent": 1.5, "stun": 1, "vulnerable": 1.5})
 	_add(w, BEHAVIOR_NEEDS.get(_behavior(key), {}))
 	if bool(e.get("boss", false)):
-		_add(w, {"boss": 4, "percent": 3, "burst": 2, "no_boss": -8})
+		_add(w, {"boss": 4, "percent": 3, "burst": 2, "no_boss": -8, "vulnerable": 1})
 	return w
 
 

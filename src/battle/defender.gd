@@ -82,7 +82,6 @@ var _aura_ring: MeshInstance3D       # Moose: Long Stretch ground ring
 var _aura_t := 0.0
 var frame_cd := 1.0                  # Rosa: seconds to the next Pitch Framing mark
 var framed: Dictionary = {}          # Rosa: Enemy -> [time left, marker node]
-var frame_refunds := 0               # Rosa: outs on framed runners that refunded energy
 
 
 func setup(p_battle: Battle, defender_id: String, uniform_colors: Dictionary) -> void:
@@ -524,12 +523,11 @@ func _setup_trait() -> void:
 			add_child(_aura_ring)
 		"pitch_framing":
 			frame_cd = 1.0
-			if battle.has_signal("runner_out"):
-				battle.connect("runner_out", _on_runner_out)
 
 
-## Long Stretch: runners within STRETCH_RADIUS are slowed and marked (+damage taken from every
-## source). Short refreshed statuses, so the effect ends as soon as a runner leaves the ring.
+## Long Stretch: runners within STRETCH_RADIUS are slowed and take more damage from every
+## source (Enemy aura vulnerability). Short refreshed statuses, so the effect ends as soon as
+## a runner leaves the ring.
 func _tick_long_stretch(delta: float) -> void:
 	var active := not is_stunned()
 	if _aura_ring:
@@ -546,10 +544,8 @@ func _tick_long_stretch(delta: float) -> void:
 			continue
 		if Field.v2(e.global_position).distance_to(me) > STRETCH_RADIUS:
 			continue
-		e.apply_slow("long_stretch", STRETCH_SLOW, 0.25)
-		# A stronger mark (a card, Rosa) runs out on its own clock before Moose's takes over.
-		if e.mark_t <= 0.0 or e.mark_amt <= STRETCH_DAMAGE + 0.001:
-			e.apply_mark(0.25, STRETCH_DAMAGE)
+		e.apply_slow("long_stretch", STRETCH_SLOW, 0.2)
+		e.apply_aura_vuln(STRETCH_DAMAGE, 0.2)
 
 
 func runners_in_stretch() -> Array[Enemy]:
@@ -613,8 +609,10 @@ func most_dangerous_runner() -> Enemy:
 	return best
 
 
+## The Signal Caller status: +FRAME_DAMAGE damage taken for FRAME_TIME s, and CardEffects pays
+## FRAME_ENERGY when the runner is put out while signalled (no second refund here).
 func frame_runner(e: Enemy) -> void:
-	e.apply_mark(FRAME_TIME, FRAME_DAMAGE)
+	e.apply_signal(FRAME_TIME, FRAME_DAMAGE, FRAME_ENERGY)
 	var acc := Color(data.accent)
 	var mk: Node3D
 	if framed.has(e) and is_instance_valid(framed[e][1]):
@@ -675,22 +673,6 @@ static func _diamond() -> ArrayMesh:
 				st.add_vertex(v)
 	_diamond_mesh = st.commit()
 	return _diamond_mesh
-
-
-## battle.runner_out (Update 9 hook): an out on a runner Rosa framed refunds energy.
-func _on_runner_out(e: Enemy, _info: Dictionary) -> void:
-	if not framed.has(e):
-		return
-	var rec: Array = framed[e]
-	if is_instance_valid(rec[1]):
-		(rec[1] as Node3D).queue_free()
-	framed.erase(e)
-	if battle.has_method("add_energy"):
-		battle.call("add_energy", FRAME_ENERGY)
-	else:
-		battle.cards.add_energy(FRAME_ENERGY)
-	frame_refunds += 1
-	battle.vfx.text_popup(e.center() + Vector3(-0.6, 0.8, 0), "+0.5 ENERGY", Color(data.accent).lightened(0.4), 0.8, 1.0)
 
 
 # ---------------------------------------------------------------- signature specials

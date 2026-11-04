@@ -1,14 +1,14 @@
 {
-  "_comment": "Offline ranked ladder. Reaching rp_required unlocks the division's Promotion Challenge; winning it promotes.",
+  "_comment": "Offline ranked ladder. Reaching rp_required unlocks the division's Promotion Challenge; winning it promotes. Promotion rewards (Update 9, Profile.promote): reaching a division pays its 'reward' once: 300 coins and 10 stars per division index, plus a Pro Pack (a Champion Pack from Gold up).",
   "divisions": [
     {"id": "rookie", "name": "Rookie", "rp_required": 0, "challenge_difficulty": "rookie", "color": "#9AA4B2"},
-    {"id": "bronze", "name": "Bronze", "rp_required": 100, "challenge_difficulty": "standard", "color": "#C07A45"},
-    {"id": "silver", "name": "Silver", "rp_required": 260, "challenge_difficulty": "standard", "color": "#C8D0DA"},
-    {"id": "gold", "name": "Gold", "rp_required": 480, "challenge_difficulty": "veteran", "color": "#F5B82E"},
-    {"id": "platinum", "name": "Platinum", "rp_required": 800, "challenge_difficulty": "veteran", "color": "#7FE0D8"},
-    {"id": "diamond", "name": "Diamond", "rp_required": 1200, "challenge_difficulty": "legend", "color": "#6FB8FF"},
-    {"id": "champion", "name": "Champion", "rp_required": 1700, "challenge_difficulty": "legend", "color": "#E0262F"},
-    {"id": "legend", "name": "Legend", "rp_required": 2400, "challenge_difficulty": "legend", "color": "#B45CFF"}
+    {"id": "bronze", "name": "Bronze", "rp_required": 100, "challenge_difficulty": "standard", "reward": {"coins": 300, "stars": 10, "packs": ["pro"]}, "color": "#C07A45"},
+    {"id": "silver", "name": "Silver", "rp_required": 260, "challenge_difficulty": "standard", "reward": {"coins": 600, "stars": 20, "packs": ["pro"]}, "color": "#C8D0DA"},
+    {"id": "gold", "name": "Gold", "rp_required": 480, "challenge_difficulty": "veteran", "reward": {"coins": 900, "stars": 30, "packs": ["champion"]}, "color": "#F5B82E"},
+    {"id": "platinum", "name": "Platinum", "rp_required": 800, "challenge_difficulty": "veteran", "reward": {"coins": 1200, "stars": 40, "packs": ["champion"]}, "color": "#7FE0D8"},
+    {"id": "diamond", "name": "Diamond", "rp_required": 1200, "challenge_difficulty": "legend", "reward": {"coins": 1500, "stars": 50, "packs": ["champion"]}, "color": "#6FB8FF"},
+    {"id": "champion", "name": "Champion", "rp_required": 1700, "challenge_difficulty": "legend", "reward": {"coins": 1800, "stars": 60, "packs": ["champion"]}, "color": "#E0262F"},
+    {"id": "legend", "name": "Legend", "rp_required": 2400, "challenge_difficulty": "legend", "reward": {"coins": 2100, "stars": 70, "packs": ["champion"]}, "color": "#B45CFF"}
   ],
   "challenge_modifiers": ["speed_demons", "iron_skin", "swarm_season", "fog_delay", "heavy_hitters", "overtime", "rain_delay"]
 }

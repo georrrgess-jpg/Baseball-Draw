@@ -23,8 +23,8 @@
     {"id": "old_school", "name": "Old School", "text": "Win Quick Defense without playing a card.", "stars": 20, "stat": "no_card_wins", "goal": 1},
     {"id": "card_max", "name": "Maxed Out", "text": "Upgrade any card to level 5.", "stars": 15, "stat": "max_card_level", "goal": 5},
     {"id": "defender_max", "name": "Franchise Player", "text": "Raise a defender to level 10.", "stars": 25, "stat": "max_defender_level", "goal": 10},
-    {"id": "full_collection", "name": "Full Deck", "text": "Collect every ability card.", "stars": 50, "stat": "cards_owned", "goal": 44},
-    {"id": "full_roster", "name": "Full Roster", "text": "Unlock every defender.", "stars": 20, "stat": "defenders_owned", "goal": 9},
+    {"id": "full_collection", "name": "Full Deck", "text": "Collect every ability card.", "stars": 50, "stat": "cards_owned", "goal": 56},
+    {"id": "full_roster", "name": "Full Roster", "text": "Unlock every defender.", "stars": 20, "stat": "defenders_owned", "goal": 12},
     {"id": "rank_gold", "name": "Golden Glove", "text": "Reach the Gold division.", "stars": 20, "stat": "division", "goal": 3},
     {"id": "rank_legend", "name": "Hall of Famer", "text": "Reach the Legend division.", "stars": 80, "stat": "division", "goal": 7},
     {"id": "groundskeeper", "name": "Groundskeeper", "text": "Unlock every stadium.", "stars": 25, "stat": "arenas_owned", "goal": 6},
@@ -40,6 +40,17 @@
     {"id": "missions_10", "name": "On a Mission", "text": "Complete 10 missions.", "stars": 10, "stat": "missions_completed", "goal": 10},
     {"id": "missions_50", "name": "Mission Accomplished", "text": "Complete 50 missions.", "stars": 25, "stat": "missions_completed", "goal": 50},
     {"id": "caught_stealing", "name": "Caught Stealing", "text": "Catch 10 Base Stealers mid-steal (slow, stun or freeze them).", "stars": 10, "stat": "caught_stealing", "goal": 10},
-    {"id": "boss_rush", "name": "Boss Rush", "text": "Defeat 25 bosses.", "stars": 25, "stat": "bosses_defeated", "goal": 25}
+    {"id": "boss_rush", "name": "Boss Hunter", "text": "Defeat 25 bosses.", "stars": 25, "stat": "bosses_defeated", "goal": 25},
+    {"id": "rush_win", "name": "Rush Hour", "text": "Win a Boss Rush.", "stars": 15, "stat": "wins_boss_rush", "goal": 1},
+    {"id": "rush_10", "name": "Boss Buster", "text": "Win 10 Boss Rush games.", "stars": 30, "stat": "wins_boss_rush", "goal": 10},
+    {"id": "boons_25", "name": "Draft Day", "text": "Draft 25 boons in the Dugout Draft.", "stars": 10, "stat": "boons_drafted", "goal": 25},
+    {"id": "boons_100", "name": "General Manager", "text": "Draft 100 boons in the Dugout Draft.", "stars": 25, "stat": "boons_drafted", "goal": 100},
+    {"id": "streak_5", "name": "On Fire", "text": "Win 5 games in a row.", "stars": 15, "stat": "best_win_streak", "goal": 5},
+    {"id": "streak_10", "name": "Unstoppable", "text": "Win 10 games in a row.", "stars": 35, "stat": "best_win_streak", "goal": 10},
+    {"id": "shop_10", "name": "Bargain Hunter", "text": "Buy 10 deals in the Daily Shop.", "stars": 10, "stat": "shop_purchases", "goal": 10},
+    {"id": "free_agent", "name": "Front Office", "text": "Sign a free agent.", "stars": 15, "stat": "free_agents_signed", "goal": 1},
+    {"id": "season_15", "name": "Halfway Home", "text": "Reach tier 15 of a Season Pass.", "stars": 10, "stat": "season_best_tier", "goal": 15},
+    {"id": "season_30", "name": "Season Ticket", "text": "Reach tier 30 of a Season Pass.", "stars": 25, "stat": "season_best_tier", "goal": 30},
+    {"id": "login_7", "name": "Regular", "text": "Claim the login reward 7 days in a row.", "stars": 10, "stat": "login_streak", "goal": 7}
   ]
 }

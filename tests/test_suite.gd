@@ -51,8 +51,10 @@ func _run() -> void:
 	test_update5_content()
 	test_update7_content()
 	test_update9_models()
+	test_update9_cards_content()
 	await test_scouting()
 	await test_battle_systems()
+	test_update9_economy()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -61,7 +63,7 @@ func _run() -> void:
 
 func test_data() -> void:
 	section("data integrity")
-	ok(DB.cards.size() == 44, "44 cards defined (%d)" % DB.cards.size())
+	ok(DB.cards.size() == 56, "56 cards defined (%d)" % DB.cards.size())
 	for id in NEW_CARDS:
 		ok(DB.cards.has(id), "Update 5 card %s defined" % id)
 	ok(DB.cards.values().filter(func(c: Dictionary) -> bool: return c.rarity == "legendary").size() >= 3, "at least three Legendary cards")
@@ -1124,6 +1126,8 @@ func test_battle_systems() -> void:
 	_clear()
 	await _test_update9_defenders()
 	_clear()
+	await _test_update9_cards_battle()
+	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
 	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
@@ -1506,6 +1510,26 @@ func _test_card(cid: String) -> void:
 		"perfect_game":
 			ok(damaged, "perfect game damages every runner")
 			ok(battle.buff_active("perfect_tag"), "perfect game opens a tag window at the plate")
+		# Update 9 cards (exact numbers in _test_update9_cards_battle)
+		"scouting_report":
+			ok(lead.scout_t > 0.0 or not lead.alive, "scouting report scouts its target's type")
+		"sprinkler_system":
+			ok(not battle.effects.active_item("wet").is_empty(), "sprinkler system soaks a base path")
+		"sweet_spot":
+			ok(battle.buff_active("sweet_spot"), "sweet spot is on")
+		"rally_monkey":
+			ok(battle.cards.energy >= energy_before, "rally monkey gives energy")
+		"second_wind":
+			ok(battle.buff_active("second_wind"), "second wind boosts a defender")
+		"money_ball":
+			ok(battle.buff_active("money_ball"), "money ball is on")
+		"signal_caller":
+			ok(any.call(func(en: Enemy) -> bool: return en.signal_t > 0.0), "signal caller marks runners")
+		"hidden_ball_trick":
+			ok(any.call(func(en: Enemy) -> bool: return not en.alive), "hidden ball trick tags a runner out")
+		"ground_rule_double":
+			ok(battle.cards.double_casts_left(battle.run.inning) == int(DB.card_param(cid, "casts", 1)), "ground rule double arms its casts")
+			battle.cards.double_left = 0   # don't double the cards of the later tests
 		_:
 			ok(damaged, "%s deals damage (%.0f -> %.0f)" % [cid, hp_before, hp_after])
 
@@ -2063,13 +2087,15 @@ func test_update9_models() -> void:
 	for pair in [["moose", "bruno"], ["rosa", "rico"], ["sid", "nova"]]:
 		ok(FileAccess.get_md5("res://assets/models/characters/%s.glb" % pair[0]) != FileAccess.get_md5("res://assets/models/characters/%s.glb" % pair[1]),
 			"%s has its own model (not the %s placeholder)" % pair)
-	var want := {"moose": ["infielder", "long_stretch", 13, 6000], "rosa": ["catcher", "pitch_framing", 16, 8000],
-		"sid": ["pitcher", "skipper", 19, 10000]}
+	var want := {"moose": ["infielder", "long_stretch", 15, 5000, "scoop_and_tag"],
+		"rosa": ["catcher", "pitch_framing", 20, 7500, "signal_caller"], "sid": ["pitcher", "skipper", 25, 10000, "worm_burner"]}
 	for id in want:
 		var d := DB.defender(id)
 		var w: Array = want[id]
 		ok(d.role == w[0] and d.trait.id == w[1] and int(d.unlock.value) == w[2] and int(d.unlock.get("coins", 0)) == w[3],
 			"%s: %s, %s, unlock at level %d or %d coins" % [id, w[0], w[1], w[2], w[3]])
+		ok(d.signature == w[4] and DB.cards.has(w[4]) and String(DB.card(w[4]).get("linked", "")) == id,
+			"%s's signature card is %s" % [id, w[4]])
 		ok(String(d.get("bio", "")).length() > 30 and String(d.get("title", "")) != "" and String(d.trait.get("text", "")).length() > 30,
 			"%s has a title, bio and trait text" % id)
 
@@ -2101,23 +2127,23 @@ func _test_update9_defenders() -> void:
 	var far_d := Field.v2(far.global_position).distance_to(Field.v2(moose.global_position))
 	ok(near.slows.has("long_stretch") and is_equal_approx(float(near.slows.long_stretch[0]), 0.10)
 		and absf(near.current_speed() / near.base_speed - 0.9) < 0.01, "Long Stretch slows a runner 3 m away by 10 %% (speed x%.2f)" % (near.current_speed() / near.base_speed))
-	ok(absf(near.mark_amt - 0.25) < 0.001 and near.mark_t > 0.0, "Long Stretch marks it for +25 %% damage (%.2f)" % near.mark_amt)
-	ok(far_d > 5.0 and not far.slows.has("long_stretch") and far.mark_t <= 0.0, "a runner %.1f m away is not affected" % far_d)
+	ok(absf(near.aura_vuln - 0.25) < 0.001 and near.aura_vuln_t > 0.0, "Long Stretch gives it +25 %% damage taken (%.2f)" % near.aura_vuln)
+	ok(far_d > 5.0 and not far.slows.has("long_stretch") and far.aura_vuln_t <= 0.0, "a runner %.1f m away is not affected" % far_d)
 	var dn := battle.deal_damage(near, 100.0, {"kind": "throw"})
 	var dfar := battle.deal_damage(far, 100.0, {"kind": "throw"})
 	ok(absf(dn / dfar - 1.25) < 0.01, "a runner in Moose's ring takes +25 %% damage from any source (%.0f vs %.0f)" % [dn, dfar])
 	ok(moose._aura_ring != null and moose._aura_ring.visible and absf(moose._aura_ring.scale.x - 5.0) < 0.01, "Moose shows a 5 m ring")
-	# A stronger mark runs out on its own clock, then Moose's takes over.
-	near.apply_mark(0.3, 0.6)
-	await _wait(0.7)
-	ok(absf(near.mark_amt - 0.25) < 0.001, "a stronger card mark is not kept alive by Moose's ring (%.2f)" % near.mark_amt)
+	# The ring adds to a card's mark instead of replacing it.
+	near.apply_mark(2.0, 0.3)
+	var dm := battle.deal_damage(near, 100.0, {"kind": "throw"})
+	ok(absf(dm / dfar - 1.55) < 0.01, "Moose's ring stacks with a card mark (%.0f)" % dm)
 	moose.stun(1.0)
 	await _wait(0.45)
-	ok(not moose._aura_ring.visible and not near.slows.has("long_stretch") and near.mark_t <= 0.0, "a stunned Moose has no ring")
+	ok(not moose._aura_ring.visible and not near.slows.has("long_stretch") and near.aura_vuln_t <= 0.0, "a stunned Moose has no ring")
 	moose.cleanse()
 	moose.place(near.global_position + Vector3(30.0, 0, 0))
 	await _wait(0.45)
-	ok(not near.slows.has("long_stretch") and near.mark_t <= 0.0, "leaving the ring ends the slow and the mark")
+	ok(not near.slows.has("long_stretch") and near.aura_vuln_t <= 0.0, "leaving the ring ends the slow and the extra damage")
 	battle.swap_defender(moose, "jax")
 	_clear()
 	await _wait(0.1)
@@ -2135,9 +2161,9 @@ func _test_update9_defenders() -> void:
 	ok(rosa.most_dangerous_runner() == lead, "the most dangerous runner is the one closest to scoring")
 	rosa.frame_cd = 0.0
 	await _wait(0.15)
-	ok(rosa.framed.has(lead) and absf(lead.mark_amt - 0.35) < 0.001 and lead.mark_t > 5.5,
-		"Pitch Framing marks the lead runner for 6 s at +35 %% (%.2f, %.1f s)" % [lead.mark_amt, lead.mark_t])
-	ok(not rosa.framed.has(back) and back.mark_t <= 0.0 and rosa.frame_cd > 5.5, "only one runner per call; the next call is 6 s away (%.1f)" % rosa.frame_cd)
+	ok(rosa.framed.has(lead) and absf(lead.signal_amt - 0.35) < 0.001 and lead.signal_t > 5.5 and absf(lead.signal_refund - 0.5) < 0.001,
+		"Pitch Framing signals the lead runner for 6 s at +35 %% with a 0.5 energy refund (%.2f, %.1f s)" % [lead.signal_amt, lead.signal_t])
+	ok(not rosa.framed.has(back) and back.signal_t <= 0.0 and rosa.frame_cd > 5.5, "only one runner per call; the next call is 6 s away (%.1f)" % rosa.frame_cd)
 	var mk: Node3D = rosa.framed[lead][1] if rosa.framed.has(lead) else null
 	ok(mk != null and mk.visible and mk.get_child_count() == 2 and Field.v2(mk.global_position).distance_to(Field.v2(lead.global_position)) < 0.3,
 		"a framed runner wears Rosa's marker")
@@ -2147,21 +2173,19 @@ func _test_update9_defenders() -> void:
 	rosa.frame_cd = 0.0
 	await _wait(0.15)
 	ok(rosa.framed.has(mid) and not rosa.framed.has(back), "the next call picks the most dangerous runner not yet framed")
-	if battle.has_signal("runner_out"):
-		battle.cards.infinite_energy = false
-		battle.cards.energy = 2.0
-		var e0: float = battle.cards.energy
-		battle.deal_damage(lead, 1.0e7, {"kind": "throw"})
-		await _wait(0.05)
-		ok(battle.cards.energy - e0 >= 0.499 and rosa.frame_refunds == 1, "an out on a framed runner refunds 0.5 energy (%.2f)" % (battle.cards.energy - e0))
-		e0 = battle.cards.energy
-		battle.deal_damage(back, 1.0e7, {"kind": "throw"})
-		await _wait(0.05)
-		ok(battle.cards.energy - e0 < 0.45 and rosa.frame_refunds == 1, "an out on an unframed runner refunds nothing")
-		battle.cards.infinite_energy = true
-	else:
-		print("  (battle.runner_out not present yet: Pitch Framing's energy refund is not tested)")
-		battle.deal_damage(lead, 1.0e7, {"kind": "throw"})
+	# The refund is paid once by CardEffects (battle.runner_out, or its on_out fallback).
+	battle.cards.infinite_energy = false
+	battle.cards.energy = 2.0
+	var e0: float = battle.cards.energy
+	battle.combo_timer = 0.0   # no double/triple-play energy from earlier outs
+	battle.deal_damage(lead, 1.0e7, {"kind": "throw"})
+	var gain := battle.cards.energy - e0
+	ok(gain >= 0.499 and gain < 0.6, "an out on a framed runner refunds 0.5 energy, once (%.2f)" % gain)
+	e0 = battle.cards.energy
+	battle.combo_timer = 0.0
+	battle.deal_damage(back, 1.0e7, {"kind": "throw"})
+	ok(battle.cards.energy - e0 < 0.1, "an out on an unframed runner refunds nothing (%.2f)" % (battle.cards.energy - e0))
+	battle.cards.infinite_energy = true
 	await _wait(0.1)
 	ok(not rosa.framed.has(lead) and (not is_instance_valid(mk) or mk.is_queued_for_deletion()), "the marker goes away with the out")
 	battle.swap_defender(rosa, "rico")
@@ -2209,3 +2233,849 @@ func _test_update9_defenders() -> void:
 	battle.swap_defender(sid, "ace")
 	battle.apply_formation(battle.run.formation)
 	_hold_fire(false)
+
+
+# ---------------------------------------------------------------- Update 9: economy and return loop (stream D)
+
+func test_update9_economy() -> void:
+	_test_u9_season()
+	_test_u9_login()
+	_test_u9_streak_and_results()
+	_test_u9_shop()
+	_test_u9_free_agents()
+	_test_u9_pity_overflow()
+	_test_u9_promotion_modes()
+	_test_u9_missions_and_saves()
+	DailyChallenge.date_override = ""
+	Profile.reset_profile()
+
+
+## A finished game of `mode`.
+func _u9_run(mode: String, inning: int, wave: int) -> RunState:
+	var r := RunState.create(_cfg(mode))
+	r.inning = inning
+	r.wave = wave
+	r.outs_total = 100
+	r.coins_earned = 600
+	return r
+
+
+func _test_u9_season() -> void:
+	section("Update 9: Season Pass")
+	Profile.reset_profile()
+	# Calendar: 14-day seasons from Monday 2026-11-02.
+	DailyChallenge.date_override = "2026-11-02"
+	var c := Season.current()
+	ok(int(c.number) == 1 and int(c.id) == 1 and c.start == "2026-11-02" and c.end == "2026-11-15" and str(c.name) == "Season 1",
+		"season 1 runs 2026-11-02 to 2026-11-15 (%s)" % [c])
+	ok(int(c.seconds_left) > 13 * 86400 and int(c.seconds_left) <= 14 * 86400, "a new season has 14 days left (%d s)" % int(c.seconds_left))
+	DailyChallenge.date_override = "2026-11-15"
+	ok(int(Season.current().number) == 1 and int(Season.current().seconds_left) <= 86400, "the last day still belongs to season 1")
+	DailyChallenge.date_override = "2026-11-16"
+	ok(int(Season.current().number) == 2 and Season.current().start == "2026-11-16" and Season.current().end == "2026-11-29", "season 2 starts 2026-11-16")
+	ok(Season.number_for("2027-01-11") == 6 and Season.number_for("2026-10-01") == 1, "season numbers follow the calendar (before the first season: 1)")
+	ok(Season.uniform_for(1) == "season_1" and DB.uniforms.has(Season.uniform_for(2)) and Season.theme(1) != "", "every season has a uniform and a theme")
+	ok(Season.countdown_text(3 * 86400 + 7200) == "3d 2h", "season countdown text")
+	# XP and tiers.
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-04"
+	ok(Season.xp() == 0 and Season.tier() == 0 and int(Profile.data.season.id) == 1, "a new profile starts season 1 at 0 XP")
+	ok(Season.add_xp(499, "test").is_empty() and Season.tier() == 0, "499 XP is not a tier")
+	ok(Season.add_xp(1, "test") == [1] and Season.tier() == 1, "500 XP reaches tier 1")
+	var tp := Season.tier_progress()
+	ok(int(tp.tier) == 1 and int(tp.xp_in) == 0 and int(tp.xp_need) == 500 and not bool(tp.bonus), "tier progress inside tier 1 (%s)" % [tp])
+	ok(Season.add_xp(1200, "test") == [2, 3] and int(Season.tier_progress().xp_in) == 200, "1,200 XP more reaches tiers 2 and 3")
+	var ts := Season.tiers()
+	ok(ts.size() == 30 and bool(ts[2].reached) and not bool(ts[3].reached) and not bool(ts[0].claimed), "tiers() lists 30 tiers with reached flags")
+	var all_ok := true
+	for t in ts:
+		all_ok = all_ok and not (t.reward as Dictionary).is_empty() and str(t.text) != "" and t.has("tier") and t.has("claimed")
+	ok(all_ok, "every tier has a reward and a text")
+	ok("champion" in Season.tier_reward(15).get("packs", []) and "champion" in Season.tier_reward(30).get("packs", []), "Champion Packs at tiers 15 and 30")
+	ok(str(Season.tier_reward(30).get("uniform", "")) == "season_1", "tier 30 pays the season 1 uniform")
+	var kinds := {"coins": false, "packs": false, "stars": false}
+	for t in ts:
+		for k in kinds.keys():
+			kinds[k] = bool(kinds[k]) or (t.reward as Dictionary).has(k)
+	ok(kinds.values().all(func(v: bool) -> bool: return v), "tier rewards mix coins, packs and stars")
+	ok(Season.claimable() == [1, 2, 3], "reached tiers are claimable (%s)" % [Season.claimable()])
+	ok(Season.claim(5).is_empty(), "a tier not reached cannot be claimed")
+	var coins := int(Profile.data.coins)
+	var cl := Season.claim(1)
+	ok(int(cl.get("tier", 0)) == 1 and int(Profile.data.coins) == coins + 200, "claiming tier 1 pays 200 coins")
+	ok(Season.claim(1).is_empty() and int(Profile.data.coins) == coins + 200, "a tier is claimed once")
+	var packs := Profile.pack_count("rookie")
+	var all := Season.claim_all()
+	ok(all.size() == 2 and Profile.pack_count("rookie") == packs + 1 and int(Profile.data.coins) == coins + 450 and Season.claimable().is_empty(),
+		"claim_all pays tiers 2 and 3")
+	ok(Season.tiers()[0].claimed and Season.tiers()[2].claimed, "claimed tiers are marked")
+	# Tier 30, the season uniform, bonus Pro Packs.
+	var reached := Season.add_xp(Season.TIERS * Season.XP_PER_TIER - Season.xp(), "test")
+	ok(reached.size() == 27 and int(reached[-1]) == 30 and Season.tier() == 30, "tier 30 at 15,000 XP")
+	ok(not Season.claim(30).is_empty() and "season_1" in Profile.data.uniforms_owned, "claiming tier 30 adds the season uniform")
+	ok(str(Season.tiers()[29].reward.get("uniform", "")) == "season_1", "a claimed tier 30 still shows its uniform")
+	ok(not Profile.uniform_for_sale("season_1") and not Profile.buy_uniform("season_2") and Profile.uniform_for_sale("retro"), "season uniforms are never sold")
+	Profile.data.stars = 100
+	ok(Profile.buy_uniform("retro") and "retro" in Profile.data.uniforms_owned and int(Profile.data.stars) == 70, "a normal uniform is bought with stars")
+	var pros := Profile.pack_count("pro")
+	ok(Season.add_xp(999, "test").is_empty() and Season.add_xp(1, "test") == [31] and Profile.pack_count("pro") == pros + 1, "after tier 30, every 1,000 XP pays a Pro Pack")
+	ok(bool(Season.tier_progress().bonus) and int(Season.tier_progress().xp_need) == 1000 and int(Profile.data.season.bonus_claimed) == 1, "bonus progress after tier 30")
+	ok(Season.add_xp(2500, "test") == [32, 33] and Profile.pack_count("pro") == pros + 3, "several bonus packs at once")
+	ok(Profile.data.achievements.has("season_15") and Profile.data.achievements.has("season_30"), "season tier achievements")
+	ok(Season.add_xp(0, "test").is_empty() and Season.add_xp(-5, "test").is_empty(), "no XP, no change")
+	# Rollover: unclaimed reached tiers are paid out, then a fresh season.
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-10"
+	Season.add_xp(2600, "test")   # tiers 1-5
+	Season.claim(1)
+	coins = int(Profile.data.coins)
+	var stars := int(Profile.data.stars)
+	var rookies := Profile.pack_count("rookie")
+	pros = Profile.pack_count("pro")
+	DailyChallenge.date_override = "2026-11-17"
+	Season.refresh()
+	var se: Dictionary = Profile.data.season
+	ok(int(se.id) == 2 and int(se.xp) == 0 and (se.claimed as Array).is_empty() and int(se.bonus_claimed) == 0, "a new season starts from 0")
+	ok(se.get("last_rollover", {}).get("tiers", []) == [2, 3, 4, 5] and int(se.last_rollover.season) == 1, "rollover lists the auto-claimed tiers")
+	ok(int(Profile.data.coins) == coins + 250 and int(Profile.data.stars) == stars + 10 and Profile.pack_count("rookie") == rookies + 1
+		and Profile.pack_count("pro") == pros + 1, "rollover pays every reached tier that was not claimed")
+	ok(str(Season.tier_reward(30).get("uniform", "")) == "season_2", "season 2 pays its own uniform")
+	DailyChallenge.date_override = "2026-11-10"
+	Season.add_xp(100, "test")
+	ok(int(Profile.data.season.id) == 2 and Season.xp() == 100, "a clock set back never resets the season")
+	DailyChallenge.date_override = "2026-12-01"   # season 3, nothing reached in season 2
+	coins = int(Profile.data.coins)
+	ok(Season.xp() == 0 and int(Profile.data.season.id) == 3 and int(Profile.data.coins) == coins, "rollover with nothing reached pays nothing")
+	# An owned season uniform turns into stars.
+	Profile.data.uniforms_owned.append("season_3")
+	ok(not Season.tier_reward(30).has("uniform") and int(Season.tier_reward(30).get("stars", 0)) == 50, "an owned season uniform becomes 50 stars")
+
+
+func _test_u9_login() -> void:
+	section("Update 9: login calendar")
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-04"
+	ok(DailyRewards.can_claim() and DailyRewards.day() == 1 and DailyRewards.streak() == 0, "a new profile can claim day 1")
+	var cal := DailyRewards.calendar()
+	ok(cal.size() == 7 and bool(cal[0].today) and not bool(cal[0].claimed) and cal.all(func(d: Dictionary) -> bool: return str(d.text) != ""),
+		"the calendar shows 7 days, today is day 1")
+	var expect := ["150 coins", "Rookie Pack", "250 coins", "10 stars", "Pro Pack", "400 coins", "Champion Pack"]
+	var texts := cal.map(func(d: Dictionary) -> String: return DailyRewards.reward_text(d.reward))
+	ok(texts == expect, "the 7-day cycle: 150 coins, Rookie, 250 coins, 10 stars, Pro, 400 coins, Champion (%s)" % [texts])
+	var coins := int(Profile.data.coins)
+	var r := DailyRewards.claim()
+	ok(int(r.get("day", 0)) == 1 and int(Profile.data.coins) == coins + 150 and int(r.streak) == 1, "day 1 pays 150 coins")
+	ok(not DailyRewards.can_claim() and DailyRewards.claim().is_empty() and int(Profile.data.coins) == coins + 150, "one claim per calendar day")
+	cal = DailyRewards.calendar()
+	ok(bool(cal[0].claimed) and bool(cal[0].today) and not bool(cal[1].claimed), "today's claimed day stays marked as today")
+	DailyChallenge.date_override = "2026-11-05"
+	var rookies := Profile.pack_count("rookie")
+	r = DailyRewards.claim()
+	ok(int(r.day) == 2 and Profile.pack_count("rookie") == rookies + 1 and int(r.streak) == 2, "day 2 the next day: a Rookie Pack, streak 2")
+	DailyChallenge.date_override = "2026-11-08"   # two days missed
+	ok(DailyRewards.streak() == 0 and DailyRewards.day() == 3, "missing days pauses the calendar on day 3")
+	coins = int(Profile.data.coins)
+	r = DailyRewards.claim()
+	ok(int(r.day) == 3 and int(Profile.data.coins) == coins + 250 and int(r.streak) == 1 and int(r.best) == 2, "the paused calendar continues with day 3; the streak starts again")
+	var stars := int(Profile.data.stars)
+	for i in range(1, 5):
+		DailyChallenge.date_override = DailyChallenge.shift_date("2026-11-08", i)
+		r = DailyRewards.claim()
+	ok(int(r.day) == 7 and int(r.streak) == 5 and int(Profile.data.stars) == stars + 10, "days 4 to 7 on consecutive days")
+	ok(Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "champion" and str(pk.source).begins_with("Login reward")), "day 7 pays a Champion Pack")
+	cal = DailyRewards.calendar()
+	ok(cal.all(func(d: Dictionary) -> bool: return bool(d.claimed)) and bool(cal[6].today), "a finished cycle shows all 7 days claimed")
+	DailyChallenge.date_override = "2026-11-13"
+	ok(DailyRewards.day() == 1 and bool(DailyRewards.calendar()[0].today) and not bool(DailyRewards.calendar()[0].claimed), "after day 7 the cycle starts again")
+	DailyChallenge.date_override = "2026-11-11"   # clock set back
+	ok(not DailyRewards.can_claim(), "a clock set back cannot claim again")
+	ok(int(Profile.data.login.best) == 5 and Profile.stat("login_claims") == 7.0, "best streak and claims are recorded")
+
+
+func _test_u9_streak_and_results() -> void:
+	section("Update 9: win streak, first win of the day, result keys")
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-04"
+	ok(Profile.win_streak() == 0 and is_zero_approx(Profile.streak_bonus()) and Profile.is_first_win_today(), "a new profile: no streak, first win waiting")
+	var c0 := int(Profile.data.coins)
+	var res := Rewards.apply(_u9_run("quick", 3, 3), true)
+	for k in ["streak", "streak_bonus_coins", "first_win_today_coins", "season_xp", "season_tiers", "boons", "milestones", "milestone_coins",
+			"promotion_reward", "overflow_coins"]:
+		ok(res.has(k), "result key %s" % k)
+	ok(int(res.streak) == 1 and int(res.streak_bonus_coins) == 0, "the first win starts the streak (no bonus yet)")
+	ok(int(res.first_win_today_coins) == int(res.coins) and int(res.coins) > 0, "the first win of the day pays its coins twice (%d + %d)" % [int(res.coins), int(res.first_win_today_coins)])
+	ok(int(Profile.data.coins) - c0 >= int(res.coins) * 2 and int(res.coins_total) >= int(res.coins) * 2, "doubled coins reach the wallet")
+	ok(not Profile.is_first_win_today() and str(Profile.data.first_win_day) == "2026-11-04", "the day's first win is used")
+	ok(int(res.season_xp) == 160 and Season.xp() == 160, "a win gives 160 season XP (100 + 60)")
+	ok(is_equal_approx(Profile.streak_bonus(), 0.1), "a streak of 1 gives the next win +10 %")
+	res = Rewards.apply(_u9_run("quick", 3, 3), true)
+	ok(int(res.streak) == 2 and int(res.streak_bonus_coins) == int(round(int(res.coins) * 0.1)) and int(res.first_win_today_coins) == 0,
+		"the second win in a row pays +10 % (%d of %d)" % [int(res.streak_bonus_coins), int(res.coins)])
+	for i in 6:
+		res = Rewards.apply(_u9_run("quick", 3, 3), true)
+	ok(int(res.streak) == 8 and is_equal_approx(float(res.streak_bonus), 0.5) and int(res.streak_bonus_coins) == int(round(int(res.coins) * 0.5)),
+		"the streak bonus stops at +50 %")
+	ok(Profile.data.achievements.has("streak_5") and int(Profile.data.streak.best) == 8, "5 wins in a row: On Fire")
+	res = Rewards.apply(_u9_run("endless", 4, 1), false)
+	ok(int(res.streak) == 8 and int(res.season_xp) == 100, "Endless never breaks the streak; a game gives 100 season XP")
+	res = Rewards.apply(_u9_run("quick", 2, 1), false)
+	ok(int(res.streak) == 0 and Profile.win_streak() == 0 and int(Profile.data.streak.best) == 8, "a loss resets the streak, the best stays")
+	DailyChallenge.date_override = "2026-11-05"
+	res = Rewards.apply(_u9_run("quick", 3, 3), true)
+	ok(int(res.first_win_today_coins) == int(res.coins), "a new day brings a new double-coin first win")
+	# Daily Challenge: +100 season XP for the day's first finished game.
+	var dr := RunState.create(DailyChallenge.config_for("2026-11-05"))
+	dr.inning = 2
+	res = Rewards.apply(dr, false)
+	ok(bool(res.daily.first_today) and int(res.season_xp) == 200, "the Daily Challenge adds 100 season XP (%d)" % int(res.season_xp))
+	dr = RunState.create(DailyChallenge.config_for("2026-11-05"))
+	res = Rewards.apply(dr, false)
+	ok(int(res.season_xp) == 100, "a second daily attempt is a normal game for season XP")
+	ok(int(res.season_xp_after) == int(res.season_xp_before) + 100 and res.season_tiers is Array, "results carry the season XP before and after")
+
+
+func _test_u9_shop() -> void:
+	section("Update 9: Daily Shop")
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-04"
+	var offs := Shop.offers()
+	ok(offs.size() == 5 and offs.map(func(o: Dictionary) -> String: return o.kind) == ["gift", "card", "card", "pack", "stars"],
+		"today's shop: a gift, two card deals, a pack deal and a star deal")
+	var keys_ok := true
+	for o in offs:
+		for k in ["id", "kind", "card", "pack", "copies", "price", "bought", "title", "text"]:
+			keys_ok = keys_ok and o.has(k)
+		keys_ok = keys_ok and (o.price as Dictionary).has("coins") and (o.price as Dictionary).has("stars") and str(o.title) != "" and str(o.text) != ""
+	ok(keys_ok, "every offer has the contract keys")
+	ok(str(Shop.generate("2026-11-04")) == str(Shop.generate("2026-11-04")), "the same day and profile roll the same offers")
+	ok(str(Shop.offers()) == str(offs), "offers stay the same through the day")
+	var differ := 0
+	for i in range(1, 11):
+		if str(Shop.generate(DailyChallenge.shift_date("2026-11-04", i))) != str(Shop.generate("2026-11-04")):
+			differ += 1
+	ok(differ >= 8, "other days roll other offers (%d of 10)" % differ)
+	var cards: Array = offs.filter(func(o: Dictionary) -> bool: return o.kind == "card")
+	ok(cards[0].card != cards[1].card, "two different cards")
+	var deal_ok := true
+	for o in cards:
+		deal_ok = deal_ok and Profile.is_card_owned(o.card) and Shop.copies_to_max(o.card) > 0 and int(o.copies) >= 1
+		deal_ok = deal_ok and int(o.price.coins) == int(o.copies) * Shop.card_price(DB.card(o.card).rarity)
+	ok(deal_ok, "card deals: owned cards that need copies, priced per copy")
+	ok(Shop.card_price("common") == 60 and Shop.card_price("uncommon") == 120 and Shop.card_price("rare") == 250 and Shop.card_price("epic") == 500
+		and Shop.card_price("legendary") == 1000, "copy prices 60 / 120 / 250 / 500 / 1,000")
+	var pack: Dictionary = offs[3]
+	ok(pack.pack == "pro" and int(pack.price.coins) == 375, "the pack deal: a Pro Pack at -25 % (375 coins)")
+	ok(offs[4].pack == "champion" and int(offs[4].price.stars) == 40 and int(offs[4].price.coins) == 0, "the star deal is paid with stars")
+	ok(int(offs[0].price.coins) == 0 and int(offs[0].price.stars) == 0, "the gift is free")
+	# Weighted toward the deck: with every card owned, deck cards come up far more than their share.
+	for id in DB.card_order:
+		Profile.data.cards[id].owned = true
+	var in_deck := 0
+	var total := 0
+	for i in 60:
+		for o in Shop.generate(DailyChallenge.shift_date("2026-11-04", i)):
+			if o.kind == "card":
+				total += 1
+				in_deck += 1 if o.card in Profile.data.deck else 0
+	var share := float(Profile.DECK_SIZE) / DB.card_order.size()
+	ok(float(in_deck) / total > share * 1.8, "card deals favour the deck (%.0f %% vs %.0f %% of the cards)" % [100.0 * in_deck / total, 100.0 * share])
+	# Copies: what the next level needs, capped per rarity.
+	Profile.data.cards.power_throw.copies = 0
+	Profile.data.cards.power_throw.level = 1
+	ok(Shop.deal_copies("power_throw") == 2, "a level 1 common needs 2 copies for level 2")
+	Profile.data.cards.power_throw.level = 4
+	ok(Shop.deal_copies("power_throw") == 4, "a level 4 common deal stops at 4 copies")
+	Profile.data.cards.power_throw.copies = 13
+	ok(Shop.deal_copies("power_throw") == 1 and Shop.copies_to_max("power_throw") == 1, "a deal never exceeds the copies still needed for max level")
+	Profile.data.cards.power_throw.level = DB.card_max_level
+	ok(Shop.copies_to_max("power_throw") == 0, "a max-level card needs no copies")
+	# Buying: once each, affordability, the gift.
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-04"
+	offs = Shop.offers()
+	Profile.data.coins = 0
+	Profile.data.stars = 0
+	ok(Shop.can_buy("gift") and Shop.gift_available(), "the free gift is always affordable")
+	var gift := Shop.buy("gift")
+	ok(not gift.is_empty() and not Shop.can_buy("gift") and Shop.buy("gift").is_empty(), "the gift is claimed once a day")
+	ok(Shop.offers()[0].bought, "the claimed gift is marked bought")
+	ok(not Shop.can_buy("pack") and Shop.buy("pack").is_empty() and not Shop.offers()[3].affordable, "deals need the coins")
+	ok(not Shop.can_buy("stars"), "the star deal needs stars")
+	ok(not Shop.can_buy("nope") and Shop.buy("nope").is_empty(), "unknown offers are refused")
+	Profile.data.coins = 1000
+	var pros := Profile.pack_count("pro")
+	var b := Shop.buy("pack")
+	ok(not b.is_empty() and int(Profile.data.coins) == 625 and Profile.pack_count("pro") == pros + 1, "buying the pack deal: 375 coins for a Pro Pack")
+	ok(not Shop.can_buy("pack") and Shop.buy("pack").is_empty() and int(Profile.data.coins) == 625, "each deal is bought once a day")
+	Profile.data.stars = 45
+	ok(not Shop.buy("stars").is_empty() and int(Profile.data.stars) == 5 and Profile.pack_count("champion") >= 1, "the star deal: a Champion Pack for 40 stars")
+	var deal: Dictionary = offs[1]
+	Profile.data.coins = int(deal.price.coins)
+	var copies := Profile.card_copies(deal.card)
+	ok(not Shop.buy("card_1").is_empty() and Profile.card_copies(deal.card) == copies + int(deal.copies) and int(Profile.data.coins) == 0,
+		"a card deal adds its copies (%s x%d)" % [deal.card, int(deal.copies)])
+	var deal2: Dictionary = offs[2]
+	Profile.data.coins = 99999
+	Profile.data.cards[deal2.card].level = DB.card_max_level
+	ok(not Shop.can_buy("card_2"), "a deal for a card that reached max level is refused")
+	ok(Profile.stat("shop_purchases") == 3.0 and Profile.stat("shop_gifts") == 1.0, "purchases and gifts are counted (%d)" % int(Profile.stat("shop_purchases")))
+	ok(Shop.seconds_to_refresh() > 0 and Shop.seconds_to_refresh() <= 86400, "refresh countdown to midnight")
+	DailyChallenge.date_override = "2026-11-05"
+	ok(Shop.can_buy("gift") and Shop.can_buy("pack") and (Profile.data.shop.bought as Array).is_empty() and Profile.data.shop.date == "2026-11-05",
+		"the shop refreshes the next day")
+	# No card needs copies: the card slots become discounted Rookie Packs.
+	for id in DB.card_order:
+		Profile.data.cards[id].owned = true
+		Profile.data.cards[id].level = DB.card_max_level
+	var fallback := Shop.generate("2026-11-06")
+	ok(fallback[1].kind == "pack" and fallback[1].pack == "rookie" and int(fallback[1].price.coins) == 150, "with nothing to copy, card slots sell Rookie Packs")
+
+
+func _test_u9_free_agents() -> void:
+	section("Update 9: free agents")
+	Profile.reset_profile()
+	var fas := Shop.free_agents()
+	var by_id := {}
+	for fa in fas:
+		by_id[fa.id] = fa
+	ok(by_id.has("moose") and int(by_id.moose.price) == 5000 and int(by_id.moose.level) == 15, "Moose: 5,000 coins or level 15")
+	ok(by_id.has("rosa") and int(by_id.rosa.price) == 7500 and int(by_id.rosa.level) == 20 and by_id.has("sid") and int(by_id.sid.price) == 10000
+		and int(by_id.sid.level) == 25, "Rosa 7,500 coins or level 20, Sid 10,000 coins or level 25")
+	ok(fas.all(func(f: Dictionary) -> bool: return f.has("signed") and not bool(f.signed)), "nobody is signed on a new profile")
+	Profile.data.coins = 4999
+	ok(not Shop.sign_agent("moose") and int(Profile.data.coins) == 4999 and not Profile.is_defender_unlocked("moose"), "signing needs the full price")
+	Profile.data.coins = 7000
+	var sig := str(DB.defender("moose").get("signature", ""))
+	if sig != "":
+		Profile.data.cards[sig].owned = false
+	ok(Shop.sign_agent("moose") and int(Profile.data.coins) == 2000 and Profile.is_defender_unlocked("moose"), "signing Moose: 5,000 coins, on the team now")
+	ok(sig == "" or Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "signature" and pk.get("card", "") == sig), "signing brings the signature pack")
+	ok(not Shop.sign_agent("moose") and int(Profile.data.coins) == 2000, "a signed defender cannot be signed again")
+	ok(not Shop.sign_agent("ace") and not Shop.sign_agent("nope"), "only free agents can be signed")
+	ok(Profile.stat("free_agents_signed") == 1.0 and Profile.data.achievements.has("free_agent"), "signing counts (Front Office)")
+	ok(bool(Shop.free_agents().filter(func(f: Dictionary) -> bool: return f.id == "moose")[0].signed), "free_agents() shows Moose as signed")
+
+
+func _test_u9_pity_overflow() -> void:
+	section("Update 9: pack pity, extra copies")
+	Profile.reset_profile()
+	ok(Profile.pity_left("epic") == 10 and Profile.pity_left("legendary") == 30, "pity: Epic within 10 packs, Legendary within 30")
+	Profile.data.pity.epic = 9
+	Profile.add_pack("rookie", "test")
+	var res := Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(res.cards.any(func(c: Dictionary) -> bool: return DB.rarity_index(c.rarity) >= DB.rarity_index("epic")) and int(Profile.data.pity.epic) == 0,
+		"the 10th pack without an Epic has one")
+	ok(Profile.pity_counts("rookie", "epic") and Profile.pity_counts("pro", "epic") and Profile.pity_counts("champion", "epic")
+		and not Profile.pity_counts("signature", "epic"), "every regular pack counts towards the Epic guarantee")
+	ok(Profile.pity_counts("pro", "legendary") and Profile.pity_counts("champion", "legendary") and not Profile.pity_counts("rookie", "legendary"),
+		"Pro and Champion Packs count towards the Legendary guarantee")
+	ok(Profile.pity_pack_names("legendary") == "Pro or Champion Packs" and Profile.pity_pack_names("epic") == "packs", "pity pack names for the Packs screen")
+	Profile.data.pity.legendary = 29
+	Profile.add_pack("rookie", "test")
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	var natural: bool = res.cards.any(func(c: Dictionary) -> bool: return c.rarity == "legendary")
+	ok(str(res.pity) != "legendary" and int(Profile.data.pity.legendary) == (0 if natural else 29), "a Rookie Pack does not trigger the Legendary guarantee")
+	Profile.data.pity.legendary = 29
+	Profile.add_pack("pro", "test")
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(res.cards.any(func(c: Dictionary) -> bool: return c.rarity == "legendary") and str(res.pity) == "legendary", "the 30th Pro Pack without a Legendary has one")
+	ok(int(Profile.data.pity.legendary) == 0 and int(Profile.data.pity.epic) == 0, "a Legendary resets both counters")
+	# Over many packs, the gaps never exceed the guarantees.
+	var gap_e := 0
+	var worst_e := 0
+	var leg0 := int(Profile.data.pity.legendary)
+	var leg_moved := false
+	for i in 90:
+		Profile.add_pack("rookie", "test")
+		res = Profile.open_pack(Profile.data.packs.size() - 1)
+		var best := 0
+		for c in res.cards:
+			best = maxi(best, DB.rarity_index(c.rarity))
+		gap_e = 0 if best >= DB.rarity_index("epic") else gap_e + 1
+		worst_e = maxi(worst_e, gap_e)
+		leg_moved = leg_moved or int(Profile.data.pity.legendary) > leg0
+	ok(worst_e <= 9, "90 Rookie Packs: at most 9 in a row without an Epic (%d)" % worst_e)
+	ok(not leg_moved, "Rookie Packs leave the Legendary counter alone")
+	ok(Profile.pity_left("epic") == 10 - int(Profile.data.pity.epic), "pity_left counts down")
+	var gap_l := 0
+	var worst_l := 0
+	for i in 70:
+		Profile.add_pack("pro", "test")
+		res = Profile.open_pack(Profile.data.packs.size() - 1)
+		var has_l: bool = res.cards.any(func(c: Dictionary) -> bool: return c.rarity == "legendary")
+		gap_l = 0 if has_l else gap_l + 1
+		worst_l = maxi(worst_l, gap_l)
+	ok(worst_l <= 29 and Profile.pity_left("legendary") == 30 - int(Profile.data.pity.legendary), "70 Pro Packs: at most 29 in a row without a Legendary (%d)" % worst_l)
+	var pe := int(Profile.data.pity.epic)
+	Profile.add_pack("signature", "test", "heat_wave")
+	Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(Profile.data.pity.epic) == pe, "signature packs do not move the counters")
+	# Pity survives save and load.
+	Profile.data.pity.epic = 4
+	Profile.save_now()
+	Profile.load_profile()
+	ok(int(Profile.data.pity.epic) == 4, "pity counters persist")
+	# Extra copies of a max-level card become coins.
+	var cid := "heat_wave"
+	var rarity := str(DB.card(cid).rarity)
+	Profile.data.cards[cid].owned = true
+	Profile.data.cards[cid].level = DB.card_max_level
+	var copies := Profile.card_copies(cid)
+	var coins := int(Profile.data.coins)
+	Profile.add_pack("signature", "test", cid)
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	var per := 2 if rarity == "common" else 1
+	ok(int(res.overflow_coins) == per * Profile.overflow_rate(rarity) and int(res.cards[0].overflow) == int(res.overflow_coins) and int(res.cards[0].copies) == 0,
+		"a copy of a max-level %s card pays %d coins" % [rarity, int(res.overflow_coins)])
+	ok(int(Profile.data.coins) == coins + int(res.overflow_coins) and Profile.card_copies(cid) == copies, "the coins reach the wallet, no copies pile up")
+	ok(Profile.overflow_rate("common") == 20 and Profile.overflow_rate("uncommon") == 40 and Profile.overflow_rate("rare") == 80
+		and Profile.overflow_rate("epic") == 160 and Profile.overflow_rate("legendary") == 400, "overflow rates 20 / 40 / 80 / 160 / 400")
+	Profile.add_pack("signature", "test", cid)
+	Profile.add_pack("signature", "test", cid)
+	var multi := Profile.open_packs("signature", 2, cid)
+	ok(int(multi.get("overflow_coins", 0)) == 2 * per * Profile.overflow_rate(rarity), "a multi-open adds up the overflow coins")
+	ok(Profile.stat("overflow_coins") == 3.0 * per * Profile.overflow_rate(rarity), "overflow coins are tracked")
+	# A card below max level keeps its copies.
+	Profile.data.cards[cid].level = 2
+	Profile.add_pack("signature", "test", cid)
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(res.overflow_coins) == 0 and Profile.card_copies(cid) == copies + per, "below max level, copies are kept")
+
+
+func _test_u9_promotion_modes() -> void:
+	section("Update 9: promotions, Endless milestones, Boss Rush")
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-04"
+	var coins := int(Profile.data.coins)
+	var stars := int(Profile.data.stars)
+	var pros := Profile.pack_count("pro")
+	var pr := Profile.promote()
+	ok(int(Profile.data.division) == 1 and int(pr.get("coins", 0)) == 300 and int(pr.get("stars", 0)) == 10 and pr.get("packs", []) == ["pro"],
+		"Bronze pays 300 coins, 10 stars and a Pro Pack (%s)" % [pr])
+	ok(int(Profile.data.coins) == coins + 300 and int(Profile.data.stars) == stars + 10 and Profile.pack_count("pro") == pros + 1, "the promotion reward is granted")
+	Profile.promote()
+	var champs := Profile.pack_count("champion")
+	pr = Profile.promote()
+	ok(int(Profile.data.division) == 3 and int(pr.coins) == 900 and int(pr.stars) == 30 and Profile.pack_count("champion") == champs + 1, "Gold pays 900 coins, 30 stars and a Champion Pack")
+	for i in range(1, DB.divisions.size()):
+		var rw := Profile.promotion_reward(i)
+		ok(int(rw.coins) == 300 * i and int(rw.stars) == 10 * i and rw.packs == (["champion"] if i >= 3 else ["pro"]), "division %d reward" % i)
+	Profile.data.division = DB.divisions.size() - 1
+	ok(Profile.promote().is_empty(), "no promotion past Legend")
+	Profile.data.division = 0
+	Profile.data.rp = 5000
+	var res := Rewards.apply(_u9_run("ranked", 3, 3), true)
+	ok(bool(res.promoted) and int(res.promotion_reward.get("coins", 0)) == 300, "a won Promotion Challenge reports its reward")
+	res = Rewards.apply(_u9_run("quick", 3, 3), true)
+	ok((res.promotion_reward as Dictionary).is_empty(), "other games report no promotion reward")
+	# Endless milestones: every 5 innings cleared.
+	ok(Rewards.milestones_for(4).is_empty() and Rewards.milestones_for(14) == [5, 10] and Rewards.milestones_for(20) == [5, 10, 15, 20], "milestones every 5 innings")
+	ok(int(Rewards.milestone_reward(5).coins) == 150 and Rewards.milestone_reward(5).packs == ["rookie"] and int(Rewards.milestone_reward(15).coins) == 450,
+		"milestone 5: 150 coins and a Rookie Pack; 15: 450 coins")
+	ok(Rewards.milestone_reward(10).packs == ["rookie", "pro"] and Rewards.milestone_reward(20).packs == ["rookie", "pro"], "Pro Packs at 10 and 20")
+	coins = int(Profile.data.coins)
+	var er := _u9_run("endless", 11, 0)   # 10 innings cleared
+	res = Rewards.apply(er, false)
+	var ms: Array = res.packs.filter(func(pk: Dictionary) -> bool: return str(pk.source).begins_with("Endless milestone"))
+	ok(res.milestones == [5, 10] and int(res.milestone_coins) == 450, "10 Endless innings: milestones 5 and 10 pay 450 coins")
+	ok(ms.size() == 3 and ms.filter(func(pk: Dictionary) -> bool: return pk.type == "pro").size() == 1, "milestone packs: 2 Rookie + 1 Pro")
+	ok(int(Profile.data.coins) - coins >= int(res.coins) + 450, "milestone coins reach the wallet")
+	var game_rookies: Array = res.packs.filter(func(pk: Dictionary) -> bool: return str(pk.source).begins_with("The Endless Ninth"))
+	ok(game_rookies.size() == 1, "Endless still gives its one game Rookie Pack (%d)" % game_rookies.size())
+	res = Rewards.apply(_u9_run("endless", 3, 1), false)
+	ok((res.milestones as Array).is_empty() and int(res.milestone_coins) == 0, "no milestone before 5 innings")
+	# Boss Rush: a Pro Pack on a win and the best time.
+	var br := _u9_run("boss_rush", 3, 3)
+	br.stats["time"] = 412.4
+	br.boons = ["team_damage"]
+	res = Rewards.apply(br, true)
+	ok((res.packs as Array).any(func(pk: Dictionary) -> bool: return pk.type == "pro" and str(pk.source).begins_with("Boss Rush")), "a Boss Rush win pays a Pro Pack")
+	ok(is_equal_approx(float(Profile.data.records.best_time_boss_rush), 412.4) and (res.records as Array).any(func(t: String) -> bool: return "6:52" in t),
+		"the best Boss Rush time is recorded (6:52)")
+	ok(res.boons == ["team_damage"], "the result lists the boons taken")
+	ok(Profile.stat("wins_boss_rush") == 1.0 and Profile.data.achievements.has("rush_win"), "Boss Rush wins are counted (Rush Hour)")
+	br = _u9_run("boss_rush", 3, 3)
+	br.stats["time"] = 450.0
+	Rewards.apply(br, true)
+	ok(is_equal_approx(float(Profile.data.records.best_time_boss_rush), 412.4), "a slower win keeps the record")
+	br = _u9_run("boss_rush", 3, 3)
+	br.stats["time"] = 380.0
+	Rewards.apply(br, true)
+	ok(is_equal_approx(float(Profile.data.records.best_time_boss_rush), 380.0), "a faster win sets the record")
+	br = _u9_run("boss_rush", 2, 1)
+	br.stats["time"] = 100.0
+	res = Rewards.apply(br, false)
+	ok(not (res.packs as Array).any(func(pk: Dictionary) -> bool: return pk.type == "pro" and str(pk.source).begins_with("Boss Rush"))
+		and is_equal_approx(float(Profile.data.records.best_time_boss_rush), 380.0),
+		"a lost Boss Rush pays no Pro Pack and sets no time")
+	ok(is_equal_approx(float(DB.mode("boss_rush").reward_mult), 0.6), "Boss Rush reward multiplier 0.6")
+
+
+func _test_u9_missions_and_saves() -> void:
+	section("Update 9: missions, achievements, old saves")
+	Profile.reset_profile()
+	DailyChallenge.date_override = "2026-11-04"
+	Missions.refresh()
+	var s := Missions.state()
+	# New events reach missions.
+	s.daily[1] = _mission("boons", "boons_drafted", 3, 2)
+	Profile.bump_stat("boons_drafted", 2)
+	ok(int(s.daily[1].progress) == 2, "drafted boons count towards a mission")
+	s.daily[2] = _mission("win_streak", "win_streak", 3, 3, true)
+	Rewards.apply(_u9_run("quick", 3, 3), true)
+	Rewards.apply(_u9_run("quick", 3, 3), true)
+	ok(int(s.daily[2].progress) == 2 and not Missions.is_done(s.daily[2]), "a win streak mission tracks the streak (2 of 3)")
+	Rewards.apply(_u9_run("quick", 3, 3), true)
+	ok(Missions.is_done(s.daily[2]), "three wins in a row finish it")
+	s.daily[0] = _mission("shop_deal", "shop_purchases", 1, 1)
+	Profile.data.coins = 1000
+	Shop.buy("pack")
+	ok(Missions.is_done(s.daily[0]), "buying a shop deal finishes the shop mission")
+	var xp0 := Season.xp()
+	var r := Missions.claim("daily", 0)
+	ok(int(r.get("season_xp", 0)) == 80 and Season.xp() == xp0 + 80 and "80 Season XP" in Missions.reward_text(r), "a claimed mission pays 80 season XP")
+	for def in Missions.data().daily + Missions.data().weekly:
+		var inst := Missions._instance(def, RandomNumberGenerator.new(), "daily")
+		ok(not "{" in Missions.text(inst), "mission %s resolves" % def.id)
+	for id in ["boss_rush", "boons", "shop_deal", "win_streak"]:
+		ok(Missions.data().daily.any(func(d: Dictionary) -> bool: return d.id == id), "daily mission %s exists" % id)
+	for id in ["rush_win", "rush_10", "boons_25", "boons_100", "streak_5", "streak_10", "shop_10", "free_agent", "season_15", "season_30", "login_7"]:
+		ok(DB.achievements.has(id) and int(DB.achievements[id].stars) > 0, "achievement %s" % id)
+	ok(int(DB.achievements.full_roster.goal) == DB.defenders.size(), "Full Roster asks for every defender (%d)" % DB.defenders.size())
+	for i in 25:
+		Profile.bump_stat("boons_drafted")
+	ok(Profile.data.achievements.has("boons_25"), "25 boons: Draft Day")
+	# Old saves: no Update 9 keys, or broken ones.
+	var old: Dictionary = Profile.data.duplicate(true)
+	for k in ["season", "login", "shop", "streak", "pity", "first_win_day"]:
+		old.erase(k)
+	old.records.erase("best_time_boss_rush")
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Profile.load_status == "ok" and int(Profile.data.season.xp) == 0 and int(Profile.data.login.day) == 0 and Profile.win_streak() == 0
+		and Profile.pity_left("epic") == 10 and Profile.is_first_win_today() and float(Profile.data.records.best_time_boss_rush) == 0.0, "a pre-Update 9 save loads with defaults")
+	ok(Season.tier() == 0 and DailyRewards.can_claim() and Shop.offers().size() == 5, "old saves get the season, the calendar and the shop")
+	old["season"] = {"id": "x", "xp": -40, "claimed": ["a", 3, 3.0, 99], "bonus_claimed": null}
+	old["login"] = "junk"
+	old["shop"] = {"date": 5, "offers": ["x", {"id": "gift"}], "bought": [1]}
+	old["streak"] = {"wins": 3.0, "best": 7.0}
+	old["pity"] = []
+	old["first_win_day"] = null
+	old["uniforms_owned"] = ["home", "nope"]
+	f = FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	var se: Dictionary = Profile.data.season
+	ok(se.claimed == [3] and int(se.xp) == 0 and typeof(se.xp) == TYPE_INT and int(se.bonus_claimed) == 0, "a broken season block is repaired (%s)" % [se])
+	ok(typeof(Profile.data.login) == TYPE_DICTIONARY and int(Profile.data.login.day) == 0 and typeof(Profile.data.pity) == TYPE_DICTIONARY, "broken login and pity blocks are reset")
+	ok(Profile.win_streak() == 3 and typeof(Profile.data.streak.wins) == TYPE_INT and str(Profile.data.first_win_day) == "", "streak floats become ints, a null day is reset")
+	ok(Profile.data.uniforms_owned == ["home"] and (Profile.data.shop.offers as Array).size() == 1, "unknown uniforms and broken offers are dropped")
+	ok(Shop.offers().size() == 5 and Season.xp() == 0 and DailyRewards.calendar().size() == 7, "the repaired state works")
+
+
+# ---------------------------------------------------------------- Update 9 cards (Stream B)
+
+const NEW_CARDS_U9 := ["scouting_report", "sprinkler_system", "sweet_spot", "rally_monkey", "second_wind", "money_ball",
+	"scoop_and_tag", "signal_caller", "hidden_ball_trick", "worm_burner", "fireworks_night", "ground_rule_double"]
+
+
+## Update 9 cards outside battle: data, text that fits the card face, combos, sets, scouting, Auto Build.
+func test_update9_cards_content() -> void:
+	section("update 9 cards (data)")
+	var expect := {"scouting_report": ["common", "control", 2], "sprinkler_system": ["common", "defense", 2],
+		"sweet_spot": ["uncommon", "offense", 3], "rally_monkey": ["uncommon", "utility", 2], "second_wind": ["rare", "utility", 2],
+		"money_ball": ["rare", "utility", 2], "scoop_and_tag": ["rare", "defense", 4], "signal_caller": ["rare", "utility", 3],
+		"hidden_ball_trick": ["epic", "control", 4], "worm_burner": ["epic", "offense", 5], "fireworks_night": ["legendary", "offense", 7],
+		"ground_rule_double": ["legendary", "utility", 6]}
+	for id in NEW_CARDS_U9:
+		var c := DB.card(id)
+		ok(not c.is_empty(), "Update 9 card %s defined" % id)
+		ok([c.get("rarity"), c.get("category"), int(c.get("cost", -1))] == expect[id], "%s is %s" % [id, expect[id]])
+		ok(DB.combos_for(id).size() > 0, "%s has a combo" % id)
+		var details := str(c.get("details", ""))
+		for key in c.params.keys():
+			details = details.replace("{%s}" % key, "1")
+		ok(details != "" and not "{" in details, "%s has details text with resolvable values" % id)
+		ok(id in CollectionSets.cards_in("big_league") and id in CollectionSets.cards_in(str(c.category)), "%s is in the Big League set and its category set" % id)
+		var a := DeckAI.analyze(id, 1)
+		ok(float(a.get("power", 0.0)) > 1.5 and str(a.get("role", "")) in ROLES, "Auto Build rates %s (power %.1f, %s)" % [id, float(a.get("power", 0.0)), a.get("role", "")])
+	ok(DB.card("scoop_and_tag").get("linked") == "moose" and DB.card("signal_caller").get("linked") == "rosa" and DB.card("worm_burner").get("linked") == "sid",
+		"the three signature cards are cast by Moose, Rosa and Sid")
+	ok(CollectionSets.cards_in("big_league").size() == NEW_CARDS_U9.size(), "the Big League set holds the %d new cards" % NEW_CARDS_U9.size())
+	# Every card's face text fits its three lines (hand card: 128 px wide at font size 13), at levels 1 and 5.
+	var font := UITheme.font_body()
+	var lh := font.get_height(13)
+	var long: Array = []
+	for id in DB.card_order:
+		for lv in [1, DB.card_max_level]:
+			var h := font.get_multiline_string_size(DB.card_text(id, lv), HORIZONTAL_ALIGNMENT_LEFT, 128, 13).y
+			if h > lh * 3.0 + 1.0:
+				long.append("%s@%d" % [id, lv])
+	ok(long.is_empty(), "every card text fits three lines on the card face %s" % [long])
+	# Scouting Book: the combat cards counter something.
+	for id in ["scouting_report", "sprinkler_system", "scoop_and_tag", "hidden_ball_trick", "worm_burner", "fireworks_night"]:
+		ok(Scouting.good_against(id).size() > 0, "%s is good against %s" % [id, Scouting.good_against(id)])
+	ok("boss" in Scouting.card_tags("hidden_ball_trick") and "run_stop" in Scouting.card_tags("hidden_ball_trick"), "hidden ball trick counts as a run-stopper and a boss answer")
+	# Auto Build with everything owned still builds a valid deck, and the new cards don't move the old cards' power.
+	var everything: Array = DB.card_order.duplicate()
+	var built := DeckAI.build("balanced", _ai_ctx(everything))
+	ok(built.deck.size() == Profile.DECK_SIZE and _unique_owned(built.deck, everything), "Auto Build with all 56 cards builds a valid deck %s" % [built.deck])
+
+
+## Update 9 cards in a live battle, one exact effect at a time (defenders hold their throws).
+func _test_update9_cards_battle() -> void:
+	section("update 9 cards (battle)")
+	var route := battle.routes[0]
+	var other := battle.routes[battle.routes.size() - 1]
+	var lv := 1
+	var cs := battle.cards
+	_hold_fire(true)
+	await _gwait(0.1)
+	var spawn := func(id: String, rt: Route, d: float, hp := 40.0) -> Enemy:
+		return battle.spawn_enemy(id, rt, d, {"lateral": 0.0, "hp_mult": hp, "speed_mult": 0.01})
+
+	# Scouting Report: the target's whole type (and later runners of it) takes +30 %; other types don't.
+	var r1: Enemy = spawn.call("runner", route, route.length * 0.5)
+	var r2: Enemy = spawn.call("runner", other, other.length * 0.4)
+	var sp: Enemy = spawn.call("sprinter", route, route.length * 0.3)
+	await _gwait(0.1)
+	battle.effects.execute("scouting_report", lv, {"enemy": r1, "point": r1.global_position, "valid": true})
+	await _gwait(0.05)
+	ok(r1.scout_t > 0.0 and r2.scout_t > 0.0 and sp.scout_t <= 0.0, "scouting report scouts every runner of the type and no other")
+	var late: Enemy = spawn.call("runner", other, 3.0)
+	await _gwait(0.1)
+	ok(late.scout_t > 0.0, "a runner of the scouted type that spawns later is scouted too")
+	var dealt := battle.deal_damage(r2, 100.0, {"kind": "throw"})
+	var plain := battle.deal_damage(sp, 100.0, {"kind": "throw"})
+	ok(absf(dealt - 130.0) < 0.5 and absf(plain - 100.0) < 0.5, "scouted runners take +30%% damage (%.1f vs %.1f)" % [dealt, plain])
+	# Enemy.apply_aura_vuln (for defender auras): +25 % while refreshed, gone shortly after.
+	sp.apply_aura_vuln(0.25)
+	var in_aura := battle.deal_damage(sp, 100.0, {"kind": "throw"})
+	await _gwait(0.4)
+	var after_aura := battle.deal_damage(sp, 100.0, {"kind": "throw"})
+	ok(absf(in_aura - 125.0) < 0.5 and absf(after_aura - 100.0) < 0.5, "an aura vulnerability adds 25%% while refreshed (%.1f, then %.1f)" % [in_aura, after_aura])
+	_clear()
+	await _gwait(0.2)
+
+	# Sprinkler System: runners on the soaked stretch are 30 % slower and roll to slip.
+	var wet: Enemy = spawn.call("runner", route, route.length * 0.5)
+	var dry: Enemy = spawn.call("runner", route, route.length * 0.5 - 14.0)
+	await _gwait(0.1)
+	battle.effects.execute("sprinkler_system", lv, {"point": wet.global_position, "valid": true})
+	await _gwait(0.1)
+	ok(wet.slows.has("sprinkler") and absf(float(wet.slows.sprinkler[0]) - 0.3) < 0.001 and not dry.slows.has("sprinkler"),
+		"sprinkler slows runners on the wet stretch only")
+	ok(wet.soak_t > 0.0 and absf(wet.slip_chance - 0.3) < 0.001 and absf(wet.slip_time - 0.6) < 0.001, "wet runners have a 30% chance to slip for 0.6 s")
+	var sure: Enemy = spawn.call("runner", other, other.length * 0.5)
+	sure.apply_soak(2.0, 1.0, 0.6)
+	await _gwait(0.65)
+	ok(sure.stun_t > 0.0, "a certain slip stuns the runner")
+	_clear()
+	await _gwait(0.2)
+
+	# Sweet Spot: every throw is a crit while it lasts.
+	var tgt: Enemy = spawn.call("runner", route, route.length * 0.5)
+	battle.effects.execute("sweet_spot", lv, {"valid": true})
+	await _gwait(0.05)
+	var crits := 0
+	for df in battle.defenders:
+		for i in 5:
+			if df._build_payload(tgt, false).crit:
+				crits += 1
+	ok(crits == battle.defenders.size() * 5, "sweet spot: every throw crits (%d of %d)" % [crits, battle.defenders.size() * 5])
+	_clear()
+	await _gwait(0.1)
+
+	# Rally Monkey: +3 energy, or +5 and a card after a run scored this inning (clutch).
+	cs.infinite_energy = false
+	battle.run.runs_inning = 0
+	cs.energy = 2.0
+	battle.effects.execute("rally_monkey", lv, {"valid": true})
+	ok(absf(cs.energy - 5.0) < 0.05, "rally monkey gives 3 energy (%.1f)" % cs.energy)
+	battle.run.runs_inning = 1
+	cs.energy = 2.0
+	var slot := cs.hand.find("")
+	if slot < 0:
+		cs.discard.append(cs.hand[0])
+		cs.hand[0] = ""
+	cs.draw_pile.append("power_throw")   # something to draw
+	var n0 := cs.hand_count()
+	battle.effects.execute("rally_monkey", lv, {"valid": true})
+	ok(absf(cs.energy - 7.0) < 0.05 and cs.hand_count() == n0 + 1, "clutch rally monkey gives 5 energy and draws a card (%.1f, %d -> %d)" % [cs.energy, n0, cs.hand_count()])
+	battle.run.runs_inning = 0
+
+	# Second Wind: the defender's signature card comes off cooldown, +50 % attack speed for 6 s.
+	var df0: Defender = battle.defenders[0]
+	var sig := str(df0.data.signature)
+	cs.cooldowns[sig] = 10.0
+	cs.cooldowns["power_throw"] = 10.0
+	var interval0 := df0.effective_interval()
+	battle.effects.execute("second_wind", lv, {"defender": df0, "valid": true})
+	await _gwait(0.05)
+	ok(cs.cooldown_left(sig) <= 0.0 and cs.cooldown_left("power_throw") > 0.0, "second wind recharges %s's signature card (%s) and nothing else" % [df0.id, sig])
+	ok(absf(df0.dyn_speed - 0.5) < 0.01 and df0.effective_interval() < interval0 * 0.7, "second wind: +50%% attack speed (%.2f, %.2f -> %.2f s)" % [df0.dyn_speed, interval0, df0.effective_interval()])
+	ok(battle.defenders[1].dyn_speed < 0.01, "second wind boosts only the chosen defender")
+	cs.cooldowns.clear()
+	_clear()
+	await _gwait(0.1)
+
+	# Money Ball: outs pay double coins (through Battle's coin-bonus hook when it has one).
+	var m1: Enemy = spawn.call("runner", route, route.length * 0.5)
+	var m2: Enemy = spawn.call("runner", route, route.length * 0.4)
+	await _gwait(0.05)
+	battle.combo_timer = 0.0
+	var c0 := battle.run.coins
+	m1.die({})
+	var base := battle.run.coins - c0
+	battle.effects.execute("money_ball", lv, {"valid": true})
+	battle.combo_timer = 0.0
+	c0 = battle.run.coins
+	m2.die({})
+	var doubled := battle.run.coins - c0
+	ok(base > 0 and absi(doubled - base * 2) <= 1, "money ball doubles the coins for an out (%d -> %d)%s" % [base, doubled,
+		" via add_out_coin_bonus" if battle.has_method("add_out_coin_bonus") else ""])
+	_clear()
+	await _gwait(0.1)
+
+	# Scoop & Tag: damage, knockback and stun; non-boss runners under 30 % are out; bosses never.
+	var pt := route.position_at(route.length * 0.5)
+	var full: Enemy = spawn.call("runner", route, route.length * 0.5)
+	var hurt: Enemy = spawn.call("runner", route, route.length * 0.5 + 0.6)
+	var boss: Enemy = battle.spawn_enemy("iron_slugger", route, route.length * 0.5 - 0.6, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01})
+	await _gwait(0.1)
+	hurt.hp = hurt.max_hp * 0.25
+	boss.hp = boss.max_hp * 0.1
+	var h_full := full.hp
+	var d_full := full.d
+	var power := float(battle.effects.caster_info("scoop_and_tag").power)
+	battle.effects.execute("scoop_and_tag", lv, {"point": pt, "valid": true})
+	await _gwait(0.9)
+	ok(not hurt.alive and boss.alive, "scoop & tag tags out the hurt runner, never the boss")
+	ok(absf((h_full - full.hp) - DB.card_param("scoop_and_tag", "damage", lv) * power) < 1.0 and full.d < d_full - 0.5,
+		"scoop & tag hits for %.0f and knocks back (%.0f, %.1f m)" % [DB.card_param("scoop_and_tag", "damage", lv) * power, h_full - full.hp, d_full - full.d])
+	ok(full.stun_t > 0.0 or full.d < d_full - 0.5, "scoop & tag stuns")
+	_clear()
+	await _gwait(0.2)
+
+	# Signal Caller: the 3 lead runners take +40 % and refund 1 energy when put out.
+	var row: Array = []
+	for i in 4:
+		row.append(spawn.call("runner", route, route.length * 0.3 + i * 3.0))
+	await _gwait(0.1)
+	battle.effects.execute("signal_caller", lv, {"valid": true})
+	await _gwait(1.0)
+	ok(row[3].signal_t > 0.0 and row[2].signal_t > 0.0 and row[1].signal_t > 0.0 and row[0].signal_t <= 0.0, "signal caller marks the 3 lead runners")
+	var sd := battle.deal_damage(row[3], 100.0, {"kind": "throw"})
+	ok(absf(sd - 140.0) < 0.5, "signalled runners take +40%% damage (%.1f)" % sd)
+	cs.energy = 0.0
+	battle.combo_timer = 0.0   # no triple-play energy in the way
+	row[2].die({})
+	await _gwait(0.05)
+	ok(cs.energy >= 0.99 and cs.energy < 1.4, "an out on a signalled runner refunds 1 energy (%.2f)" % cs.energy)
+	cs.energy = 0.0
+	battle.combo_timer = 0.0
+	row[0].die({})
+	await _gwait(0.05)
+	ok(cs.energy < 0.4, "an out on an unmarked runner refunds nothing (%.2f, regen only)" % cs.energy)
+	_clear()
+	await _gwait(0.2)
+
+	# Hidden Ball Trick: after the reveal the strongest non-boss runner is out; bosses lose 15 %.
+	var small: Enemy = spawn.call("runner", route, route.length * 0.6)
+	var big: Enemy = spawn.call("armored", route, route.length * 0.3)
+	var hb: Enemy = battle.spawn_enemy("iron_slugger", other, other.length * 0.3, {"lateral": 0.0, "hp_mult": 1.0, "speed_mult": 0.01})
+	await _gwait(0.1)
+	var hb0 := hb.hp
+	battle.effects.execute("hidden_ball_trick", lv, {"valid": true})
+	await _gwait(0.6)
+	ok(big.alive, "the hidden ball trick waits for its reveal")
+	await _gwait(DB.card_param("hidden_ball_trick", "reveal", lv))
+	ok(not big.alive and small.alive, "the strongest runner (not the lead one) is tagged out")
+	ok(absf((hb0 - hb.hp) - hb.max_hp * 0.15) < 1.0, "a boss loses 15%% of its max health (%.0f of %.0f)" % [hb0 - hb.hp, hb.max_hp])
+	_clear()
+	await _gwait(0.2)
+
+	# Worm Burner: every runner on the stretch behind the landing spot takes damage and trips;
+	# a runner ahead of it and one on another path don't; the path stays slick.
+	var d_land := route.length * 0.6
+	var on_path: Array = []
+	for off in [1.0, 5.0, 10.0]:
+		on_path.append(spawn.call("runner", route, d_land - off))
+	var ahead: Enemy = spawn.call("runner", route, d_land + 6.0)
+	var off_path: Enemy = spawn.call("runner", other, 4.0)
+	await _gwait(0.1)
+	var hp_on: Array = on_path.map(func(en: Enemy) -> float: return en.hp)
+	var h_ahead := ahead.hp
+	var h_off := off_path.hp
+	var wpow := float(battle.effects.caster_info("worm_burner").power)
+	battle.effects.execute("worm_burner", lv, {"point": route.position_at(d_land), "valid": true})
+	var tripped := 0
+	for i in 20:
+		await _gwait(0.1)
+		for en in on_path:
+			if en.stun_t > 0.0:
+				tripped = maxi(tripped, 1)
+	await _gwait(0.4)
+	var hits := 0
+	for i in on_path.size():
+		if absf((float(hp_on[i]) - on_path[i].hp) - DB.card_param("worm_burner", "damage", lv) * wpow) < 1.0:
+			hits += 1
+	ok(hits == 3, "worm burner hits every runner on the path behind it for %.0f (%d of 3)" % [DB.card_param("worm_burner", "damage", lv) * wpow, hits])
+	ok(ahead.hp >= h_ahead - 0.01 and off_path.hp >= h_off - 0.01, "worm burner misses runners ahead of it and on other paths")
+	ok(tripped > 0, "worm burner trips the runners it hits")
+	var slick := battle.effects.active_item("wet")
+	ok(not slick.is_empty() and slick.key == "slick" and on_path[0].slows.has("slick"), "worm burner leaves a slick that slows runners")
+	_clear()
+	await _gwait(0.2)
+
+	# Fireworks Night: 14 rockets of 70 (plus splashes) over 4 s, then a finale on the crowd.
+	var crowd: Array = []
+	for i in 5:
+		crowd.append(spawn.call("runner", route, route.length * 0.5 + i * 0.5, 80.0))
+	await _gwait(0.1)
+	var imp0 := float(battle.run.card_impact.get("fireworks_night", {}).get("damage", 0.0))
+	battle.effects.execute("fireworks_night", lv, {"valid": true})
+	await _gwait(DB.card_param("fireworks_night", "time", lv) + 1.1)
+	var fw := float(battle.run.card_impact.get("fireworks_night", {}).get("damage", 0.0)) - imp0
+	var least := DB.card_param("fireworks_night", "rockets", lv) * DB.card_param("fireworks_night", "damage", lv) + 5.0 * DB.card_param("fireworks_night", "finale_damage", lv)
+	ok(fw >= least - 1.0, "fireworks night deals at least %.0f (%.0f)" % [least, fw])
+	ok(crowd.all(func(en: Enemy) -> bool: return en.stun_t > 0.0), "the finale stuns the crowd")
+	_clear()
+	await _gwait(0.2)
+
+	# Ground Rule Double: the next 2 cards this inning are cast twice; a third isn't; charges end with the inning.
+	var gr: Enemy = spawn.call("runner", route, route.length * 0.5)
+	await _gwait(0.1)
+	battle.effects.execute("ground_rule_double", lv, {"valid": true})
+	ok(cs.double_casts_left(battle.run.inning) == 2, "ground rule double arms 2 casts (and doesn't use one itself)")
+	var g0 := gr.hp
+	battle.effects.execute("bean_ball", lv, {"enemy": gr, "point": gr.global_position, "valid": true})
+	await _gwait(0.6)
+	var once := g0 - gr.hp
+	await _gwait(CardEffects.ECHO_DELAY + 1.0)
+	var twice := g0 - gr.hp
+	var bb := DB.card_param("bean_ball", "damage", lv)
+	ok(absf(once - bb) < 1.0 and absf(twice - 2.0 * bb) < 1.0, "a doubled card goes off twice (%.0f, then %.0f)" % [once, twice])
+	ok(cs.double_casts_left(battle.run.inning) == 1, "one cast-twice charge left")
+	battle.effects.execute("bean_ball", lv, {"enemy": gr, "point": gr.global_position, "valid": true})
+	ok(cs.double_casts_left(battle.run.inning) == 0, "the second card uses the last charge")
+	await _gwait(CardEffects.ECHO_DELAY + 1.6)
+	var g1 := gr.hp
+	battle.effects.execute("bean_ball", lv, {"enemy": gr, "point": gr.global_position, "valid": true})
+	await _gwait(CardEffects.ECHO_DELAY + 1.6)
+	ok(absf((g1 - gr.hp) - bb) < 1.0, "the third card is cast once (%.0f)" % (g1 - gr.hp))
+	cs.grant_double_casts(2, battle.run.inning)
+	ok(cs.double_casts_left(battle.run.inning + 1) == 0, "cast-twice charges run out when the inning ends")
+	cs.double_left = 0
+	cs.infinite_energy = true
+	_clear()
+	_hold_fire(false)
+
+
+## Waits `sec` seconds of game time (the battle's clock): under heavy load the engine advances
+## game time slower than the wall clock, so card timings are checked against game time.
+func _gwait(sec: float) -> void:
+	await get_tree().create_timer(sec, false, false, false).timeout

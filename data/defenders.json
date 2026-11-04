@@ -294,7 +294,7 @@
    "role": "infielder",
    "number": 25,
    "accent": "#A3D139",
-   "signature": "infield_fly",
+   "signature": "scoop_and_tag",
    "title": "The Big Scoop",
    "bio": "Moose Malone is the biggest glove in the league. Anything that comes near first base gets scooped, slowed down and swarmed.",
    "stats": {
@@ -314,9 +314,9 @@
    "targeting": "first",
    "unlock": {
     "type": "level",
-    "value": 13,
+    "value": 15,
     "stars": 0,
-    "coins": 6000
+    "coins": 5000
    }
   },
   {
@@ -325,7 +325,7 @@
    "role": "catcher",
    "number": 7,
    "accent": "#D63AF9",
-   "signature": "tag_at_the_plate",
+   "signature": "signal_caller",
    "title": "The Strategist",
    "bio": "Rosa Vega reads runners like a scouting report. She flips her mask up, calls the play, and the whole team throws at her mark.",
    "stats": {
@@ -345,9 +345,9 @@
    "targeting": "first",
    "unlock": {
     "type": "level",
-    "value": 16,
+    "value": 20,
     "stars": 0,
-    "coins": 8000
+    "coins": 7500
    }
   },
   {
@@ -356,7 +356,7 @@
    "role": "pitcher",
    "number": 51,
    "accent": "#5C6BC0",
-   "signature": "line_drive",
+   "signature": "worm_burner",
    "title": "Submarine",
    "bio": "Sid \"Submarine\" Okafor throws from below his knees. His low skippers bounce off the dirt and keep on going.",
    "stats": {
@@ -376,7 +376,7 @@
    "targeting": "first",
    "unlock": {
     "type": "level",
-    "value": 19,
+    "value": 25,
     "stars": 0,
     "coins": 10000
    }
