@@ -9,6 +9,8 @@
     {"id": "endless", "name": "The Endless Ninth", "innings": 0, "waves_per_inning": 3, "boss_every": 3,
      "inning_offset": 1.5, "mini_boss_from": 2, "mini_boss_slugger_from": 4,
      "text": "Survive as long as you can. Random modifiers every inning, an elite mini-boss closing every inning and a boss every third.", "rewards": true, "reward_mult": 0.8},
+    {"id": "boss_rush", "name": "Boss Rush", "innings": 3, "waves_per_inning": 3, "bosses": {"1": "iron_slugger", "2": "phantom_captain", "3": "grand_slammer"}, "inning_scale": 2.4,
+     "text": "Three innings, three bosses, a boon draft after each. About 7 minutes.", "rewards": true, "reward_mult": 0.6},
     {"id": "practice", "name": "Practice Field", "innings": 0, "waves_per_inning": 0,
      "text": "Spawn any runner, test any card. No rewards, no risk.", "rewards": false, "reward_mult": 0.0},
     {"id": "ranked", "name": "Promotion Challenge", "innings": 3, "waves_per_inning": 3, "bosses": {"3": "phantom_captain"}, "inning_scale": 2.2,

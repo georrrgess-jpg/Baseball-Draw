@@ -16,6 +16,8 @@ const SCENES := {
 	"packs": "res://scenes/packs.tscn",
 	"card_upgrades": "res://scenes/card_upgrades.tscn",
 	"scouting_book": "res://scenes/scouting_book.tscn",
+	"shop": "res://scenes/shop.tscn",
+	"season": "res://scenes/season.tscn",
 }
 
 var current := ""

@@ -36,6 +36,8 @@ var positions: Dictionary = {}       # defender id -> [x, z]
 var targeting: Dictionary = {}       # defender id -> targeting mode
 var modifiers: Array = []      # active endless/challenge modifier ids
 var formation := "balanced"
+var boons: Array = []         # Update 9: Dugout Draft boon ids taken this game (src/core/boons.gd)
+var milestones: Array = []    # Update 9: Endless innings milestones reached (paid out by Rewards)
 
 var stats := {
 	"damage_by": {}, "outs_by": {}, "cards_played": 0, "double_plays": 0, "triple_plays": 0,
@@ -207,7 +209,7 @@ func to_dict() -> Dictionary:
 		"outs_total": outs_total, "energy": energy, "team": team, "captain": captain, "deck": deck,
 		"temp_cards": temp_cards, "card_level_bonus": card_level_bonus, "upgrades": upgrades,
 		"defender_bonus": defender_bonus, "positions": positions, "targeting": targeting,
-		"modifiers": modifiers, "formation": formation, "stats": stats,
+		"modifiers": modifiers, "formation": formation, "stats": stats, "boons": boons, "milestones": milestones,
 		"saved_at": Time.get_datetime_string_from_system(),
 	}
 
@@ -222,7 +224,7 @@ static func from_dict(d: Dictionary) -> RunState:
 			r.set(k, int(d[k]))
 	r.run_seed = int(d.get("seed", r.run_seed))
 	r.energy = float(d.get("energy", 5.0))
-	for k in ["team", "deck", "temp_cards", "modifiers"]:
+	for k in ["team", "deck", "temp_cards", "modifiers", "boons", "milestones"]:
 		if d.has(k) and typeof(d[k]) == TYPE_ARRAY:
 			r.set(k, d[k].duplicate())
 	for k in ["card_level_bonus", "upgrades", "defender_bonus", "positions", "targeting"]:

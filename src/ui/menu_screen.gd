@@ -165,7 +165,7 @@ func go_back() -> void:
 
 static func _screen_name(scene: String) -> String:
 	return {"main_menu": "the main menu", "play_menu": "Play", "packs": "Card Packs", "deck_builder": "Cards & Deck",
-		"card_upgrades": "Upgrade Cards", "roster": "Team", "progression": "Progression", "settings": "Settings", "scouting_book": "the Scouting Book"}.get(scene, "the main menu")
+		"card_upgrades": "Upgrade Cards", "roster": "Team", "progression": "Progression", "settings": "Settings", "scouting_book": "the Scouting Book", "shop": "the Shop", "season": "the Season Pass"}.get(scene, "the main menu")
 
 
 ## Turns on the hint system for this screen: a "?" button in the header (left of the currencies)

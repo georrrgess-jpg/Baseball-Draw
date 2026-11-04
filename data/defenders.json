@@ -287,6 +287,99 @@
     "value": 10,
     "stars": 0
    }
+  },
+  {
+   "id": "moose",
+   "name": "Moose",
+   "role": "infielder",
+   "number": 25,
+   "accent": "#A3D139",
+   "signature": "infield_fly",
+   "title": "The Big Scoop",
+   "bio": "Moose Malone plays first base like a brick wall with a butterfly net.",
+   "stats": {
+    "damage": 30,
+    "interval": 1.0,
+    "range": 8.5,
+    "throw_speed": 26.0,
+    "accuracy": 80,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "long_stretch",
+    "name": "Long Stretch",
+    "text": "Runners within 5m of him take +25% damage from everyone and are 10% slower."
+   },
+   "targeting": "first",
+   "unlock": {
+    "type": "level",
+    "value": 13,
+    "stars": 0,
+    "coins": 6000
+   }
+  },
+  {
+   "id": "rosa",
+   "name": "Rosa",
+   "role": "catcher",
+   "number": 7,
+   "accent": "#D63AF9",
+   "signature": "tag_at_the_plate",
+   "title": "The Strategist",
+   "bio": "Rosa Vega calls every pitch, every throw and, somehow, every runner's next move.",
+   "stats": {
+    "damage": 26,
+    "interval": 0.9,
+    "range": 12.0,
+    "throw_speed": 25.0,
+    "accuracy": 85,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "pitch_framing",
+    "name": "Pitch Framing",
+    "text": "Every 6s marks the most dangerous runner: it takes +35% damage, and its out gives +0.5 energy."
+   },
+   "targeting": "strongest",
+   "unlock": {
+    "type": "level",
+    "value": 16,
+    "stars": 0,
+    "coins": 8000
+   }
+  },
+  {
+   "id": "sid",
+   "name": "Sid",
+   "role": "pitcher",
+   "number": 51,
+   "accent": "#5C6BC0",
+   "signature": "line_drive",
+   "title": "Submarine",
+   "bio": "Sid Okafor throws from below his knees. Runners never see the ball coming up.",
+   "stats": {
+    "damage": 27,
+    "interval": 1.0,
+    "range": 11.0,
+    "throw_speed": 33.0,
+    "accuracy": 85,
+    "special_power": 1.0,
+    "special_cooldown": 1.0
+   },
+   "trait": {
+    "id": "skipper",
+    "name": "Skipper",
+    "text": "Throws skip and pierce: they also hit one runner behind the target for 60% damage."
+   },
+   "targeting": "first",
+   "unlock": {
+    "type": "level",
+    "value": 19,
+    "stars": 0,
+    "coins": 10000
+   }
   }
  ],
  "synergies": [

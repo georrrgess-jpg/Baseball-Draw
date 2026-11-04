@@ -78,6 +78,13 @@ func default_profile() -> Dictionary:
 		"missions": Missions.default_state(),
 		# Scouting Book (Update 8): runner types, bosses and elites met in a game, and opened in the book.
 		"scouting": Scouting.default_state(),
+		# Update 9: Season Pass, login calendar, Daily Shop, win streak, pack pity, first win of the day.
+		"season": Season.default_state(),
+		"login": DailyRewards.default_state(),
+		"shop": Shop.default_state(),
+		"streak": {"wins": 0, "best": 0},
+		"pity": {"epic": 0, "legendary": 0},
+		"first_win_day": "",
 	}
 	for id in DB.defender_order:
 		var unlocked: bool = DB.defender(id).get("unlock", {}).get("type", "") == "default"
@@ -854,6 +861,30 @@ func arena_unlock_text(id: String) -> String:
 		"win_mode": return "Win %s" % DB.mode(str(u.value)).name
 		"rank": return "Reach the %s division" % str(u.value).capitalize()
 	return ""
+
+
+# ------------------------------------------------------------------ Update 9 hooks
+# FOUNDATION STUBS: the economy stream (D) owns the rules (docs/plans/UPDATE_9_PLAN.md).
+
+## Consecutive wins in rewarded modes (a loss resets it).
+func win_streak() -> int:
+	return int(data.get("streak", {}).get("wins", 0))
+
+
+## Coin bonus the current win streak gives (+10 % per win in the streak, at most +50 %).
+func streak_bonus() -> float:
+	return minf(0.5, 0.1 * win_streak())
+
+
+## Packs left until the pity guarantee for `rarity` ("epic" or "legendary") kicks in.
+func pity_left(rarity: String) -> int:
+	var limit := 30 if rarity == "legendary" else 10
+	return maxi(0, limit - int(data.get("pity", {}).get(rarity, 0)))
+
+
+## True until the first win of the current calendar day has been rewarded.
+func is_first_win_today() -> bool:
+	return str(data.get("first_win_day", "")) != Time.get_date_string_from_system()
 
 
 func refresh_unlocks() -> void:
