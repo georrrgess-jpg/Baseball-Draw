@@ -1537,6 +1537,12 @@ func show_draft(offers: Array) -> void:
 		if _draft == d:
 			_draft = null)
 	root.add_child(d)
+	# First draft ever: a short tip pointing at the cards (after the reveal; not during the tutorial).
+	if get_node_or_null("Tutorial") == null and not battle.practice and not battle.auto_test:
+		Hints.show_unseen(self, ["battle_boons"], func() -> Dictionary:
+			if not is_instance_valid(d):
+				return {}
+			return {"battle_boons": d.card_row if d.card_row else d}, 0.9)
 
 
 func _fill_boons() -> void:

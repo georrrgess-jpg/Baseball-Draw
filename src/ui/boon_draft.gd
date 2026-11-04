@@ -14,6 +14,7 @@ const CARD_SIZE := Vector2(360, 470)
 var battle: Battle
 var offers: Array = []
 var cards: Array[Button] = []
+var card_row: HBoxContainer        # the three cards (the "battle_boons" hint points at it)
 var _picked := false
 var _input_t := 0.35     # real seconds before keys are accepted (no accidental pick from a held key)
 var _dim: ColorRect
@@ -51,6 +52,8 @@ func _ready() -> void:
 	row.add_theme_constant_override("separation", 34)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.name = "BoonCards"
+	card_row = row
 	_box.add_child(row)
 	for i in offers.size():
 		var c := _make_card(str(offers[i]), i)

@@ -2469,6 +2469,12 @@ func _test_update9_draft() -> void:
 	var cb := func(o: Array) -> void: opened.append(o)
 	battle.draft_opened.connect(cb)
 	var continued := [0]
+	# The first draft ever shows the "battle_boons" tip (hints are on for this check; not on the
+	# Practice Field, so the battle plays a normal game until the cards are up).
+	Hints.force_enabled = true
+	var hs: Dictionary = Profile.data.flags.get_or_add("hints_seen", {})
+	hs.erase("battle_boons")
+	battle.practice = false
 	battle.open_draft(func() -> void: continued[0] += 1)
 	ok(battle.state == "draft" and battle.draft_offers.size() == 3 and opened.size() == 1, "open_draft holds the game with three offers")
 	ok(not battle.choose_boon("not_a_boon"), "an id that is not on offer is refused")
@@ -2484,6 +2490,16 @@ func _test_update9_draft() -> void:
 			break
 	await _wait(0.4)
 	ok(ov != null and is_instance_valid(ov) and (ov.get("cards") as Array).size() == 3, "the draft overlay shows three cards")
+	if Hints.HINTS.has("battle_boons"):
+		for i in 30:
+			if Hints.is_showing():
+				break
+			await _wait(0.1)
+		ok(Hints.current_id() == "battle_boons", "the first draft shows the Dugout Draft tip (%s)" % Hints.current_id())
+		if Hints.current():
+			Hints.current().queue_free()
+	Hints.force_enabled = false
+	battle.practice = true
 	var pick: String = battle.draft_offers[1]
 	var stat0 := Profile.stat("boons_drafted")
 	battle.practice = false   # boons_drafted counts outside the Practice Field
