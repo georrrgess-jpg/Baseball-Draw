@@ -23,10 +23,9 @@ const HINTS := {
 	"menu_streak": ["WIN STREAK", "Win games in a row for bonus coins: +10% for every win in the streak, up to +50%. A loss resets it. Your first win each day also pays double coins."],
 	"menu_shop": ["DAILY SHOP", "A free gift every day, plus card copies, a discounted pack and a star deal. The deals change at midnight, and you can sign free agents there too."],
 	# Daily Shop and Season Pass screens (Update 9).
-	"shop_intro": ["DAILY SHOP", "Today's deals: copies of cards you still need, a pack deal and a star deal. Each can be bought once a day. The free gift costs nothing; new deals come at midnight."],
+	"shop_intro": ["THE SHOP", "New deals every day at midnight: a free gift, copies of cards you need, a discounted pack and a star deal. Each can be bought once. Free agents can be signed early for coins."],
 	"shop_free_agents": ["FREE AGENTS", "Sign a new defender early for coins instead of waiting for their account level. A signed defender joins your team list and brings their signature card pack."],
-	"season_intro": ["SEASON PASS", "Season XP fills the track: 100 per game, +60 for a win, +80 per mission and +100 for the Daily Challenge. Claim each tier's reward here before the season ends."],
-	"season_claim": ["CLAIM REWARDS", "Tiers you have reached glow gold. Claim them one at a time or all at once. After tier 30, every 1,000 XP pays a Pro Pack."],
+	"season_intro": ["SEASON PASS", "Every game earns season XP (more for wins, missions and the Daily Challenge). Each tier pays a reward: claim it here. After tier 30 every 1,000 XP pays a Pro Pack."],
 	# Card packs.
 	"packs_intro": ["CARD PACKS", "Pick a pack on the shelf and open it. New cards join your collection; a card you already own becomes a copy, used to upgrade that card."],
 	"packs_rarity": ["CARD RARITY", "The colour of a card's frame is its rarity: Common (grey), Uncommon (green), Rare (blue), Epic (purple), Legendary (gold). Rarer cards are stronger and show up less often."],
@@ -75,8 +74,8 @@ const SCREENS := {
 	"card_upgrades": ["upgrades_intro"],
 	"roster": ["team_intro", "team_road", "team_traits", "team_free_agents"],
 	"play_menu": ["play_modes", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak"],
-	"shop": ["shop_intro", "shop_free_agents"],
-	"season": ["season_intro", "season_claim"],
+	"shop": ["shop_intro"],
+	"season": ["season_intro"],
 	"results": ["results_season"],
 	"dugout": ["dugout_intro"],
 	"settings": ["settings_intro"],
@@ -88,7 +87,7 @@ const SCREENS := {
 ## passes them in `extra` (the player has actually met the feature).
 const FEATURE_ONLY := ["menu_promotion", "menu_streak", "menu_shop", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
 	"team_free_agents", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak",
-	"season_claim", "battle_combo", "battle_scout", "battle_boons"]
+	"battle_combo", "battle_scout", "battle_boons"]
 
 const ACCENT := UITheme.GOLD
 const CARD_W := 440.0

@@ -258,7 +258,7 @@ func _build_ui() -> void:
 			"%d READY" % ready if ready > 0 else "", Color(0.16, 0.6, 0.35), "Level up cards with copies and coins"],
 		["TEAM", "roster", UITheme.BLUE, func() -> void: Router.goto("roster"), "NEW TRAIT" if _trait_ready() else "",
 			Color(0.16, 0.45, 0.75), "Defenders, captain, traits, gear and free agents"],
-		["SHOP", "coin", UITheme.GOLD, func() -> void: Router.goto("shop"), "FREE GIFT" if not gift.is_empty() else "",
+		["SHOP", "coin", UITheme.GOLD, func() -> void: Router.open("shop"), "FREE GIFT" if not gift.is_empty() else "",
 			UITheme.GOLD.darkened(0.35), "Daily deals, the free gift and free agents. New deals in %s" % UITheme.format_duration(Shop.seconds_to_refresh())],
 		["SCOUTING BOOK", "enemy", Color("#FF6B3D"), func() -> void: Router.goto("scouting_book"),
 			"%d NEW" % Scouting.new_count() if Scouting.new_count() > 0 else "", UITheme.SCARLET,
@@ -704,7 +704,7 @@ func _build_season_bar() -> Button:
 	b.mouse_entered.connect(func() -> void: Audio.ui("ui_hover", -7.0))
 	b.pressed.connect(func() -> void:
 		Audio.ui("ui_click", -2.0)
-		Router.goto("season"))
+		Router.open("season"))
 	UITheme.add_feedback(b, 1.02)
 	var hb := HBoxContainer.new()
 	hb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -930,7 +930,7 @@ func _build_gift_button(gift: Dictionary) -> Control:
 	b.add_theme_color_override("icon_normal_color", UITheme.GOLD)
 	var what := str(gift.get("title", ""))
 	b.tooltip_text = "Today's free gift%s. Open the Shop to take it." % ((": " + what) if what != "" else "")
-	b.pressed.connect(func() -> void: Router.goto("shop"))
+	b.pressed.connect(func() -> void: Router.open("shop"))
 	_gift_button = b
 	return b
 
@@ -1086,13 +1086,14 @@ func _unhandled_input(event: InputEvent) -> void:
 func _show_welcome() -> void:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.08, 0.14, 0.96), Color(UITheme.SCARLET, 0.7), 2, 12, 22))
-	# Grows up and left from the bottom-right corner, so its buttons are never cut off.
-	p.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	# Bottom of the open middle of the screen (between the two columns), growing up, so it never
+	# covers the TODAY column or its buttons and is never cut off.
+	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	p.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	p.offset_left = -600
+	p.offset_left = -215
 	p.offset_top = -40
-	p.offset_right = -40
+	p.offset_right = 345
 	p.offset_bottom = -40
 	p.custom_minimum_size = Vector2(560, 0)
 	ui.add_child(p)
