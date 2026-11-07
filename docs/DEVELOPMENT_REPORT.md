@@ -1000,3 +1000,11 @@ Plan: `docs/plans/UPDATE_10_PLAN.md`. Two parallel streams; the lead merged and 
 ![Concept and result](screenshots/u10/menu_concept_vs_after.jpg)
 
 ### Verification
+* Script check: 97 scripts, 0 failed.
+* System suite: 2,979 checks, 0 failed, including 62 new TeamAI checks: valid teams, never locked,
+  deterministic, beats the starter team, Balanced covers every role.
+* Full UI flow test on the merged update: 448 checks, 0 failed. It includes the Best Team/Compare section
+  (47 checks) and the new hub checks: top bar values, CONTINUE RUN, chips, TODAY cards, bottom bar, gear menu,
+  no overlaps.
+* The hub's warm-up catch timer is now guarded against the menu being left mid-throw. That old script error
+  was seen once in a UI run.
