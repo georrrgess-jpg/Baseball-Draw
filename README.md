@@ -56,6 +56,9 @@ What changed: [Update 6](docs/screenshots/update6_before_after.jpg), [Update 5](
   up to 10 pays out coins, a new trait or a card pack. The results screen shows each XP bar filling.
 - **Scouting Book**: every runner, boss and elite with a 3D model, stats, how to stop it and the best cards
   against it; click a threat icon in battle to scout it on the spot. Cards that combo glow and link in your hand.
+- **Best Team and Compare Defenders**: BEST TEAM picks your strongest six and captain (Balanced, Damage,
+  Control or Boss Killer) and shows who comes in and why before you apply it; COMPARE puts two defenders side
+  by side with a verdict and can swap a bench player into the six.
 - **Smart Auto Build and card comparison**: Auto Build picks the best 8 cards for your team and card levels
   (Balanced, Aggressive, Control or Boss Killer) and explains why; compare any two cards side by side.
 - **Missions and level road**: three daily missions and a weekly one, a "Learn the ropes" chain for new

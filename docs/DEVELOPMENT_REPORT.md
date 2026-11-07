@@ -940,3 +940,63 @@ Economy model (`tools/balance/economy.py`, 200 players, 30 h):
   * The Long Toss and Fresh Arms boons are never picked by the value-based autopilot. Their effects are covered
     by system tests.
   * Sprinkler System and Worm Burner read only moderately well from the far camera.
+
+## 19. Update 10: "Front Office"
+
+Plan: `docs/plans/UPDATE_10_PLAN.md`. Two parallel streams; the lead merged and verified.
+
+### Best Team and Compare Defenders
+* **TeamAI** (`src/core/team_ai.gd`) scores each defender from:
+  * level-scaled stats, using the battle's own formulas;
+  * gear and training traits;
+  * a value for each of the 12 traits;
+  * zone bonuses in the formation slots;
+  * synergies at their real distances;
+  * the captain aura;
+  * owned signature cards and the deck.
+
+  It tries every possible six (924 teams with 12 unlocked, under 0.3 s) with the best captain for each. It has
+  four styles: Balanced, Damage, Control and Boss Killer. Only a strictly better team replaces the current
+  one, so results are deterministic. It enforces the game's real team rules: six players, unlocked only, no
+  duplicates, captain in the team.
+* **BEST TEAM** on the Team screen previews:
+  * the score before → after;
+  * who comes in and who goes out;
+  * a captain change, if any;
+  * the top reasons for each pick.
+
+  APPLY sets the team; CANCEL or Esc changes nothing. When the team is already the best for that style, the
+  preview says so and APPLY is disabled.
+* **COMPARE** puts two defenders side by side:
+  * every stat at the current level, plus damage per second, vs bosses, vs crowds, control and team boost, with
+    green/red bars;
+  * traits, position bonus and signature card;
+  * the TeamAI score;
+  * a one-line verdict.
+
+  CHANGE picks any defender for either side, locked ones included. PUT X IN FOR Y swaps a bench player into
+  the starting six.
+* Trait values in TeamAI are hand-set estimates, not simulator-tuned. Captains are usually the pitcher,
+  because the aura on the default formations mostly reaches the infielders.
+
+![Best Team](screenshots/u10/team_best_team_preview.jpg)
+![Compare Defenders](screenshots/u10/team_compare.jpg)
+
+### Main menu: broadcast matchday
+* **Rebuilt to match the concept art:**
+  * a full-width top bar: manager, division and RP, level with XP bar, coins, stars, cards owned, "?" and a
+    settings gear;
+  * a BROADCAST MATCHDAY hero block: the mode title, stadium and difficulty, CONTINUE RUN, PLAY and the mode
+    chips;
+  * the 3D lineup in the middle;
+  * a TODAY panel: the Daily Challenge, Missions and Daily Login, each with a REWARDS strip of what it really
+    pays;
+  * a full-width bottom bar with the seven destinations.
+* The gear menu holds Settings, Practice and Exit.
+* The win streak, season tier and promotion are chips in the hero block.
+* The hub scales down to fit at UI scales above 100 %.
+* It is keyboard/controller navigable: the first arrow focuses PLAY.
+
+![Concept and result](screenshots/u10/menu_concept_vs_after.jpg)
+
+### Verification
