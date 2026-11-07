@@ -55,6 +55,7 @@ func _run() -> void:
 	test_update9_modes()
 	test_update9_models()
 	test_update9_cards_content()
+	test_routes()
 	await test_scouting()
 	await test_battle_systems()
 	await test_u9_e2_screens()
@@ -3784,3 +3785,41 @@ func test_team_ai() -> void:
 	ok(Profile.data.team == pr.team and Profile.data.captain == pr.captain, "Profile.set_team keeps the best team and captain")
 	ok(bool(TeamAI.best_team().already_best), "after applying, the team is already the best")
 	Profile.reset_profile()
+
+
+# ---------------------------------------------------------------- runner routes
+
+## Every runner route leaves its gate straight through the doorway (gates face home plate), stays
+## clear of the outfield wall away from its gate and never passes another gate. Iron Fortress's
+## routes once cut sideways through the gate doors and along the wall.
+func test_routes() -> void:
+	var home := Vector2(Field.HOME.x, Field.HOME.z)
+	for lid in DB.layouts.keys():
+		var lay: Dictionary = DB.layouts[lid]
+		var gates: Dictionary = lay.get("gates", {})
+		for r in lay.get("routes", []):
+			var pts: Array = r.points
+			var g := Vector2(float(gates[r.gate][0]), float(gates[r.gate][1]))
+			var p0 := Vector2(float(pts[0][0]), float(pts[0][1]))
+			var p1 := Vector2(float(pts[1][0]), float(pts[1][1]))
+			var off := rad_to_deg((home - g).angle_to(p1 - p0))
+			ok(p0.distance_to(g) < 0.5 and absf(off) <= 25.0, "%s/%s leaves gate %s through the doorway (%.0f deg off)" % [lid, r.id, r.gate, off])
+			var travelled := 0.0
+			var wall_ok := true
+			var gate_ok := true
+			for i in pts.size() - 1:
+				var a := Vector2(float(pts[i][0]), float(pts[i][1]))
+				var b := Vector2(float(pts[i + 1][0]), float(pts[i + 1][1]))
+				var seg := a.distance_to(b)
+				var steps := maxi(1, int(seg / 0.25))
+				for k in steps + 1:
+					var q := a.lerp(b, float(k) / steps)
+					if travelled + seg * float(k) / steps > 4.0 and q.distance_to(home) > Field.WALL_RADIUS - 2.5:
+						wall_ok = false
+					for gid in gates.keys():
+						if gid != r.gate and q.distance_to(Vector2(float(gates[gid][0]), float(gates[gid][1]))) < 4.0:
+							gate_ok = false
+				travelled += seg
+			ok(wall_ok, "%s/%s stays clear of the outfield wall" % [lid, r.id])
+			ok(gate_ok, "%s/%s never passes another gate" % [lid, r.id])
+	ok(Battle.GATE_LEAD >= 0.5, "runners wait for the gate doors to open before stepping through")

@@ -32,6 +32,9 @@ const COMBO_WINDOW := 1.35
 const BREAK_TIME := 12.0
 ## Energy for calling the next wave early (NEXT WAVE NOW), on top of the usual +1 at wave start.
 const EARLY_CALL_ENERGY := 1.0
+## Runners wait this long after a wave starts so the gate doors (0.8 s swing) are open before the
+## first one steps through them.
+const GATE_LEAD := 0.7
 ## Seconds between the boss wave clearing and the Dugout Draft cards appearing (the boss finale).
 const DRAFT_DELAY := 1.3
 const SPEEDS := [1.0, 2.0, 3.0]
@@ -547,7 +550,7 @@ func begin_wave() -> void:
 	for g in wave_info.groups:
 		var route_i := int(g.route) % routes.size()
 		for i in int(g.count):
-			spawn_queue.append({"time": float(g.start) + i * float(g.interval), "enemy": g.enemy, "route": route_i,
+			spawn_queue.append({"time": GATE_LEAD + float(g.start) + i * float(g.interval), "enemy": g.enemy, "route": route_i,
 				"affix": g.affix, "hp_mult": hp_mult, "speed_mult": spd_mult})
 	spawn_queue.sort_custom(func(a, b) -> bool: return a.time < b.time)
 	wave_total = spawn_queue.size()

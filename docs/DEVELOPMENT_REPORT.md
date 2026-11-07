@@ -1017,3 +1017,22 @@ Plan: `docs/plans/UPDATE_10_PLAN.md`. Two parallel streams; the lead merged and 
     pending callbacks die with their scene.
   * **Re-checked after the fix:** suite 2,979/0; UI sections draft 23/0 and newcards 12/0; three local smoke
     runs pass.
+
+### Fix: runners running through the gate doors
+* **Iron Fortress:**
+  * **Before:** both routes left their gate 60° off the doorway and ran along the outfield wall, so runners cut
+    through the door frames and the wall.
+  * **Now:** they go 7 m straight out through the doorway, then make their wide swing well inside the wall
+    (still the same winding path: out, wide, back across, past second, then home).
+* **Every stadium:**
+  * **Before:** gates start opening when a wave starts and take 0.8 s to swing open, but the first runners
+    spawned at once and walked through the still-closed doors.
+  * **Now:** spawns wait 0.7 s (`Battle.GATE_LEAD`).
+* **New test, `test_routes`:**
+  * every route in every layout leaves through its doorway (within 25°);
+  * stays clear of the wall away from its gate;
+  * never passes another gate.
+
+  The other three layouts already passed.
+
+![Iron Fortress gates](screenshots/u10/iron_fortress_gates_fixed.jpg)
