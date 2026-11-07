@@ -91,6 +91,11 @@ func _button_center(b: Button) -> Vector2:
 
 
 func _run() -> void:
+	if "--ui-test-section=hub" in OS.get_cmdline_user_args():
+		await _test_u9_hub_play_results()
+		await _test_u10_hub()
+		_finish()
+		return
 	if "--ui-test-section=tutorial" in OS.get_cmdline_user_args():
 		await _test_tutorial()
 		_finish()
@@ -352,6 +357,12 @@ func _run() -> void:
 	for pair in [["PLAY", "play_menu"], ["CARD PACKS", "packs"], ["CARDS & DECK", "deck_builder"], ["TEAM", "roster"],
 			["PROGRESSION", "progression"], ["SETTINGS", "settings"]]:
 		await _wait(0.6)
+		if pair[0] == "SETTINGS":   # Update 10: Settings lives in the top bar's gear menu
+			var gear: Button = get_tree().current_scene.find_child("GearButton", true, false)
+			_check(gear != null, "main menu has the settings gear")
+			if gear:
+				await _click(_button_center(gear))
+				await _wait(0.4)
 		var b := _find_button_prefix(get_tree().current_scene, pair[0])
 		_check(b != null, "main menu has %s" % pair[0])
 		if b == null:
@@ -377,6 +388,7 @@ func _run() -> void:
 	await _test_u10_team()
 	await _test_title()
 	await _test_u9_hub_play_results()
+	await _test_u10_hub()
 	await _test_tutorial()
 	await _test_draft()
 	_finish()
@@ -420,8 +432,7 @@ func _test_u9_hub_play_results() -> void:
 			await _wait(0.6)
 			_check(not DailyRewards.can_claim() and hub.find_child("LoginClaim", true, false) == null, "CLAIM takes today's login reward")
 	if Shop.gift_available():
-		_check(hub.find_child("FreeGiftButton", true, false) != null and _find_label(hub.find_child("ShopTile", true, false), "FREE GIFT"),
-			"the free gift shows in TODAY and on the Shop tile")
+		_check(_find_label(hub.find_child("ShopTile", true, false), "FREE GIFT"), "the free gift shows on the Shop tile")
 	# Quick mode switch: Boss Rush changes what PLAY opens with.
 	var chip: Button = hub.find_child("Mode_boss_rush", true, false)
 	_check(chip != null, "the quick mode switch offers Boss Rush")
@@ -430,11 +441,9 @@ func _test_u9_hub_play_results() -> void:
 		await _wait(0.3)
 		_check(str(Profile.data.flags.get("last_mode", "")) == "boss_rush" and chip.button_pressed, "picking Boss Rush on the switch selects it")
 		var hero: Button = hub.find_child("PlayButton", true, false)
-		var sub_ok := false
-		for l in hero.find_children("*", "Label", true, false):
-			if str((l as Label).text).begins_with("Boss Rush"):
-				sub_ok = true
-		_check(sub_ok, "PLAY shows the picked mode")
+		var t_top: Label = hub.find_child("HeroTitleTop", true, false)
+		var t_main: Label = hub.find_child("HeroTitleMain", true, false)
+		_check(t_top != null and t_main != null and t_top.text == "BOSS" and t_main.text == "RUSH", "the hero title shows the picked mode")
 		# Keyboard: the first arrow press focuses PLAY, Enter opens the Play screen on Boss Rush.
 		_mouse_move(Vector2(960, 1000))
 		await _wait(0.2)
@@ -570,6 +579,148 @@ func _test_u9_hub_play_results() -> void:
 	Profile.data.flags["last_mode"] = last_mode
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+## Update 10 broadcast hub: the top bar's values, CONTINUE RUN only with a saved run, the hero
+## title and mode chips, the three TODAY cards, the bottom bar, the gear menu (Settings, Practice,
+## Exit; Esc opens and closes it) and a layout where nothing overlaps or leaves the screen.
+func _test_u10_hub() -> void:
+	Profile.data.flags["tutorial_done"] = true
+	if (Profile.data.history as Array).is_empty():
+		Profile.add_history({"won": true, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "inning": 3, "score": 100, "outs": 30, "runs": 0, "date": Time.get_datetime_string_from_system()})
+	var saved_run: Variant = Profile.data.current_run
+	var last_mode := str(Profile.data.flags.get("last_mode", "standard"))
+	# No saved run: no CONTINUE RUN card.
+	Profile.data.current_run = null
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(1.2)
+	var hub: Node = get_tree().current_scene
+	_check(hub.find_child("ContinueRun", true, false) == null and _find_button(hub, "CONTINUE RUN") == null, "no CONTINUE RUN card without a saved run")
+	# Top bar values.
+	var d: Dictionary = Profile.data
+	var owned := 0
+	for cid in DB.card_order:
+		if Profile.is_card_owned(cid):
+			owned += 1
+	var want := {"CoinsValue": UITheme.format_int(int(d.coins)), "StarsValue": UITheme.format_int(int(d.stars)),
+		"CardsValue": "%d/%d" % [owned, DB.card_order.size()], "LevelText": "LEVEL %d" % int(d.level), "ManagerName": str(d.name).to_upper()}
+	for k in want.keys():
+		var l: Label = hub.find_child(k, true, false)
+		_check(l != null and l.is_visible_in_tree() and l.text == want[k], "the top bar shows %s = %s (%s)" % [k, want[k], l.text if l else "missing"])
+	var div_l: Label = hub.find_child("DivisionText", true, false)
+	_check(div_l != null and div_l.text.contains("DIVISION") and div_l.text.ends_with("RP"), "the top bar shows the division and RP")
+	var xp_l: Label = hub.find_child("XPText", true, false)
+	_check(xp_l != null and (xp_l.text.ends_with(" XP") or xp_l.text == "MAX LEVEL"), "the top bar shows the XP numbers")
+	_check(hub.find_child("LevelBar", true, false) != null and _find_button(hub, "?") != null and hub.find_child("GearButton", true, false) != null,
+		"the top bar has the level bar, ? and the settings gear")
+	# Hero: ribbon, title, venue, chips.
+	_check(hub.find_child("BroadcastRibbon", true, false) != null, "the hero block has the BROADCAST MATCHDAY ribbon")
+	var venue: Label = hub.find_child("HeroVenue", true, false)
+	_check(venue != null and venue.text.contains(str(DB.difficulty(str(Profile.data.difficulty)).get("name", "")).to_upper()), "the hero shows the stadium and difficulty")
+	var sw: Control = hub.find_child("ModeSwitch", true, false)
+	var chip_names: Array = []
+	var pressed := 0
+	if sw:
+		for c in sw.get_children():
+			chip_names.append(str(c.name))
+			if (c as Button).button_pressed:
+				pressed += 1
+	_check(chip_names == ["Mode_quick", "Mode_standard", "Mode_boss_rush", "Mode_endless"], "the mode chips are QUICK, SIEGE, BOSS RUSH, ENDLESS %s" % [chip_names])
+	_check(pressed == 1, "exactly one mode chip is highlighted")
+	_check(hub.find_child("SeasonBar", true, false) != null and hub.find_child("StreakFlame", true, false) != null, "the Season and win streak chips are on the hub")
+	# TODAY cards.
+	var daily: Control = hub.find_child("DailyPanel", true, false)
+	_check(daily != null and daily.find_child("DailyRewards", true, false) != null and daily.find_child("DailyButton", true, false) != null,
+		"the Daily Challenge card has PLAY DAILY and a REWARDS strip")
+	var mis: Control = hub.find_child("MissionsWidget", true, false)
+	var rows := 0
+	var mrows: Node = mis.find_child("MissionRows", true, false) if mis else null
+	if mrows:
+		for c in mrows.get_children():
+			if c is HBoxContainer:
+				rows += 1
+	_check(mis != null and rows == 3 and mis.find_child("MissionRewards", true, false) != null and mis.find_child("MissionsButton", true, false) != null,
+		"the Missions card has three rows, OPEN and a REWARDS strip (%d rows)" % rows)
+	var login: Control = hub.find_child("LoginPanel", true, false)
+	var days: Control = hub.find_child("LoginDays", true, false)
+	var nxt: Label = hub.find_child("LoginNext", true, false)
+	_check(login != null and days != null and days.get_child_count() == 7 and nxt != null and nxt.text != ""
+		and (hub.find_child("LoginClaim", true, false) != null or hub.find_child("LoginClaimed", true, false) != null),
+		"the Daily Login card has CLAIM/CLAIMED, the next reward line and seven days")
+	# Bottom bar.
+	var bottom: Control = hub.find_child("HubBottom", true, false)
+	var names: Array = []
+	if bottom:
+		for c in bottom.get_children():
+			if c is Button:
+				names.append((c as Button).text)
+	_check(names == ["CARDS & DECK", "CARD PACKS", "UPGRADE CARDS", "TEAM", "SHOP", "SCOUTING BOOK", "PROGRESSION"], "the bottom bar lists the destinations %s" % [names])
+	# Layout: nothing overlaps or leaves the screen, and no button is squeezed below its text.
+	var vp := (hub.get_viewport() as Viewport).get_visible_rect()
+	var left_r := (hub.find_child("HubLeft", true, false) as Control).get_global_rect()
+	var today_r := (hub.find_child("TodayBackdrop", true, false) as Control).get_global_rect()
+	var bottom_r := (hub.find_child("BottomBar", true, false) as Control).get_global_rect()
+	var top_r := (hub.find_child("TopBar", true, false) as Control).get_global_rect()
+	_check(not left_r.intersects(today_r) and left_r.end.y <= bottom_r.position.y and left_r.position.y >= top_r.end.y
+		and today_r.end.y <= bottom_r.position.y + 1.0, "the hero block, TODAY and the bars do not overlap (%s %s)" % [left_r, today_r])
+	var outside: Array = []
+	var squeezed: Array = []
+	for b in _all_buttons(hub):
+		if not b.is_visible_in_tree():
+			continue
+		var r := b.get_global_rect()
+		if r.position.x < vp.position.x - 1 or r.end.x > vp.end.x + 1 or r.end.y > vp.end.y + 1:
+			outside.append(b.name)
+		if b.text != "" and b.size.x + 1.0 < b.get_combined_minimum_size().x:
+			squeezed.append(b.name)
+	_check(outside.is_empty(), "every hub button is on screen %s" % [outside])
+	_check(squeezed.is_empty(), "no hub button is squeezed below its text %s" % [squeezed])
+	var today_inner: Control = hub.find_child("HubRight", true, false)
+	_check(today_inner != null and today_inner.get_combined_minimum_size().y <= today_r.size.y - 20.0, "the TODAY cards fit the panel (%d of %d)" % [
+		today_inner.get_combined_minimum_size().y if today_inner else -1, today_r.size.y])
+	# Gear menu: Settings, Practice and Exit; Esc opens and closes it.
+	var gear: Button = hub.find_child("GearButton", true, false)
+	if gear:
+		await _click(_button_center(gear))
+		await _wait(0.4)
+		var ok := true
+		for n in ["SettingsButton", "PracticeButton", "ExitButton"]:
+			var gb: Button = hub.find_child(n, true, false)
+			ok = ok and gb != null and gb.is_visible_in_tree()
+		_check(ok, "the gear opens Settings, Practice and Exit")
+		_check(get_viewport().gui_get_focus_owner() == hub.find_child("SettingsButton", true, false), "the gear menu focuses SETTINGS")
+		await _key("pause")
+		await _wait(0.3)
+		var gm: Node = hub.find_child("GearMenu", true, false)
+		_check(gm == null or gm.is_queued_for_deletion(), "Esc closes the gear menu")
+		get_viewport().gui_release_focus()
+		await _wait(0.2)
+		await _key("pause")
+		await _wait(0.3)
+		var pr: Button = hub.find_child("PracticeButton", true, false)
+		_check(pr != null and pr.is_visible_in_tree() and Router.current == "main_menu", "Esc on the hub opens the gear menu")
+		await _key("pause")
+		await _wait(0.3)
+	# A saved run: the CONTINUE RUN card with the mode, inning and stadium.
+	Profile.data.current_run = {"arena_id": "steel_yard", "config": {"mode": "endless"}, "inning": 7, "mode_id": "endless", "saved_at": "test"}
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(1.0)
+	hub = get_tree().current_scene
+	var cont := _find_button(hub, "CONTINUE RUN")
+	var det: Label = hub.find_child("ContinueDetail", true, false)
+	_check(cont != null and det != null and det.text.contains("Inning 7") and det.text.contains(str(DB.mode("endless").name)), "CONTINUE RUN shows the saved run (%s)" % (det.text if det else "none"))
+	if cont:
+		var hero_r := (hub.find_child("PlayButton", true, false) as Control).get_global_rect()
+		_check(cont.get_global_rect().end.y <= hero_r.position.y, "CONTINUE RUN sits above PLAY")
+	_check((hub.find_child("HubLeft", true, false) as Control).get_global_rect().end.y <= (hub.find_child("BottomBar", true, false) as Control).get_global_rect().position.y,
+		"the hero block with CONTINUE RUN still clears the bottom bar")
+	Profile.data.current_run = saved_run
+	Profile.data.flags["last_mode"] = last_mode
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(0.5)
 
 
 ## Presses and releases a key (for the built-in ui_* focus actions).

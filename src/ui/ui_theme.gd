@@ -530,7 +530,8 @@ static func corner_badge(target: Control, text: String, color := SCARLET) -> Pan
 
 ## The win streak flame: a pill with a fire icon, the streak and the coin bonus it gives.
 ## A streak of 0 shows a dim flame with what the next win starts.
-static func flame_chip(streak: int, bonus: float, size := FS_SMALL, compact := false) -> PanelContainer:
+## `short` keeps the bonus but drops words ("3-WIN STREAK  +30%") for tight rows.
+static func flame_chip(streak: int, bonus: float, size := FS_SMALL, compact := false, short := false) -> PanelContainer:
 	var hot := streak > 0
 	var col := FLAME if hot else MUTED
 	var p := PanelContainer.new()
@@ -551,6 +552,8 @@ static func flame_chip(streak: int, bonus: float, size := FS_SMALL, compact := f
 	var txt := ""
 	if compact:
 		txt = "%d" % streak
+	elif short:
+		txt = ("%d-WIN STREAK  +%d%%" % [streak, int(round(bonus * 100.0))]) if hot else "NO STREAK"
 	elif hot:
 		txt = "%d-WIN STREAK  ·  +%d%% COINS" % [streak, int(round(bonus * 100.0))]
 	else:
@@ -652,3 +655,127 @@ static func format_int(n: int) -> String:
 		out = "," + s.substr(s.length() - 3) + out
 		s = s.substr(0, s.length() - 3)
 	return ("-" if n < 0 else "") + s + out
+
+
+# ---------------------------------------------------------------- broadcast style (Update 10 hub)
+
+## Broadcast-graphics palette: deep navy bars and panels, gold card borders, red ribbons.
+const BAR_BG := Color(0.035, 0.06, 0.11, 0.96)
+const TODAY_BG := Color(0.03, 0.055, 0.1, 0.9)
+const TODAY_CARD_BG := Color(0.04, 0.07, 0.13, 0.96)
+const STRIP_BG := Color(0.0, 0.0, 0.0, 0.32)
+
+static var _spaced := {}
+
+
+## `base` with extra space between letters ("F R O S T P A R K" style captions).
+static func font_spaced(base: Font, spacing := 4) -> Font:
+	var key := "%d:%d" % [base.get_instance_id(), spacing]
+	if _spaced.has(key):
+		return _spaced[key]
+	var v := FontVariation.new()
+	v.base_font = base
+	v.spacing_glyph = spacing
+	_spaced[key] = v
+	return v
+
+
+## Gives every state of a button's style a slant (the broadcast look). Margins grow a little so
+## the text stays inside the slanted shape.
+static func skew_button(b: Button, skew := -0.18) -> void:
+	for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		if not b.has_theme_stylebox_override(st) and st == "hover_pressed":
+			continue
+		var s := b.get_theme_stylebox(st)
+		if not (s is StyleBoxFlat):
+			continue
+		var d: StyleBoxFlat = (s as StyleBoxFlat).duplicate()
+		d.skew = Vector2(skew, 0)
+		d.set_corner_radius_all(4)
+		b.add_theme_stylebox_override(st, d)
+
+
+## A red slanted ribbon ("BROADCAST MATCHDAY", "TODAY"): an optional icon (or a pulsing live
+## marker), the text in the display face, and two trailing slashes.
+static func slant_ribbon(text: String, icon := "", size := FS_H2, color := SCARLET, live := false, slashes := 2) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var p := PanelContainer.new()
+	p.name = "Ribbon"
+	var s := panel_style(color, color.lightened(0.25), 0, 3, 0)
+	s.border_width_bottom = 3
+	s.border_color = color.darkened(0.45)
+	s.skew = Vector2(-0.3, 0)
+	s.content_margin_left = 22 + size * 0.3
+	s.content_margin_right = 22 + size * 0.3
+	s.content_margin_top = 2
+	s.content_margin_bottom = 2
+	s.shadow_color = Color(0, 0, 0, 0.35)
+	s.shadow_size = 6
+	s.shadow_offset = Vector2(0, 3)
+	p.add_theme_stylebox_override("panel", s)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(p)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 12)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(hb)
+	if live:
+		var lv := label("((•))", int(size * 0.95), Color.WHITE, font_header())
+		lv.name = "LiveIcon"
+		lv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hb.add_child(lv)
+		var tw := lv.create_tween().set_loops()
+		tw.tween_property(lv, "modulate:a", 0.45, 0.7).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(lv, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
+	elif icon != "":
+		var ic := icon_rect(icon, size * 0.95, Color.WHITE)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hb.add_child(ic)
+	var l := label(text, size, Color.WHITE, font_display())
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.45))
+	l.add_theme_constant_override("shadow_offset_x", 2)
+	l.add_theme_constant_override("shadow_offset_y", 2)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(l)
+	for i in slashes:
+		var sl := Panel.new()
+		var ss := StyleBoxFlat.new()
+		ss.bg_color = color if i == 0 else color.darkened(0.25)
+		ss.skew = Vector2(-0.45, 0)
+		sl.add_theme_stylebox_override("panel", ss)
+		sl.custom_minimum_size = Vector2(10, 0)
+		sl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(sl)
+	return row
+
+
+## A tag centred on a control's top edge, overlapping it ("FREE GIFT" on the Shop button), so it
+## never covers the control's label. Named CornerBadge like corner_badge (tests check both).
+static func top_tag(target: Control, text: String, color := GOLD) -> PanelContainer:
+	var bd := badge(text, color)
+	bd.name = "CornerBadge"
+	var l: Label = bd.get_child(0)
+	l.add_theme_color_override("font_color", Color(0.1, 0.07, 0.0) if color.get_luminance() > 0.55 else Color.WHITE)
+	bd.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	bd.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	bd.grow_vertical = Control.GROW_DIRECTION_END
+	bd.offset_left = 0
+	bd.offset_right = 0
+	bd.offset_top = -13
+	bd.offset_bottom = -13
+	bd.z_index = 1
+	target.add_child(bd)
+	return bd
+
+
+## A thin vertical divider for bars (top bar, rewards strips).
+static func vsep(height := 40.0, alpha := 0.16) -> ColorRect:
+	var c := ColorRect.new()
+	c.color = Color(1, 1, 1, alpha)
+	c.custom_minimum_size = Vector2(2, height)
+	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c

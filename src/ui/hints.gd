@@ -14,7 +14,7 @@ extends RefCounted
 ## id -> [title, text]
 const HINTS := {
 	# Main menu (after the first game; the welcome panel covers the very first launch).
-	"menu_home": ["YOUR CLUBHOUSE", "PLAY starts a game. Tiles with a badge have something waiting for you: unopened packs, new cards or cards ready to upgrade."],
+	"menu_home": ["YOUR CLUBHOUSE", "PLAY starts the mode picked on the chips under it. The bar along the bottom holds your cards, packs, team and the Shop: a badge means something is waiting. The gear (or Esc) has Settings, Practice and Exit."],
 	"menu_daily": ["DAILY CHALLENGE", "A new game every day with fixed rules, the same for every manager. Your first game and first win each day give a bonus pack; play on back-to-back days for a streak."],
 	"menu_promotion": ["PROMOTION CHALLENGE", "You have enough Rank Points to move up a division. Open PLAY and pick Promotion Challenge: win it to get promoted."],
 	# Update 9: the return loop on the hub.
@@ -42,6 +42,8 @@ const HINTS := {
 	"team_road": ["LEVEL ROAD", "Defenders earn XP in every game they play. Each level on the road gives a reward: coins, a pack or a new trait to choose."],
 	"team_traits": ["TRAINING TRAITS", "At the levels shown, pick one of two traits for this defender. You can switch your pick any time. Gear (from Progression → Pro Shop) and uniforms (bought with stars) are below."],
 	"team_free_agents": ["FREE AGENTS", "Sign a locked defender early for coins, or wait for the account level shown to unlock them for free. A signed defender brings their signature card pack."],
+	"team_best": ["BEST TEAM", "Let the coach pick: BEST TEAM finds the strongest six and captain from your unlocked defenders in the style you choose, shows who comes in and goes out and why, and changes nothing until you press APPLY."],
+	"team_compare": ["COMPARE DEFENDERS", "COMPARE puts the selected defender next to a rival: every stat with green and red bars, traits, signature cards and a verdict. PUT IN swaps a bench player into the starting six."],
 	# Play.
 	"play_modes": ["CHOOSE A GAME", "Quick Defense is a short 3-inning game; Standard Siege is the full 9 innings with 3 bosses. Higher difficulty means tougher runners and bigger rewards."],
 	"play_daily": ["DAILY CHALLENGE", "Today's game has a fixed deck, stadium and twist, the same for everyone. Bonus pack for your first game and first win today. It never touches your saved run."],
@@ -72,7 +74,7 @@ const SCREENS := {
 	"deck_builder": ["deck_intro", "deck_auto", "deck_compare", "deck_mastery", "deck_sets"],
 	"collection": ["deck_mastery", "deck_compare", "deck_sets", "packs_rarity"],
 	"card_upgrades": ["upgrades_intro"],
-	"roster": ["team_intro", "team_road", "team_traits", "team_free_agents"],
+	"roster": ["team_intro", "team_road", "team_traits", "team_free_agents", "team_best", "team_compare"],
 	"play_menu": ["play_modes", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak"],
 	"shop": ["shop_intro"],
 	"season": ["season_intro"],
@@ -86,7 +88,7 @@ const SCREENS := {
 ## Feature hints: part of a screen's "?" replay, but shown automatically only when the screen
 ## passes them in `extra` (the player has actually met the feature).
 const FEATURE_ONLY := ["menu_promotion", "menu_streak", "menu_shop", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
-	"team_free_agents", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak",
+	"team_free_agents", "team_best", "team_compare", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak",
 	"battle_combo", "battle_scout", "battle_boons"]
 
 const ACCENT := UITheme.GOLD
