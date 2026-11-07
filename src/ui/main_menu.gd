@@ -147,7 +147,10 @@ func _play_catch() -> void:
 		t2.tween_callback(func() -> void:
 			_ball.visible = false
 			Audio.play("glove_catch", -14.0))
-		get_tree().create_timer(maxf(flight - 0.25, 0.0)).timeout.connect(func() -> void:
+		# Bound to the menu: a scene-tree timer would outlive it and call this with a freed defender.
+		var t3 := create_tween()
+		t3.tween_interval(maxf(flight - 0.25, 0.0))
+		t3.tween_callback(func() -> void:
 			if is_instance_valid(b):
 				b.play_action("catch", 1.0)))
 

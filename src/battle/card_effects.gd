@@ -182,7 +182,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 			fx.barrage_start(point, r, 2.9)
 			for i in balls:
 				var delay := 0.25 + i * (2.4 / balls)
-				battle.get_tree().create_timer(delay, false).timeout.connect(func() -> void:
+				battle.later(delay, func() -> void:
 					if not is_instance_valid(battle):
 						return
 					var off := Vector2.from_angle(randf() * TAU) * sqrt(randf()) * r
@@ -210,14 +210,14 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 					var pos: Vector3 = df.model.chest_position()
 					var dl := i * 0.08
 					var ground := df.global_position
-					battle.get_tree().create_timer(dl, false).timeout.connect(func() -> void:
+					battle.later(dl, func() -> void:
 						fx.relay_link(prev, pos, ground))
 					prev = pos
 				var dmg := p(card_id, "damage", level) * power * (1.0 + float(DB.card(card_id).params.per_defender) * chain.size())
 				var count := int(p(card_id, "targets", level)) + (1 if battle.buff_active("twin_play") else 0)
 				var targets := battle.lead_runners(count)
 				var last := prev
-				battle.get_tree().create_timer(chain.size() * 0.08 + 0.1, false).timeout.connect(func() -> void:
+				battle.later(chain.size() * 0.08 + 0.1, func() -> void:
 					Audio.play("lightning_zap", -4.0)
 					if targets.is_empty():
 						fx.fizzle(last, "NO RUNNERS")
@@ -440,7 +440,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 			for df: Defender in battle.defenders:
 				df.cleanse()
 				df.celebrate()
-				battle.get_tree().create_timer(0.8, false).timeout.connect(func() -> void:
+				battle.later(0.8, func() -> void:
 					if is_instance_valid(df):
 						df.model.play_base("ready", 0.2))
 			battle.crowd_cheer(1.0)
@@ -599,7 +599,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 			# Bolts of light strike every runner in a quick sweep outward from the mound.
 			for e: Enemy in victims:
 				var delay := 0.35 + clampf(Field.v2(e.global_position).distance_to(Field.v2(Field.MOUND)) / 40.0, 0.0, 0.5)
-				battle.get_tree().create_timer(delay, false).timeout.connect(func() -> void:
+				battle.later(delay, func() -> void:
 					if not is_instance_valid(battle) or not is_instance_valid(e) or not e.alive:
 						return
 					fx.perfect_strike(e)
@@ -687,15 +687,15 @@ func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3
 			for i in path.size() - 1:
 				var a := path[i]
 				var b := path[i + 1]
-				battle.get_tree().create_timer(i * 0.13, false).timeout.connect(func() -> void:
+				battle.later(i * 0.13, func() -> void:
 					fx.horn_link(a, b)
 					Audio.play("glove_catch", -8.0, 0.1))
 			var t0 := (path.size() - 1) * 0.13 + 0.05
 			if targets.is_empty():
-				battle.get_tree().create_timer(t0, false).timeout.connect(func() -> void: fx.fizzle(Field.FIRST + Vector3(0, 1.5, 0), "NO RUNNERS"))
+				battle.later(t0, func() -> void: fx.fizzle(Field.FIRST + Vector3(0, 1.5, 0), "NO RUNNERS"))
 			for i in targets.size():
 				var wr := weakref(targets[i])
-				battle.get_tree().create_timer(t0 + i * 0.1, false).timeout.connect(func() -> void:
+				battle.later(t0 + i * 0.1, func() -> void:
 					var e := wr.get_ref() as Enemy
 					if e == null or not e.targetable():
 						return
@@ -726,7 +726,7 @@ func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3
 			Audio.play("rally_horn", -6.0)
 			battle.notify("GRAND SALAMI!", Color(1.0, 0.45, 0.15))
 			fx.salami_drop(land, flight)
-			battle.get_tree().create_timer(flight, false).timeout.connect(func() -> void:
+			battle.later(flight, func() -> void:
 				if not is_instance_valid(battle):
 					return
 				Audio.play("boss_slam", -2.0)
@@ -915,7 +915,7 @@ func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3
 			Audio.play("crowd_ooh", -6.0)
 			battle.notify("INSTANT REPLAY: %s!" % String(rc.name).to_upper(), Color(0.5, 0.95, 1.0))
 			fx.instant_replay(at, rid)
-			battle.get_tree().create_timer(0.45, false).timeout.connect(func() -> void:
+			battle.later(0.45, func() -> void:
 				if not is_instance_valid(battle):
 					return
 				_replaying = true
@@ -1197,7 +1197,7 @@ func _tick_reliever(it: Dictionary, delta: float) -> bool:
 						dmg *= 1.75
 					var mw := weakref(model)
 					var tw := weakref(tgt)
-					battle.get_tree().create_timer(0.3 / 1.6, false).timeout.connect(func() -> void:
+					battle.later(0.3 / 1.6, func() -> void:
 						var m := mw.get_ref() as CharacterModel
 						var en := tw.get_ref() as Enemy
 						if m == null or en == null or not en.targetable():
@@ -1432,7 +1432,7 @@ func _execute_u9(card_id: String, level: int, target: Dictionary, point: Vector3
 				var flight := clampf(from.distance_to(land) / 36.0, 0.12, 0.8)
 				Audio.play("bat_crack", -3.0)
 				fx.worm_release(from, land, flight)
-				battle.get_tree().create_timer(flight, false).timeout.connect(func() -> void:
+				battle.later(flight, func() -> void:
 					if not is_instance_valid(battle):
 						return
 					Audio.play("explosion_small", -6.0)
@@ -1455,10 +1455,10 @@ func _execute_u9(card_id: String, level: int, target: Dictionary, point: Vector3
 			fx.fireworks_start(span)
 			for i in n:
 				var delay := 0.35 + span * float(i) / float(maxi(n, 1))
-				battle.get_tree().create_timer(delay, false).timeout.connect(func() -> void:
+				battle.later(delay, func() -> void:
 					if is_instance_valid(battle):
 						_firework(dmg, i))
-			battle.get_tree().create_timer(0.35 + span + 0.45, false).timeout.connect(func() -> void:
+			battle.later(0.35 + span + 0.45, func() -> void:
 				if is_instance_valid(battle):
 					_fireworks_finale(card_id, level))
 
@@ -1483,7 +1483,7 @@ func _echo(card_id: String, level: int, target: Dictionary) -> void:
 	if te != null and is_instance_valid(te):
 		at = (te as Enemy).global_position
 	fx.double_mark(card_id, at, ECHO_DELAY)
-	battle.get_tree().create_timer(ECHO_DELAY, false).timeout.connect(func() -> void:
+	battle.later(ECHO_DELAY, func() -> void:
 		if not is_instance_valid(battle):
 			return
 		var tgt := echo_target(card_id, target)
@@ -1735,14 +1735,14 @@ func _firework(dmg: float, i: int) -> void:
 	if pool.is_empty():
 		var sky := Field.MOUND + Vector3(randf_range(-14, 14), randf_range(12, 18), randf_range(-14, 6))
 		fx.firework_rocket(from, sky, flight, i)
-		battle.get_tree().create_timer(flight, false).timeout.connect(func() -> void:
+		battle.later(flight, func() -> void:
 			if is_instance_valid(battle):
 				fx.firework_burst(sky, i, false))
 		return
 	var e: Enemy = pool[randi() % pool.size()]
 	var wr := weakref(e)
 	fx.firework_rocket(from, e.center() + Vector3(0, 0.5, 0), flight, i)
-	battle.get_tree().create_timer(flight, false).timeout.connect(func() -> void:
+	battle.later(flight, func() -> void:
 		if not is_instance_valid(battle):
 			return
 		var t := wr.get_ref() as Enemy

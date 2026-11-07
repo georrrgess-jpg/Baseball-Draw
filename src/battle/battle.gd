@@ -248,7 +248,7 @@ func _intro() -> void:
 				if ids.size() == 3 and state == "draft":
 					draft_offers = ids
 					draft_opened.emit(ids)
-					get_tree().create_timer(DRAFT_DELAY, false).timeout.connect(func() -> void:
+					later(DRAFT_DELAY, func() -> void:
 						if state == "draft" and hud.has_method("show_draft"):
 							hud.show_draft(ids))
 		elif "--open-break" in args:
@@ -645,7 +645,7 @@ func open_draft(then: Callable = Callable()) -> void:
 	field_mat.set_shader_parameter("zones_alpha", 0.0)
 	draft_opened.emit(offers)
 	# The boss finale plays first; the timer follows pause and game speed.
-	get_tree().create_timer(DRAFT_DELAY, false).timeout.connect(func() -> void:
+	later(DRAFT_DELAY, func() -> void:
 		if state == "draft" and draft_offers == offers:
 			Audio.play_music("dugout_theme")
 			if hud.has_method("show_draft"):
@@ -928,6 +928,15 @@ func add_out_coin_bonus(mult: float, time: float) -> void:
 
 
 ## Update 9 hook: energy gain (capped at the maximum).
+## Runs `cb` after `delay` seconds of game time (pauses with the game). The tween is bound to the
+## battle, so a pending callback dies with it: a scene-tree timer would outlive the battle and call
+## a lambda whose captured runners or effects were already freed when the game ends mid-effect.
+func later(delay: float, cb: Callable) -> void:
+	var tw := create_tween()
+	tw.tween_interval(maxf(delay, 0.0))
+	tw.tween_callback(cb)
+
+
 func add_energy(n: float) -> void:
 	cards.add_energy(n)
 

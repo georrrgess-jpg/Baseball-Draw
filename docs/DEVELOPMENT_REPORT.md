@@ -1008,3 +1008,12 @@ Plan: `docs/plans/UPDATE_10_PLAN.md`. Two parallel streams; the lead merged and 
   no overlaps.
 * The hub's warm-up catch timer is now guarded against the menu being left mid-throw. That old script error
   was seen once in a UI run.
+* **Smoke-test fix:** the first Update 10 build failed CI's Linux smoke test with six "Lambda capture was
+  freed" errors. That is the same intermittent error as the coin-boost build.
+  * **Cause:** card effects, Dugout Draft holds, the autopilot and the hub's catch animation used scene-tree
+    timers. Those timers outlive their battle or menu. When a game ended right after a cast, the pending
+    callbacks ran with their runners already freed.
+  * **Fix:** they now use `Battle.later()` (a tween bound to the battle) or a tween bound to the menu, so
+    pending callbacks die with their scene.
+  * **Re-checked after the fix:** suite 2,979/0; UI sections draft 23/0 and newcards 12/0; three local smoke
+    runs pass.

@@ -128,7 +128,7 @@ func _on_draft(offers: Array) -> void:
 	for id in offers:
 		boons_offered[id] = int(boons_offered.get(id, 0)) + 1
 	var pick := choose_boon(offers)
-	get_tree().create_timer(Battle.DRAFT_DELAY + 1.0, false).timeout.connect(func() -> void:
+	battle.later(Battle.DRAFT_DELAY + 1.0, func() -> void:
 		if battle.state != "draft":
 			return
 		var draft: Node = battle.hud.get("_draft")

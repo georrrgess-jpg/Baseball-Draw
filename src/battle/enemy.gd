@@ -1204,7 +1204,7 @@ func _resolve_telegraph() -> void:
 			for i in 3:
 				battle.spawn_enemy("decoy", route, minf(d + randf_range(-2.0, 2.0), route.length - 2.0),
 					{"lateral": randf_range(-1.6, 1.6), "hp_mult": 1.0})
-			get_tree().create_timer(1.6, false).timeout.connect(func() -> void:
+			battle.later(1.6, func() -> void:
 				if is_instance_valid(self) and alive:
 					model.set_ghost(1.0)
 					_rim_dirty = true)
