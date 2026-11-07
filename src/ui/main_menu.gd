@@ -66,8 +66,8 @@ func _ready() -> void:
 
 	if "--skip-welcome" in OS.get_cmdline_user_args():   # screenshot helper: a returning player
 		Profile.data.flags.tutorial_done = true
-	_build_ui()
 	UITheme.apply_debug_ui_scale(self)
+	_build_ui()
 	Audio.play_music("menu_theme")
 	Audio.play_ambience(["stadium_crowd", ""])
 
@@ -182,9 +182,11 @@ func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	ui = Control.new()
-	ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ui.name = "HubUI"
 	ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(ui)
+	_fit_ui()
+	get_tree().root.size_changed.connect(_fit_ui)
 	# A dark gradient behind the hero block keeps the big title legible over the stadium.
 	var grad := TextureRect.new()
 	var g := Gradient.new()
@@ -217,6 +219,21 @@ func _build_ui() -> void:
 	_setup_help()
 	if "--open-gear" in OS.get_cmdline_user_args():   # screenshot helper: the gear menu open
 		get_tree().create_timer(1.0).timeout.connect(_toggle_gear_menu)
+
+
+## The hub is laid out on a canvas of at least DESIGN_SIZE: when the visible area is smaller (a
+## UI scale above 100 %), the whole hub is scaled down to fit instead of overflowing.
+const DESIGN_SIZE := Vector2(1920, 1080)
+
+
+func _fit_ui() -> void:
+	if ui == null or not is_instance_valid(ui) or get_viewport() == null:
+		return
+	var vis := get_viewport().get_visible_rect().size
+	var f := minf(1.0, minf(vis.x / DESIGN_SIZE.x, vis.y / DESIGN_SIZE.y))
+	ui.position = Vector2.ZERO
+	ui.scale = Vector2(f, f)
+	ui.size = vis / f
 
 
 # ---------------------------------------------------------------- top bar
