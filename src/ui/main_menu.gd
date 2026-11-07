@@ -147,7 +147,9 @@ func _play_catch() -> void:
 		t2.tween_callback(func() -> void:
 			_ball.visible = false
 			Audio.play("glove_catch", -14.0))
-		get_tree().create_timer(maxf(flight - 0.25, 0.0)).timeout.connect(func() -> void: b.play_action("catch", 1.0)))
+		get_tree().create_timer(maxf(flight - 0.25, 0.0)).timeout.connect(func() -> void:
+			if is_instance_valid(b):
+				b.play_action("catch", 1.0)))
 
 
 # ---------------------------------------------------------------- UI
