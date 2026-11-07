@@ -4,6 +4,9 @@ extends Node3D
 ## Update 9: the defenders are a portrait grid (12 fit without scrolling) and free agents can be
 ## signed early for coins (Shop.sign_agent, after a confirmation). `Router.open("roster", id)`
 ## opens the screen on that defender.
+## Update 10: BEST TEAM (TeamAI, four styles) previews the strongest six and captain, who comes in and
+## goes out, the score change and why, then applies it; COMPARE opens TeamCompare for the selected
+## defender and the most natural rival (same role, in the six or on the bench).
 
 const GRID_COLS := 3
 const PORTRAIT := 88.0
@@ -27,6 +30,14 @@ var _traits_head: Control   # the TRAINING TRAITS header (hint target)
 var tiles := {}
 ## SIGN button of the selected free agent (null when the selected defender is not one).
 var sign_button: Button
+## Update 10: the strip's BEST TEAM and COMPARE buttons, the open Best Team preview and comparison.
+var best_button: Button
+var compare_button: Button
+var best_preview: Control
+var compare: TeamCompare
+var best_mode := "balanced"
+var best_result: Dictionary = {}
+var _best_body: VBoxContainer
 
 
 func _ready() -> void:
@@ -94,6 +105,9 @@ func _ready() -> void:
 	_team_strip = HBoxContainer.new()
 	_team_strip.add_theme_constant_override("separation", 12)
 	bottom.add_child(_team_strip)
+	best_mode = str(Profile.data.get("flags", {}).get("best_team_mode", "balanced"))
+	if not best_mode in TeamAI.MODES:
+		best_mode = "balanced"
 	selected = Profile.data.team[0]
 	if DB.defenders.has(Router.open_arg):   # opened on a defender (e.g. from the Shop)
 		selected = Router.open_arg
@@ -111,8 +125,13 @@ func _ready() -> void:
 					ShopScreen.confirm_sign(_screen, selected, func(ok: bool) -> void:
 						if ok:
 							_refresh())
+				elif spec.size() > 1 and spec[1] == "best":
+					open_best_team(spec[2] if spec.size() > 2 else best_mode)
+				elif spec.size() > 1 and spec[1] == "compare":
+					open_compare(selected, spec[2] if spec.size() > 2 else "")
 	_screen.set_help("roster", func() -> Dictionary:
-		return {"team_intro": _grid, "team_road": _road_box, "team_traits": _traits_head, "team_free_agents": _grid}, _hint_features)
+		return {"team_intro": _grid, "team_road": _road_box, "team_traits": _traits_head, "team_free_agents": _grid,
+			"team_best": best_button, "team_compare": compare_button}, _hint_features)
 
 
 ## Traits are explained automatically once a defender has reached a trait level; free agents
@@ -222,6 +241,13 @@ func _process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# The Best Team preview keeps keyboard focus on its own buttons.
+	if best_preview and is_instance_valid(best_preview) and not best_preview.is_queued_for_deletion():
+		if TeamCompare.trap_focus(best_preview, event):
+			get_viewport().set_input_as_handled()
+		return
+	if compare and is_instance_valid(compare):
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var mp: Vector2 = event.position
 		var vs := get_viewport().get_visible_rect().size
@@ -708,4 +734,385 @@ func _fill_team() -> void:
 	var rl := UITheme.label(txt, 17, UITheme.MUTED)
 	rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_team_strip.add_child(rl)
+	best_button = UITheme.button("BEST TEAM", "primary", UITheme.FS_BODY, "special", UITheme.GOLD.darkened(0.25))
+	best_button.name = "BestTeamButton"
+	best_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	best_button.tooltip_text = "Pick the strongest six and captain from your unlocked defenders (%s style), with a preview first." % TeamAI.MODE_NAMES[best_mode]
+	best_button.pressed.connect(func() -> void: open_best_team(best_mode))
+	_team_strip.add_child(best_button)
+	compare_button = UITheme.button("COMPARE", "secondary", UITheme.FS_BODY, "swap")
+	compare_button.name = "CompareButton"
+	compare_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	compare_button.tooltip_text = "Compare %s side by side with another defender." % DB.defender(selected).name
+	compare_button.pressed.connect(func() -> void: open_compare(selected))
+	_team_strip.add_child(compare_button)
+
+
+# ---------------------------------------------------------------- Update 10: Best Team
+
+## Opens the Best Team preview in a style: who comes in and goes out, the score before and after,
+## the reasons per pick, the style choice, and APPLY (Profile.set_team) / CANCEL.
+func open_best_team(mode := "balanced") -> Control:
+	if best_preview and is_instance_valid(best_preview) and not best_preview.is_queued_for_deletion():
+		best_preview.queue_free()
+	var shade := ColorRect.new()
+	shade.name = "BestTeamPreview"
+	shade.color = Color(0, 0, 0, 0.66)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.z_index = 40
+	_screen.add_child(shade)
+	_screen.push_overlay(shade)
+	best_preview = shade
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.add_child(center)
+	var p := UITheme.card_panel(Color(UITheme.GOLD, 0.7), 22, Color(0.04, 0.065, 0.11, 0.98), 2)
+	p.custom_minimum_size = Vector2(1380, 0)
+	center.add_child(p)
+	_best_body = VBoxContainer.new()
+	_best_body.add_theme_constant_override("separation", 10)
+	p.add_child(_best_body)
+	set_best_mode(mode, false)
+	shade.modulate.a = 0.0
+	shade.create_tween().tween_property(shade, "modulate:a", 1.0, 0.15)
+	Audio.ui("ui_tab")
+	return shade
+
+
+## Recomputes the preview for a style (and remembers the style).
+func set_best_mode(mode: String, sound := true) -> void:
+	if not mode in TeamAI.MODES:
+		mode = "balanced"
+	best_mode = mode
+	if Profile.data.has("flags"):
+		Profile.data.flags["best_team_mode"] = mode
+	best_result = TeamAI.best_team(mode)
+	if sound:
+		Audio.ui("ui_tab")
+	if _best_body and is_instance_valid(_best_body):
+		_fill_best(_best_body, best_result)
+	if best_button and is_instance_valid(best_button):
+		best_button.tooltip_text = "Pick the strongest six and captain from your unlocked defenders (%s style), with a preview first." % TeamAI.MODE_NAMES[mode]
+
+
+func _fill_best(vb: VBoxContainer, r: Dictionary) -> void:
+	for c in vb.get_children():
+		vb.remove_child(c)
+		c.queue_free()
+	# Header: title and the style buttons.
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	vb.add_child(head)
+	var sh := UITheme.section_header("BEST TEAM", "special", UITheme.GOLD, UITheme.FS_H2)
+	sh.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(sh)
+	var mode_btns: Array = []
+	for m in TeamAI.MODES:
+		var mb := UITheme.small_button(str(TeamAI.MODE_NAMES[m]), UITheme.GOLD, UITheme.FS_SMALL)
+		mb.name = "Mode_" + m
+		mb.toggle_mode = true
+		mb.button_pressed = m == r.mode
+		mb.custom_minimum_size = Vector2(0, UITheme.BTN_H_SMALL)
+		mb.tooltip_text = str(TeamAI.MODE_TEXT[m])
+		mb.add_theme_stylebox_override("focus", UITheme.panel_style(Color(0, 0, 0, 0), Color(UITheme.GOLD, 0.95), 2, 6, 0))
+		var mm: String = m
+		var focus_name := mb.name
+		mb.pressed.connect(func() -> void:
+			set_best_mode(mm)
+			_focus_named.call_deferred(focus_name))
+		head.add_child(mb)
+		mode_btns.append(mb)
+	var mt := UITheme.label(str(TeamAI.MODE_TEXT[r.mode]), UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
+	vb.add_child(mt)
+	# Score before / after.
+	var sr := HBoxContainer.new()
+	sr.name = "ScoreRow"
+	sr.add_theme_constant_override("separation", 14)
+	vb.add_child(sr)
+	var stl := UITheme.label("TEAM SCORE", UITheme.FS_BODY, UITheme.MUTED, UITheme.font_body_bold())
+	stl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sr.add_child(stl)
+	var before := float(r.current_score)
+	var after := float(r.score)
+	var sl := UITheme.label("%.1f" % before, UITheme.FS_H1, UITheme.OFFWHITE, UITheme.font_display())
+	sl.name = "ScoreBefore"
+	sr.add_child(sl)
+	if not bool(r.already_best):
+		sr.add_child(UITheme.label("→", UITheme.FS_H1, UITheme.MUTED, UITheme.font_display()))
+		var al := UITheme.label("%.1f" % after, UITheme.FS_H1, UITheme.GREEN, UITheme.font_display())
+		al.name = "ScoreAfter"
+		sr.add_child(al)
+		var gain := UITheme.badge("+%.1f" % (after - before), UITheme.GREEN.darkened(0.35), UITheme.FS_SMALL)
+		gain.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		sr.add_child(gain)
+	var sumr := UITheme.label(str(r.summary), UITheme.FS_SMALL, Color(0.85, 0.9, 1.0), UITheme.font_body_bold())
+	sumr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sumr.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sumr.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sumr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sr.add_child(sumr)
+	if bool(r.already_best):
+		var ab := UITheme.label("Your team is already the best %s team: no change needed." % str(TeamAI.MODE_NAMES[r.mode]), UITheme.FS_LEAD, UITheme.GREEN, UITheme.font_header())
+		ab.name = "AlreadyBest"
+		vb.add_child(ab)
+	else:
+		# Who comes in and goes out.
+		var io := HBoxContainer.new()
+		io.name = "InOut"
+		io.add_theme_constant_override("separation", 12)
+		vb.add_child(io)
+		if not r.ins.is_empty():
+			var ib := UITheme.badge("IN", UITheme.GREEN.darkened(0.35), UITheme.FS_SMALL)
+			ib.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			io.add_child(ib)
+			for id in r.ins:
+				io.add_child(_mini_player(id, UITheme.GREEN))
+		if not r.outs.is_empty():
+			var gap := Control.new()
+			gap.custom_minimum_size = Vector2(20, 0)
+			io.add_child(gap)
+			var ob := UITheme.badge("OUT", UITheme.SCARLET, UITheme.FS_SMALL)
+			ob.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			io.add_child(ob)
+			for id in r.outs:
+				io.add_child(_mini_player(id, Color(1.0, 0.55, 0.5)))
+		if bool(r.captain_changed):
+			var gap2 := Control.new()
+			gap2.custom_minimum_size = Vector2(20, 0)
+			io.add_child(gap2)
+			var cl := UITheme.label("New captain: %s (was %s)" % [DB.defender(r.captain).name, DB.defender(str(Profile.data.captain)).name],
+				UITheme.FS_BODY, UITheme.GOLD, UITheme.font_body_bold())
+			cl.name = "CaptainChange"
+			cl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			io.add_child(cl)
+	vb.add_child(UITheme.hsep())
+	# The six with their reasons.
+	var grid := GridContainer.new()
+	grid.name = "Picks"
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 8)
+	vb.add_child(grid)
+	for id in r.team:
+		grid.add_child(_pick_card(id, r))
+	# Buttons.
+	var btns := HBoxContainer.new()
+	btns.add_theme_constant_override("separation", 12)
+	vb.add_child(btns)
+	var hint := UITheme.label("Esc closes.  The team only changes when you press APPLY.", UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	btns.add_child(hint)
+	var cancel := UITheme.button("CLOSE" if bool(r.already_best) else "CANCEL", "secondary")
+	cancel.name = "Cancel"
+	cancel.pressed.connect(func() -> void:
+		Audio.ui("ui_back")
+		if is_instance_valid(best_preview):
+			best_preview.queue_free())
+	btns.add_child(cancel)
+	var apply := UITheme.button("APPLY", "primary", UITheme.FS_LEAD, "check", UITheme.GREEN.darkened(0.3))
+	apply.name = "Apply"
+	apply.disabled = bool(r.already_best)
+	apply.tooltip_text = "Make this your starting six" if not apply.disabled else "Your team is already the best for this style."
+	apply.pressed.connect(apply_best_team)
+	btns.add_child(apply)
+	# Focus: APPLY when there is something to apply, else the current style.
+	var fb: Button = apply if not apply.disabled else mode_btns[TeamAI.MODES.find(r.mode)]
+	var fo := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if fo == null or not fo.is_visible_in_tree() or not best_preview.is_ancestor_of(fo):
+		fb.grab_focus.call_deferred()
+
+
+func _focus_named(n: String) -> void:
+	if best_preview and is_instance_valid(best_preview):
+		var b: Control = best_preview.find_child(n, true, false)
+		if b and not b.is_queued_for_deletion():
+			b.grab_focus()
+
+
+func _mini_player(id: String, col: Color) -> Control:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 6)
+	hb.add_child(MenuScreen.portrait_rect(id, 44, DB.defender_accent(id)))
+	var l := UITheme.label("%s  Lv %d" % [DB.defender(id).name, Profile.defender_level(id)], UITheme.FS_BODY, col, UITheme.font_header())
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(l)
+	return hb
+
+
+func _pick_card(id: String, r: Dictionary) -> Control:
+	var d := DB.defender(id)
+	var accent := DB.defender_accent(id)
+	var p := PanelContainer.new()
+	p.name = "Pick_" + id
+	p.custom_minimum_size = Vector2(655, 0)
+	var is_new: bool = id in r.ins
+	p.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.06, 0.09, 0.15, 0.95), Color(UITheme.GREEN, 0.7) if is_new else Color(accent, 0.3), 2 if is_new else 1, 10, 8))
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 10)
+	p.add_child(hb)
+	hb.add_child(MenuScreen.portrait_rect(id, 64, accent))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 1)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	v.add_child(top)
+	top.add_child(UITheme.label(str(d.name).to_upper(), UITheme.FS_LEAD, accent.lightened(0.3), UITheme.font_header()))
+	var lv := UITheme.label("Lv %d · %s" % [Profile.defender_level(id), DB.roles[d.role].name], UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
+	lv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(lv)
+	if id == r.captain:
+		var cb := UITheme.badge("C", UITheme.GOLD.darkened(0.25), UITheme.FS_MIN)
+		cb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		top.add_child(cb)
+	if is_new:
+		var nb := UITheme.badge("IN", UITheme.GREEN.darkened(0.35), UITheme.FS_MIN)
+		nb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		top.add_child(nb)
+	var rows: Dictionary = r.get("parts", {}).get("rows", {})
+	var sc := float(rows[id].score) if rows.has(id) else 0.0
+	var scl := UITheme.label("%.1f" % sc, UITheme.FS_BODY, UITheme.GOLD, UITheme.font_display())
+	scl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	scl.tooltip_text = "TeamAI score in this team"
+	scl.mouse_filter = Control.MOUSE_FILTER_PASS
+	top.add_child(scl)
+	var reasons: Array = r.reasons.get(id, [])
+	for i in mini(reasons.size(), 3):
+		var rr: Array = reasons[i]
+		var rl := HBoxContainer.new()
+		rl.add_theme_constant_override("separation", 6)
+		var chip := UITheme.badge(str(rr[0]), _reason_color(str(rr[0])), 13)
+		chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		rl.add_child(chip)
+		var t := UITheme.label(str(rr[1]), UITheme.FS_MIN, UITheme.OFFWHITE.darkened(0.08))
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.clip_text = true
+		t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		t.tooltip_text = str(rr[1])
+		t.mouse_filter = Control.MOUSE_FILTER_PASS
+		rl.add_child(t)
+		v.add_child(rl)
+	if reasons.size() > 3:
+		var more: Array = []
+		for i in range(3, reasons.size()):
+			more.append(str(reasons[i][1]))
+		p.tooltip_text = "\n".join(more)
+		p.mouse_filter = Control.MOUSE_FILTER_PASS
+	return p
+
+
+func _reason_color(chip: String) -> Color:
+	if chip.begins_with("CAPTAIN"):
+		return UITheme.GOLD.darkened(0.3)
+	if chip.contains("DAMAGE") or chip == "BOSS":
+		return DB.category_color("offense").darkened(0.3)
+	if chip == "CROWD" or chip == "CONTROL":
+		return DB.category_color("control").darkened(0.3)
+	if chip == "SYNERGY" or chip == "TEAM BOOST":
+		return UITheme.GREEN.darkened(0.45)
+	if chip == "SIGNATURE":
+		return UITheme.SCARLET.darkened(0.2)
+	return Color(0.25, 0.32, 0.45)
+
+
+## APPLY: sets the previewed six and captain (Profile.set_team) and closes the preview.
+func apply_best_team() -> void:
+	if best_result.is_empty() or bool(best_result.get("already_best", false)) or (best_result.team as Array).is_empty():
+		return
+	var ins: Array = best_result.ins
+	Profile.set_team(best_result.team, str(best_result.captain))
+	Audio.ui("ui_confirm")
+	var msg := "Best team applied (%s): score %.1f." % [TeamAI.MODE_NAMES[best_result.mode], float(best_result.score)]
+	if not ins.is_empty():
+		var names: Array = []
+		for id in ins:
+			names.append(str(DB.defender(id).name))
+		msg = "Best team applied: %s in. Score %.1f → %.1f." % [", ".join(names), float(best_result.current_score), float(best_result.score)]
+	Router.toast(msg, "level")
+	if is_instance_valid(best_preview):
+		best_preview.queue_free()
+	_refresh()
+	_focus_best_button.call_deferred()
+
+
+func _focus_best_button() -> void:
+	if best_button and is_instance_valid(best_button) and best_button.is_inside_tree():
+		best_button.grab_focus()
+
+
+# ---------------------------------------------------------------- Update 10: Compare
+
+## The natural rival for a defender: when `id` is in the six, the best bench player of the same role
+## (else the best bench player); otherwise the weakest team member of the same role (else the weakest).
+func compare_partner(id: String) -> String:
+	var ctx := TeamAI.profile_context()
+	var team: Array = Profile.data.team
+	var role: String = DB.defender(id).role
+	if id in team:
+		for pass_i in 2:
+			var best := ""
+			var best_s := -INF
+			for o in DB.defender_order:
+				if o == id or o in team or not Profile.is_defender_unlocked(o):
+					continue
+				if pass_i == 0 and DB.defender(o).role != role:
+					continue
+				var s := TeamAI.defender_score(o, ctx, best_mode)
+				if s > best_s:
+					best_s = s
+					best = o
+			if best != "":
+				return best
+		for o in team:   # nobody on the bench: another member of the six
+			if o != id and DB.defender(o).role == role:
+				return o
+		return team[0] if team[0] != id else team[1]
+	for pass_i in 2:
+		var worst := ""
+		var worst_s := INF
+		for o in team:
+			if pass_i == 0 and DB.defender(o).role != role:
+				continue
+			var s := TeamAI.defender_score(o, ctx, best_mode)
+			if s < worst_s:
+				worst_s = s
+				worst = o
+		if worst != "":
+			return worst
+	return team[0]
+
+
+## Opens the side-by-side comparison: `a` on the left, `b` (default: compare_partner(a)) on the right.
+func open_compare(a: String, b := "") -> TeamCompare:
+	if not DB.defenders.has(a):
+		return null
+	if b == "" or not DB.defenders.has(b) or b == a:
+		b = compare_partner(a)
+	if compare and is_instance_valid(compare):
+		compare.queue_free()
+	var c := TeamCompare.new(a, b, _screen, best_mode)
+	compare = c
+	c.team_changed.connect(func() -> void:
+		_fill_list()
+		_fill_info()
+		_fill_team())
+	c.closed.connect(func() -> void:
+		if compare == c:
+			compare = null
+			_focus_compare_button.call_deferred())
+	_screen.add_child(c)
+	_screen.push_overlay(c)
+	Audio.ui("ui_tab")
+	return c
+
+
+func _focus_compare_button() -> void:
+	if compare_button and is_instance_valid(compare_button) and compare_button.is_inside_tree():
+		compare_button.grab_focus()

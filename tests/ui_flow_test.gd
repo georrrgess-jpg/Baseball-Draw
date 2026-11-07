@@ -144,6 +144,10 @@ func _run() -> void:
 		await _test_draft()
 		_finish()
 		return
+	if "--ui-test-section=u10team" in OS.get_cmdline_user_args():
+		await _test_u10_team()
+		_finish()
+		return
 	if "--ui-test-section=u9screens" in OS.get_cmdline_user_args():
 		await _test_u9_hub_play_results()
 		_finish()
@@ -370,6 +374,7 @@ func _run() -> void:
 	await _test_navigation()
 	await _test_scouting()
 	await _test_u9_e2()
+	await _test_u10_team()
 	await _test_title()
 	await _test_u9_hub_play_results()
 	await _test_tutorial()
@@ -2155,5 +2160,202 @@ func _test_u9_level_road() -> void:
 		prev = r.end.x
 	_check(ok_lines, "every level caption is a single line")
 	_check(ok_gap, "level captions never overlap their neighbours")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+
+# ---------------------------------------------------------------- Update 10: Best Team, Compare Defenders
+
+## Team screen: BEST TEAM opens a preview (who comes in and goes out, the score before and after, reasons,
+## the style choice), Esc cancels without changing the team, APPLY sets it, and a second look says the
+## team is already the best. COMPARE opens the side-by-side panel: CHANGE picks any defender (a locked
+## one shows as locked, with no PUT IN), Esc closes the picker first, PUT X IN FOR Y swaps into the six
+## keeping the rules, and Esc closes the panel without leaving the screen.
+func _test_u10_team() -> void:
+	Profile.data.flags["tutorial_done"] = true
+	var seen := {}
+	for h in Hints.HINTS:
+		seen[h] = true
+	Profile.data.flags["hints_seen"] = seen
+	Profile.set_team(Profile.STARTER_TEAM.duplicate(), "ace")
+	for id in ["nova", "hana", "moose", "rosa"]:
+		Profile.data.defenders[id].unlocked = true
+		Profile.data.defenders[id].level = 6
+	if Profile.is_defender_unlocked("sid"):
+		Profile.data.defenders["sid"].unlocked = false
+	Router.goto("roster")
+	_check(await _wait_scene("roster"), "u10: Team screen opens")
+	await _wait(1.0)
+	var rs: Node = get_tree().current_scene
+	var bb: Button = rs.get("best_button")
+	var cb: Button = rs.get("compare_button")
+	_check(bb != null and bb.is_visible_in_tree() and cb != null and cb.is_visible_in_tree(), "u10: the team strip has BEST TEAM and COMPARE")
+	var vp := get_viewport().get_visible_rect()
+	_check(bb != null and vp.encloses(bb.get_global_rect()) and cb != null and vp.encloses(cb.get_global_rect()), "u10: both buttons fit on screen")
+	if bb == null or cb == null:
+		return
+	# BEST TEAM preview, Esc cancels.
+	var team_before: Array = Profile.data.team.duplicate()
+	await _click(_button_center(bb))
+	await _wait(0.6)
+	var pv: Node = rs.get("best_preview")
+	_check(pv != null and not _closed(pv), "u10: BEST TEAM opens the preview")
+	if pv == null:
+		return
+	var res: Dictionary = rs.get("best_result")
+	_check(not bool(res.already_best) and not (res.ins as Array).is_empty() and res.ins.size() == res.outs.size(), "u10: the preview lists who comes in and goes out (%s in, %s out)" % [res.ins, res.outs])
+	_check(pv.find_child("InOut", true, false) != null and pv.find_child("ScoreAfter", true, false) != null, "u10: the preview shows the in/out row and the new score")
+	_check(_find_label(pv, "%.1f" % float(res.current_score)) and _find_label(pv, "%.1f" % float(res.score)), "u10: the score before (%.1f) and after (%.1f)" % [float(res.current_score), float(res.score)])
+	var picks: Node = pv.find_child("Picks", true, false)
+	_check(picks != null and picks.get_child_count() == Profile.TEAM_SIZE, "u10: the preview lists the six picks with reasons")
+	var apply: Button = pv.find_child("Apply", true, false)
+	_check(apply != null and not apply.disabled, "u10: APPLY is enabled")
+	var fo := get_viewport().gui_get_focus_owner()
+	_check(fo != null and pv.is_ancestor_of(fo), "u10: the preview takes keyboard focus")
+	for k in [KEY_UP, KEY_UP, KEY_LEFT, KEY_DOWN]:
+		await _press(k)
+	fo = get_viewport().gui_get_focus_owner()
+	_check(fo != null and pv.is_ancestor_of(fo), "u10: arrow keys stay inside the preview (%s)" % (fo.name if fo else "none"))
+	# Style choice.
+	var mb: Button = pv.find_child("Mode_boss", true, false)
+	_check(mb != null, "u10: the preview offers the Boss Killer style")
+	if mb:
+		await _click(_button_center(mb))
+		await _wait(0.5)
+		res = rs.get("best_result")
+		_check(str(res.mode) == "boss" and str(Profile.data.flags.get("best_team_mode", "")) == "boss", "u10: choosing Boss Killer recomputes the team (%s)" % [res.team])
+		var mbal: Button = pv.find_child("Mode_balanced", true, false)
+		if mbal:
+			await _click(_button_center(mbal))
+			await _wait(0.5)
+			res = rs.get("best_result")
+	_check(str(res.mode) == "balanced", "u10: back to Balanced")
+	await _key("pause")
+	await _wait(0.4)
+	_check(_closed(pv), "u10: Esc closes the preview")
+	_check(Router.current == "roster" and Profile.data.team == team_before, "u10: Esc keeps the screen and the team unchanged")
+	# APPLY.
+	await _click(_button_center(rs.get("best_button")))
+	await _wait(0.6)
+	pv = rs.get("best_preview")
+	res = rs.get("best_result")
+	apply = pv.find_child("Apply", true, false) if pv else null
+	if apply:
+		await _click(_button_center(apply))
+		await _wait(0.6)
+	_check(Profile.data.team == res.team and Profile.data.captain == res.captain, "u10: APPLY sets the team %s, captain %s" % [Profile.data.team, Profile.data.captain])
+	_check(_closed(pv), "u10: APPLY closes the preview")
+	for id in res.ins:
+		var t: Button = rs.tiles.get(id)
+		_check(t != null and ("starting six" in t.tooltip_text or "captain" in t.tooltip_text), "u10: %s's tile shows them in the six" % id)
+	# Already the best.
+	await _click(_button_center(rs.get("best_button")))
+	await _wait(0.6)
+	pv = rs.get("best_preview")
+	_check(pv != null and pv.find_child("AlreadyBest", true, false) != null, "u10: a second look says the team is already the best")
+	apply = pv.find_child("Apply", true, false) if pv else null
+	_check(apply != null and apply.disabled, "u10: APPLY is disabled when nothing would change")
+	await _key("pause")
+	await _wait(0.4)
+	_check(_closed(pv), "u10: Esc closes it again")
+	# COMPARE: select a bench defender, open the panel.
+	var bench := ""
+	for id in DB.defender_order:
+		if Profile.is_defender_unlocked(id) and not id in Profile.data.team:
+			bench = id
+			break
+	_check(bench != "", "u10: someone is on the bench (%s)" % bench)
+	if bench == "":
+		return
+	await _click(_button_center(rs.tiles[bench]))
+	await _wait(0.5)
+	await _click(_button_center(rs.get("compare_button")))
+	await _wait(0.6)
+	var cmp: TeamCompare = rs.get("compare")
+	_check(cmp != null and not _closed(cmp), "u10: COMPARE opens the comparison")
+	if cmp == null:
+		return
+	_check(cmp.ids[0] == bench and cmp.ids[1] in Profile.data.team, "u10: %s on the left, a team member on the right (%s)" % [bench, cmp.ids[1]])
+	var rows_ok := true
+	for rn in ["Row_Level", "Row_Damage", "Row_Throw interval", "Row_Range", "Row_Accuracy", "Row_TeamAI score"]:
+		if cmp.find_child(rn, true, false) == null:
+			rows_ok = false
+	_check(rows_ok, "u10: the table lists level, every stat and the TeamAI score")
+	var bars := cmp.find_children("Bar", "ColorRect", true, false)
+	var green := false
+	var red := false
+	for b in bars:
+		if (b as ColorRect).color.is_equal_approx(UITheme.GREEN):
+			green = true
+		if (b as ColorRect).color.r > 0.7 and (b as ColorRect).color.g < 0.3:
+			red = true
+	_check(green and red, "u10: better values have green bars, worse ones red")
+	var vd: Label = cmp.find_child("Verdict", true, false)
+	_check(vd != null and vd.text != "", "u10: a one-line verdict (%s)" % (vd.text if vd else ""))
+	fo = get_viewport().gui_get_focus_owner()
+	_check(fo != null and cmp.is_ancestor_of(fo), "u10: the panel takes keyboard focus")
+	var start_fo := fo
+	var moved := false
+	var inside := true
+	for k in [KEY_RIGHT, KEY_DOWN, KEY_LEFT, KEY_LEFT, KEY_UP, KEY_UP, KEY_UP]:
+		await _press(k)
+		fo = get_viewport().gui_get_focus_owner()
+		inside = inside and fo != null and cmp.is_ancestor_of(fo)
+		moved = moved or fo != start_fo
+	_check(inside and moved, "u10: arrow keys move between the panel's buttons and never leave it")
+	# CHANGE the right side to a locked defender.
+	var ch1: Button = cmp.buttons.get("Change1")
+	await _click(_button_center(ch1))
+	await _wait(0.5)
+	_check(cmp.picker != null and not _closed(cmp.picker), "u10: CHANGE opens the defender picker")
+	var lk: Button = cmp.picker.find_child("Pick_sid", true, false) if cmp.picker else null
+	_check(lk != null and not lk.disabled and "locked" in lk.tooltip_text, "u10: a locked defender is listed as locked")
+	if lk:
+		await _click(_button_center(lk))
+		await _wait(0.5)
+	_check(cmp.ids[1] == "sid" and cmp.picker == null, "u10: picking sets the side and closes the picker")
+	var st1: Node = cmp.find_child("Side1", true, false)
+	_check(st1 != null and _find_label(st1, "LOCKED"), "u10: the locked side says LOCKED")
+	_check(cmp.buttons.get("PutIn0") == null and cmp.buttons.get("PutIn1") == null, "u10: no PUT IN against a locked defender")
+	# Esc closes the picker first, then the panel.
+	await _click(_button_center(cmp.buttons.get("Change1")))
+	await _wait(0.5)
+	var pk: Control = cmp.picker
+	await _key("pause")
+	await _wait(0.4)
+	_check(_closed(pk) and not _closed(cmp), "u10: Esc closes the picker but keeps the panel")
+	# PUT X IN FOR Y.
+	var member := ""
+	for id in Profile.data.team:
+		if id != Profile.data.captain:
+			member = id
+			break
+	cmp.open_picker(1)
+	await _wait(0.4)
+	var mp: Button = cmp.picker.find_child("Pick_" + member, true, false)
+	if mp:
+		await _click(_button_center(mp))
+		await _wait(0.5)
+	var put: Button = cmp.buttons.get("PutIn0")
+	_check(put != null and put.text == "PUT %s IN FOR %s" % [str(DB.defender(bench).name).to_upper(), str(DB.defender(member).name).to_upper()], "u10: PUT %s IN FOR %s is offered" % [bench, member])
+	if put:
+		var size_before: int = Profile.data.team.size()
+		await _click(_button_center(put))
+		await _wait(0.6)
+		_check(bench in Profile.data.team and not member in Profile.data.team and Profile.data.team.size() == size_before, "u10: PUT IN swaps them in the starting six %s" % [Profile.data.team])
+		_check(Profile.data.captain in Profile.data.team, "u10: the captain is still in the team")
+		_check(cmp.buttons.get("PutIn1") != null and cmp.buttons.get("PutIn0") == null, "u10: the panel now offers the swap back")
+		var strip_ok := false
+		for l in rs.find_children("*", "Label", true, false):
+			if (l as Label).text.begins_with(str(DB.defender(bench).name)) and (l as Label).is_visible_in_tree():
+				strip_ok = true
+		_check(strip_ok, "u10: the starting six strip shows %s" % bench)
+	await _key("pause")
+	await _wait(0.4)
+	_check(_closed(cmp), "u10: Esc closes the comparison")
+	_check(Router.current == "roster", "u10: Esc on the panel stays on the Team screen")
+	fo = get_viewport().gui_get_focus_owner()
+	_check(fo == rs.get("compare_button"), "u10: focus returns to COMPARE")
+	Profile.set_team(Profile.STARTER_TEAM.duplicate(), "ace")
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")

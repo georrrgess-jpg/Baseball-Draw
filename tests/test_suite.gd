@@ -47,6 +47,7 @@ func _run() -> void:
 	test_update6_waves()
 	test_upgrade_all()
 	test_deck_ai()
+	test_team_ai()
 	await test_menus()
 	await test_u9_screens()
 	test_update5_content()
@@ -3655,3 +3656,131 @@ func _test_update9_cards_battle() -> void:
 ## game time slower than the wall clock, so card timings are checked against game time.
 func _gwait(sec: float) -> void:
 	await get_tree().create_timer(sec, false, false, false).timeout
+
+
+# ---------------------------------------------------------------- Update 10: team AI (Best Team, compare)
+
+func _team_ctx(unlocked: Array, levels := {}, deck: Array = [], owned: Array = [], team: Array = [], captain := "ace") -> Dictionary:
+	if team.is_empty():
+		team = Profile.STARTER_TEAM.duplicate()
+	if deck.is_empty():
+		deck = Profile.STARTER_DECK.duplicate()
+	if owned.is_empty():
+		owned = deck.duplicate()
+	var lv := {}
+	for id in DB.defender_order:
+		lv[id] = int(levels.get(id, 1))
+	return {"unlocked": unlocked, "levels": lv, "owned_cards": owned, "card_levels": {}, "deck": deck,
+		"team": team, "captain": captain, "formation": "balanced"}
+
+
+func _valid_team(r: Dictionary, ctx: Dictionary) -> bool:
+	return TeamAI.is_valid(r.team, str(r.captain), ctx)
+
+
+func test_team_ai() -> void:
+	section("update 10: team AI")
+	var starter: Array = Profile.STARTER_TEAM
+	var all: Array = DB.defender_order.duplicate()
+	# Every defender has a trait the AI knows, and a positive rating at every level.
+	var unknown: Array = []
+	for id in all:
+		if not TeamAI.TRAITS.has(str(DB.defender(id).trait.id)):
+			unknown.append(id)
+	ok(unknown.is_empty(), "TeamAI knows every defender's trait %s" % [unknown])
+	var full := _team_ctx(all, {"ace": 6, "rico": 5, "maya": 6, "jax": 3, "kai": 7, "bruno": 4, "nova": 6, "dex": 4, "hana": 6, "moose": 5, "rosa": 5, "sid": 2})
+	for id in all:
+		var r1 := TeamAI.rate(id, _team_ctx(all))
+		ok(float(r1.score) > 0.0 and float(r1.eff) > 0.0, "%s has a positive rating" % id)
+	# Level-scaled stats: a higher level means a higher rating; gear and training traits count.
+	ok(float(TeamAI.rate("hana", _team_ctx(all, {"hana": 8})).eff) > float(TeamAI.rate("hana", _team_ctx(all, {"hana": 1})).eff) * 1.3, "a higher level means more damage")
+	var geared := _team_ctx(all)
+	geared["mods"] = {"kai": TeamAI.level_mods(1).merged({"damage": 0.10, "attack_speed": 0.10}, true)}
+	ok(float(TeamAI.rate("kai", geared).eff) > float(TeamAI.rate("kai", _team_ctx(all)).eff) * 1.15, "gear and training traits raise the rating")
+	# Position bonus and signature cards.
+	ok(float(TeamAI.rate("ace", full, "balanced", true).eff) > float(TeamAI.rate("ace", full, "balanced", false).eff), "the position bonus counts")
+	var no_sig := _team_ctx(all, {}, ["power_throw", "curveball", "lockdown", "frost_field", "wall_of_dirt", "twin_play", "rally_cry", "bullpen_call"])
+	ok(TeamAI.defender_score("ace", _team_ctx(all)) > TeamAI.defender_score("ace", no_sig) + 2.0, "a signature card in the deck adds to the score")
+	# Every mode: the rules the game enforces, determinism, and at least the starter team's score.
+	for m in TeamAI.MODES:
+		var r := TeamAI.best_team(m, full)
+		ok(r.team.size() == Profile.TEAM_SIZE and _valid_team(r, full), "%s: six unique unlocked defenders, captain in the team" % m)
+		ok(r.team == TeamAI.best_team(m, full).team and r.captain == TeamAI.best_team(m, full).captain, "%s: the same input gives the same team" % m)
+		var st := float(TeamAI.team_score(starter, full, m).total)
+		ok(float(r.score) >= st - 0.0001, "%s: the best team scores at least the starter team (%.1f >= %.1f)" % [m, float(r.score), st])
+		ok(not r.reasons.is_empty() and (r.reasons.keys() as Array).all(func(k: String) -> bool: return not (r.reasons[k] as Array).is_empty()), "%s: every pick has a reason" % m)
+		ok(r.mode == m and str(r.summary) != "", "%s: a summary line" % m)
+	# Role coverage (scored, the way the battle fills the formation slots): Balanced covers every slot.
+	var bal := TeamAI.best_team("balanced", full)
+	var roles := {}
+	for id in bal.team:
+		roles[DB.defender(id).role] = int(roles.get(DB.defender(id).role, 0)) + 1
+	var need := {}
+	for s in DB.formation_slots:
+		need[s] = int(need.get(s, 0)) + 1
+	ok(roles == need, "Balanced fills every formation slot with its role %s" % [roles])
+	for id in bal.team:
+		ok(bool(bal.parts.rows[id].in_position), "Balanced: %s stands in a slot of their role" % id)
+	# Never a locked defender: the free agents stay out until they are unlocked, however strong.
+	var some := starter + ["nova", "hana"]
+	var strong := _team_ctx(some, {"moose": 10, "rosa": 10, "sid": 10, "dex": 10})
+	var locked_ok := true
+	for m in TeamAI.MODES:
+		for id in TeamAI.best_team(m, strong).team:
+			if not id in some:
+				locked_ok = false
+	ok(locked_ok, "never picks a locked defender, even at level 10")
+	# Random rosters: always valid, deterministic, never below the current team.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1010
+	var rand_ok := true
+	for i in 10:
+		var pool := all.duplicate()
+		for k in range(pool.size() - 1, 0, -1):
+			var j := rng.randi_range(0, k)
+			var t: Variant = pool[k]
+			pool[k] = pool[j]
+			pool[j] = t
+		var un: Array = pool.slice(0, rng.randi_range(6, pool.size()))
+		var lv := {}
+		for id in all:
+			lv[id] = rng.randi_range(1, DB.defender_max_level)
+		var cur: Array = un.slice(0, 6)
+		var ctx := _team_ctx(un, lv, [], [], cur, cur[2])
+		var m: String = TeamAI.MODES[i % TeamAI.MODES.size()]
+		var r := TeamAI.best_team(m, ctx)
+		if not _valid_team(r, ctx) or r.team != TeamAI.best_team(m, ctx).team or float(r.score) < float(r.current_score) - 0.0001:
+			rand_ok = false
+	ok(rand_ok, "random rosters (6 to 12 unlocked, random levels): valid, deterministic, never worse than the current team")
+	# Fewer than six unlocked: all of them, captain included; none: an empty result, no crash.
+	var four := TeamAI.best_team("balanced", _team_ctx(["ace", "rico", "maya", "kai"], {}, [], [], ["ace", "rico", "maya", "kai"]))
+	ok(four.team.size() == 4 and four.captain in four.team, "four unlocked: a team of four with a captain")
+	ok(TeamAI.best_team("balanced", _team_ctx([])).team.is_empty(), "nobody unlocked: an empty team, no crash")
+	ok(TeamAI.best_team("nonsense", full).mode == "balanced", "an unknown mode falls back to Balanced")
+	# Already best: the starter team with only the starters unlocked.
+	var only := TeamAI.best_team("balanced", _team_ctx(starter))
+	ok(bool(only.already_best) and only.ins.is_empty() and only.outs.is_empty(), "the starters alone: the team is already the best")
+	ok(absf(float(only.score) - float(only.current_score)) < 0.001, "already best: the score does not change")
+	var changed := TeamAI.best_team("balanced", full)
+	ok(not bool(changed.already_best) and changed.ins.size() == changed.outs.size() and changed.ins.size() > 0, "a stronger bench: who comes in and who goes out")
+	ok(float(changed.score) > float(changed.current_score), "the new team scores higher (%.1f > %.1f)" % [float(changed.score), float(changed.current_score)])
+	# Captain: the battle's aura (+8 % within 6 m), so in Balanced it is the pitcher on the mound.
+	ok(DB.defender(bal.captain).role == "pitcher" and bal.captain in bal.team, "the captain is the pitcher whose aura reaches the infield")
+	# Compare helpers.
+	ok(TeamAI.verdict("rosa", "rico", full).contains("Rosa: better vs bosses"), "verdict: Rosa is better vs bosses (%s)" % TeamAI.verdict("rosa", "rico", full))
+	ok(TeamAI.verdict("bruno", "kai", full).contains("Bruno: better vs crowds"), "verdict: Bruno is better vs crowds")
+	var sw := TeamAI.swap_in(starter, "ace", "nova", "ace", some)
+	ok(sw.team.size() == 6 and "nova" in sw.team and not "ace" in sw.team and sw.captain == "nova", "put in: the incoming player takes the place and the captaincy")
+	ok(TeamAI.swap_in(starter, "ace", "moose", "jax", some).is_empty(), "put in: a locked defender cannot come in")
+	ok(TeamAI.swap_in(starter, "ace", "rico", "jax", some).is_empty(), "put in: a team member cannot come in twice")
+	# The profile context: the result is a team Profile.set_team keeps as it is.
+	Profile.reset_profile()
+	for id in ["nova", "hana", "moose"]:
+		Profile.data.defenders[id].unlocked = true
+		Profile.data.defenders[id].level = 6
+	var pr := TeamAI.best_team()
+	ok(TeamAI.is_valid(pr.team, pr.captain, TeamAI.profile_context()), "profile context: a valid team")
+	Profile.set_team(pr.team, pr.captain)
+	ok(Profile.data.team == pr.team and Profile.data.captain == pr.captain, "Profile.set_team keeps the best team and captain")
+	ok(bool(TeamAI.best_team().already_best), "after applying, the team is already the best")
+	Profile.reset_profile()
