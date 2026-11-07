@@ -146,6 +146,10 @@ func _hint_features() -> Array:
 		if not bool(fa.get("signed", false)):
 			out.append("team_free_agents")
 			break
+	# Update 10: Best Team and Compare once there is a bench to choose from (hint texts live in hints.gd;
+	# ids without a text are skipped).
+	if TeamAI.available(TeamAI.profile_context()).size() > Profile.TEAM_SIZE:
+		out.append_array(["team_best", "team_compare"])
 	return out
 
 
