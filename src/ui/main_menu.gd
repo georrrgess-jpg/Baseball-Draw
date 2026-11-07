@@ -99,7 +99,7 @@ func _spawn_team() -> void:
 ## Camera framing: the lineup sits in the open middle of the screen, a little left of centre
 ## (the TODAY panel covers the right third).
 const CAM_POS := Vector3(-0.4, 1.8, 16.6)
-const CAM_LOOK := Vector3(4.15, 2.3, 4.0)
+const CAM_LOOK := Vector3(4.35, 2.3, 4.0)
 
 
 func _process(delta: float) -> void:
@@ -1207,7 +1207,8 @@ func _login_sub_text() -> String:
 func _login_cell(e: Dictionary, can: bool) -> Control:
 	var day := int(e.get("day", 0))
 	var claimed := bool(e.get("claimed", false))
-	var today := bool(e.get("today", false))
+	# The cell to claim now, or (once today's is claimed) the one tomorrow pays.
+	var today := (bool(e.get("today", false)) and can) or (not can and not claimed and day == DailyRewards.day())
 	var big := day == 7
 	var accent := UITheme.GOLD
 	var bg := Color(0.05, 0.08, 0.14, 0.95)
@@ -1227,7 +1228,7 @@ func _login_cell(e: Dictionary, can: bool) -> Control:
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	var reward: Variant = e.get("reward", {})
 	var txt := str(e.get("text", DailyRewards.reward_text(reward) if typeof(reward) == TYPE_DICTIONARY else ""))
-	p.tooltip_text = "Day %d: %s%s" % [day, txt if txt != "" else "reward", "  (claimed)" if claimed else ("  (today)" if today else "")]
+	p.tooltip_text = "Day %d: %s%s" % [day, txt if txt != "" else "reward", "  (claimed)" if claimed else (("  (today)" if can else "  (next)") if today else "")]
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 2)
 	vb.alignment = BoxContainer.ALIGNMENT_CENTER

@@ -14,7 +14,7 @@ extends RefCounted
 ## id -> [title, text]
 const HINTS := {
 	# Main menu (after the first game; the welcome panel covers the very first launch).
-	"menu_home": ["YOUR CLUBHOUSE", "PLAY starts a game. Tiles with a badge have something waiting for you: unopened packs, new cards or cards ready to upgrade."],
+	"menu_home": ["YOUR CLUBHOUSE", "PLAY starts the mode picked on the chips under it. The bar along the bottom holds your cards, packs, team and the Shop: a badge means something is waiting. The gear (or Esc) has Settings, Practice and Exit."],
 	"menu_daily": ["DAILY CHALLENGE", "A new game every day with fixed rules, the same for every manager. Your first game and first win each day give a bonus pack; play on back-to-back days for a streak."],
 	"menu_promotion": ["PROMOTION CHALLENGE", "You have enough Rank Points to move up a division. Open PLAY and pick Promotion Challenge: win it to get promoted."],
 	# Update 9: the return loop on the hub.
