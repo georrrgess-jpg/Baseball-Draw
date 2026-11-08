@@ -847,9 +847,15 @@ func _all_row(e: Dictionary) -> Control:
 	var nm := UITheme.label(str(c.name), 22, Color.WHITE, UITheme.font_body_bold())
 	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(nm)
-	var to_txt := DB.level_label(int(e.to)).replace("P★", "PRESTIGE ★") if int(e.to) > DB.PRESTIGE_LEVEL else "%d" % int(e.to)
-	var from_txt := DB.level_label(int(e.from))
-	row.add_child(UITheme.label("%s  ▶  %s" % [from_txt, to_txt], 22, CardView.PRESTIGE_GOLD if bool(e.get("prestige", false)) else UITheme.GOLD, UITheme.font_header()))
+	var to_l := int(e.to)
+	var from_l := int(e.from)
+	var to_txt := ("PRESTIGE ★%d" % DB.prestige_stars(to_l)) if bool(e.get("prestige", false)) else \
+		("★%d" % DB.prestige_stars(to_l) if to_l > DB.PRESTIGE_LEVEL else "%d" % to_l)
+	var from_txt := ("★%d" % DB.prestige_stars(from_l)) if from_l > DB.PRESTIGE_LEVEL else "LV %d" % from_l
+	row.add_child(UITheme.label("%s  ▶  %s" % [from_txt, to_txt], 22, CardView.PRESTIGE_GOLD if to_l > DB.PRESTIGE_LEVEL else UITheme.GOLD, UITheme.font_header()))
+	var pad := Control.new()   # keeps the text clear of the scroll bar
+	pad.custom_minimum_size = Vector2(16, 0)
+	row.add_child(pad)
 	return row
 
 

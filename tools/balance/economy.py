@@ -752,7 +752,7 @@ class Player:
 			prestiged += c["level"] > self.d.prestige_level
 		return {"hours": self.minutes / 60.0, "owned": owned, "maxed": maxed, "lvl5": lvl5, "prestiged": prestiged,
 			"level": self.level, "coins": self.coins,
-			"division": self.division, "def_avg": statistics.mean(self.def_level[d] for d in self.team),
+			"division": self.division, "def_avg": statistics.mean(self.def_level[d] for d in self.team), "def_max": max(self.def_level.values()),
 			"card_levels": sum(c["level"] - 1 for c in self.cards.values()), "defenders": len(self.unlocked),
 			"upgrade_coins_left": sum(sum(self.d.coin_cost(self.d.card_rarity[cid], l) for l in range(c["level"], self.d.max_level))
 				for cid, c in self.cards.items() if c["owned"]),
@@ -906,6 +906,10 @@ def main():
 	ms["all commons at max level (%d)" % data.max_level] = first_hour(tls, lambda s: s["maxed"]["common"] >= counts["common"])
 	ms["team average level 5"] = first_hour(tls, lambda s: s["def_avg"] >= 5)
 	ms["team average level 10"] = first_hour(tls, lambda s: s["def_avg"] >= 10)
+	if data.def_max >= 20:   # Update 11 (stream B): defender levels to 20
+		ms["team average level 15"] = first_hour(tls, lambda s: s["def_avg"] >= 15)
+		ms["team average level 20"] = first_hour(tls, lambda s: s["def_avg"] >= 20)
+		ms["first defender at level 20"] = first_hour(tls, lambda s: s["def_max"] >= 20)
 	all_defs = len(data.defenders)
 	ms["all %d defenders" % all_defs] = first_hour(tls, lambda s: s["defenders"] >= all_defs)
 	for i, dv in enumerate(data.divisions[1:], 1):
