@@ -1239,12 +1239,20 @@ func _set_tile(sid: String) -> Control:
 		var bar := UITheme.bar(UITheme.GREEN if claimed else col, 8, float(maxi(1, int(prog.total))), float(prog.owned))
 		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		vb.add_child(bar)
+	# Update 11: Prestige cards in the set.
+	var pp := CollectionSets.prestige_progress(sid)
+	if int(pp.prestiged) > 0:
+		var pl := UITheme.label("★ %d PRESTIGE" % int(pp.prestiged), UITheme.FS_MIN, CardView.PRESTIGE_GOLD, UITheme.font_body_bold())
+		pl.name = "SetPrestige"
+		vb.add_child(pl)
+	var pres_tip := ("\n%d of %d cards are Prestige cards (%d at Prestige ★5)." % [int(pp.prestiged), int(pp.total), int(pp.maxed)]) if int(pp.prestiged) > 0 else ""
 	if claimed:
-		tile.tooltip_text = "%s set complete. Reward claimed: %s." % [str(inf[1]).capitalize(), pack_name]
+		tile.tooltip_text = "%s set complete. Reward claimed: %s." % [str(inf[1]).capitalize(), pack_name] + pres_tip
 	else:
 		var left := int(prog.total) - int(prog.owned)
 		tile.tooltip_text = "%s set: %d of %d cards collected. Collect %s for a %s." % [str(inf[1]).capitalize(), int(prog.owned), int(prog.total),
 			"the last %d" % left if left > 0 else "them all", pack_name] if not claimable else "Set complete! Claim your %s." % pack_name
+		tile.tooltip_text += pres_tip
 	return tile
 
 
@@ -1389,7 +1397,8 @@ func _refresh_detail() -> void:
 	stats.add_child(_stat("target", "TARGET", str(TARGET_TEXT.get(str(c.target), str(c.target))), UITheme.OFFWHITE))
 	stats.add_child(_stat(str(c.category), str(c.category).to_upper(), str(c.rarity).capitalize(), DB.rarity_color(c.rarity)))
 	if owned:
-		stats.add_child(_stat("upgrade", "LEVEL", "%d / %d" % [lvl, DB.card_max_level], UITheme.GOLD))
+		stats.add_child(_stat("upgrade", "PRESTIGE" if DB.prestige_stars(lvl) > 0 else "LEVEL", CardCompare._level_text(lvl),
+			CardView.PRESTIGE_GOLD if DB.prestige_stars(lvl) > 0 else UITheme.GOLD))
 	var cid_cmp := selected
 	_compare_btn = UITheme.button("COMPARE", "secondary", UITheme.FS_SMALL, "swap")
 	_compare_btn.name = "CompareButton"
@@ -1403,6 +1412,12 @@ func _refresh_detail() -> void:
 	var desc := UITheme.label(DB.card_text(selected, lvl), 22, UITheme.OFFWHITE)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail.add_child(desc)
+	if owned and Profile.is_card_prestiged(selected):   # Update 11
+		var pt := UITheme.label("PRESTIGE ★%d  ·  +%d%% stats over level %d%s" % [Profile.card_prestige(selected),
+			int(round((DB.card_level_mult(lvl) / DB.card_level_mult(DB.PRESTIGE_LEVEL) - 1.0) * 100.0)), DB.PRESTIGE_LEVEL,
+			"  ·  HALL OF FAME" if CardMastery.is_hall_of_fame(selected) else ""], 19, CardView.PRESTIGE_GOLD, UITheme.font_body_bold())
+		pt.name = "PrestigeLine"
+		_detail.add_child(pt)
 	_detail.add_child(_good_against_block(selected))
 	var why: Array = _auto_result.get("reasons", {}).get(selected, []) if selected in deck else []
 	if not why.is_empty():

@@ -37,6 +37,12 @@ U9_CARDS), the Season Pass (tiers claimed as soon as reached; a season is 14 day
 when the coins or stars are there above the reserve), free agents (signed once the coins are there, saving up for
 them instead of buying packs while one is available), pack pity, coins for extra copies of max-level cards, the
 win streak and first-win-of-the-day coin bonuses, promotion rewards, Endless milestones and Boss Rush.
+
+Update 11 (off with --u10): card levels 6-10 behind the Prestige step (copies from COPIES_TO_UPGRADE, coins from
+PRESTIGE_COINS in db.gd), and extra copies become coins only when the card can't use them any more (level 10, or
+it already holds every copy it needs to get there). The player prestiges as soon as copies and coins allow (the
+Upgrade All opt-in), and while a card's copies for its next level are there but the coins are not, keeps those
+coins aside instead of buying packs. --u10 = the Update 10 rules (max level 5, copies of level-5 cards to coins).
 """
 import argparse
 import json
@@ -119,6 +125,9 @@ class Data:
 				self.card_rarity.pop(cid, None)
 		self.card_ids = list(self.card_rarity)
 		self.max_level = jload("cards.json").get("max_level", 5)
+		self.u10 = args.u10 or args.u8 or args.u5
+		if self.u10:
+			self.max_level = 5
 		pk = jload("packs.json")
 		self.packs = {p["id"]: p for p in pk["packs"]}
 		if args.u8:   # the Update 8 Legendary odds (Update 9 lowered them when pity arrived)
@@ -146,6 +155,8 @@ class Data:
 		self.achievements = jload("achievements.json")["achievements"]
 		self.copies = gd_const("src/autoload/db.gd", "COPIES_TO_UPGRADE")
 		self.coins_up = gd_const("src/autoload/db.gd", "COINS_TO_UPGRADE")
+		self.prestige_coins = gd_const("src/autoload/db.gd", "PRESTIGE_COINS") if not self.u10 else {}
+		self.prestige_level = gd_number("src/autoload/db.gd", r"const PRESTIGE_LEVEL\s*:=\s*(\d+)", int, 5)
 		prof = "src/autoload/profile.gd"
 		self.starter = gd_const(prof, "STARTER_CARDS")
 		self.starter_deck = gd_const(prof, "STARTER_DECK")
@@ -197,6 +208,15 @@ class Data:
 	def copies_to_max(self, rarity, level, copies):
 		return max(0, sum(self.copies[rarity][level:self.max_level]) - copies)
 
+	def coin_cost(self, rarity, level):
+		"""DB.upgrade_coins: COINS_TO_UPGRADE up to level 5, then PRESTIGE_COINS by rarity."""
+		if level >= self.max_level:
+			return 0
+		if level < self.prestige_level:
+			return self.coins_up[level]
+		t = self.prestige_coins[rarity]
+		return t[min(level - self.prestige_level, len(t) - 1)]
+
 
 class Player:
 	def __init__(self, data, rng, args):
@@ -219,7 +239,7 @@ class Player:
 			"coins_earned": 0, "upgrades": 0, "coins_upgrades": 0, "coins_packs": 0, "coins_gear": 0, "best_endless": 0,
 			"missions": 0, "dailies": 0, "daily_wins": 0, "wins": 0, "packs_opened": 0, "coins_missions": 0,
 			"coins_shop": 0, "coins_agents": 0, "shop_deals": 0, "agents": 0, "overflow": 0, "season_xp": 0,
-			"season_tier": 0, "best_streak": 0, "wins_boss_rush": 0, "legendary_pity": 0}
+			"season_tier": 0, "best_streak": 0, "wins_boss_rush": 0, "legendary_pity": 0, "prestiges": 0}
 		self.coin_src = {}
 		self.first_win = False
 		self.day = -1
@@ -461,6 +481,14 @@ class Player:
 			coins = n * int(self.d.overflow.get(rarity, 0))
 			self.earn(coins, "extra copies")
 			self.stats["overflow"] += coins
+		elif self.u9 and not self.d.u10:   # Update 11: Profile.spare_copies
+			room = self.d.copies_to_max(rarity, c["level"], c["copies"])
+			extra = max(0, n - room)
+			if extra:
+				coins = extra * int(self.d.overflow.get(rarity, 0))
+				self.earn(coins, "extra copies")
+				self.stats["overflow"] += coins
+			c["copies"] += n - extra
 		else:
 			c["copies"] += n
 
@@ -469,21 +497,29 @@ class Player:
 		lv = self.cards[cid]["level"]
 		if lv >= self.d.max_level:
 			return None
-		return self.d.copies[self.d.card_rarity[cid]][lv], self.d.coins_up[lv]
+		r = self.d.card_rarity[cid]
+		return self.d.copies[r][lv], self.d.coin_cost(r, lv)
 
 	def upgrade_all(self):
 		changed = True
 		while changed:
 			changed = False
 			best = None
+			saving = self.saving_for_upgrade()
 			for cid, c in self.cards.items():
 				cost = self.upgrade_cost(cid)
 				if c["owned"] and cost and c["copies"] >= cost[0] and self.coins >= cost[1]:
+					# Update 11: cards outside the deck level up only from coins beyond what the deck's next
+					# Prestige level-up needs.
+					if self.focus(cid) and self.coins < cost[1] + saving:
+						continue
 					if best is None or cost[1] < best[1][1]:
 						best = (cid, cost)
 			if best:
 				cid, (cp, co) = best
 				self.cards[cid]["copies"] -= cp
+				if self.cards[cid]["level"] == self.d.prestige_level:
+					self.stats["prestiges"] += 1
 				self.cards[cid]["level"] += 1
 				self.coins -= co
 				self.stats["upgrades"] += 1
@@ -526,7 +562,7 @@ class Player:
 			return
 		rookie = self.d.packs["rookie"]["price_coins"]
 		bundle = self.d.bundle_price("rookie")
-		keep = self.a.reserve + (int(agent["unlock"]["coins"]) if agent else 0)
+		keep = self.a.reserve + (int(agent["unlock"]["coins"]) if agent else 0) + self.saving_for_upgrade()
 		if self.a.policy == "bundles":
 			while self.coins >= bundle + (keep - self.a.reserve):
 				self.buy("rookie", self.d.bundle_size, bundle)
@@ -541,6 +577,23 @@ class Player:
 			self.stars -= cs
 			self.packs.append(("champion", None))
 			self.pack_src["stars (champion)"] = self.pack_src.get("stars (champion)", 0) + 1
+
+	def focus(self, cid):
+		"""Update 11: True for a card outside the deck (its level-ups wait while the deck saves for a Prestige level)."""
+		return not self.d.u10 and cid not in self.deck
+
+	def saving_for_upgrade(self):
+		"""Update 11: coins kept aside (instead of buying packs) for the cheapest Prestige level-up of a deck card
+		whose copies are already there."""
+		if self.d.u10:
+			return 0
+		best = 0
+		for cid in self.deck:
+			c = self.cards[cid]
+			cost = self.upgrade_cost(cid)
+			if c["owned"] and cost and c["level"] >= self.d.prestige_level and c["copies"] >= cost[0] and (best == 0 or cost[1] < best):
+				best = cost[1]
+		return best
 
 	def buy(self, t, n, price):
 		self.coins -= price
@@ -591,7 +644,7 @@ class Player:
 
 	def shop_deals(self):
 		sh = self.d.shop
-		keep = self.a.reserve
+		keep = self.a.reserve + self.saving_for_upgrade()
 		for deal in list(self.shop_today):
 			cid, n, price = deal
 			c = self.cards[cid]
@@ -689,14 +742,20 @@ class Player:
 	def snapshot(self):
 		owned = {r: 0 for r in RARITIES}
 		maxed = {r: 0 for r in RARITIES}
+		lvl5 = {r: 0 for r in RARITIES}
+		prestiged = 0
 		for cid, c in self.cards.items():
 			r = self.d.card_rarity[cid]
 			owned[r] += c["owned"]
 			maxed[r] += c["level"] >= self.d.max_level
-		return {"hours": self.minutes / 60.0, "owned": owned, "maxed": maxed, "level": self.level, "coins": self.coins,
-			"division": self.division, "def_avg": statistics.mean(self.def_level[d] for d in self.team),
+			lvl5[r] += c["level"] >= 5
+			prestiged += c["level"] > self.d.prestige_level
+		return {"hours": self.minutes / 60.0, "owned": owned, "maxed": maxed, "lvl5": lvl5, "prestiged": prestiged,
+			"level": self.level, "coins": self.coins,
+			"division": self.division, "def_avg": statistics.mean(self.def_level[d] for d in self.team), "def_max": max(self.def_level.values()),
 			"card_levels": sum(c["level"] - 1 for c in self.cards.values()), "defenders": len(self.unlocked),
-			"upgrade_coins_left": sum(sum(self.d.coins_up[c["level"]:self.d.max_level]) for c in self.cards.values() if c["owned"]),
+			"upgrade_coins_left": sum(sum(self.d.coin_cost(self.d.card_rarity[cid], l) for l in range(c["level"], self.d.max_level))
+				for cid, c in self.cards.items() if c["owned"]),
 			**{k: v for k, v in self.stats.items()}}
 
 
@@ -779,6 +838,7 @@ def main():
 	ap.add_argument("--u8", action="store_true", help="the Update 8 economy: none of the Update 9 systems and the Update 8 Legendary odds, "
 		"with the Update 9 cards (add --no-u9-cards and --quick 0.5 --standard 0.35 for the Update 8 projection itself)")
 	ap.add_argument("--no-u9-cards", action="store_true", help="leave the twelve Update 9 cards out")
+	ap.add_argument("--u10", action="store_true", help="the Update 10 card rules: max level 5, copies of level-5 cards become coins")
 	ap.add_argument("--json", default="")
 	args = ap.parse_args()
 	if args.u8:
@@ -809,7 +869,7 @@ def main():
 	print("| Hour | Games | Account lvl | Division | Team avg lvl | Packs earned | Packs bought | Cards owned | Card upgrades | Coins earned | Coins on upgrades / packs / gear / shop / agents | Coins held |")
 	print("|---|---|---|---|---|---|---|---|---|---|---|---|")
 	rows = []
-	for h in [1, 2, 3, 5, 8, 12, 16, 20, 25, 30]:
+	for h in [1, 2, 3, 5, 8, 12, 16, 20, 25, 30, 35, 40, 50, 60]:
 		if h > H:
 			break
 		owned = sum(med(h, "owned", r) for r in RARITIES)
@@ -819,6 +879,14 @@ def main():
 				med(h, "coins_agents")), med(h, "coins"))
 		rows.append(row)
 		print("| %d | %d | %d | %s | %.1f | %d | %d | %d / %d | %d | %d | %s | %d |" % (row[:7] + (owned, n_cards) + row[8:]))
+	if not data.u10:
+		print("\n| Hour | Cards prestiged | Commons at 5 / 10 | Card levels gained | Coins held |")
+		print("|---|---|---|---|---|")
+		for h in [5, 8, 10, 12, 16, 20, 25, 30, 35, 40, 50, 60]:
+			if h > H:
+				break
+			print("| %d | %g | %g / %g | %g | %d |" % (h, med(h, "prestiged"), med(h, "lvl5", "common"), med(h, "maxed", "common"),
+				med(h, "card_levels"), med(h, "coins")))
 	print("\n| Milestone | Median hour |")
 	print("|---|---|")
 	ms = {}
@@ -827,11 +895,21 @@ def main():
 	ms["whole collection owned (%d)" % n_cards] = first_hour(tls, lambda s: sum(s["owned"].values()) >= n_cards)
 	ms["first epic owned"] = first_hour(tls, lambda s: s["owned"]["epic"] >= 1)
 	ms["first legendary owned"] = first_hour(tls, lambda s: s["owned"]["legendary"] >= 1)
+	if not data.u10:
+		for r in RARITIES:
+			ms["first %s card at level 5" % r] = first_hour(tls, lambda s, r=r: s["lvl5"][r] >= 1)
+		ms["all commons at level 5"] = first_hour(tls, lambda s: s["lvl5"]["common"] >= counts["common"])
+		ms["first Prestige (any card at level 6)"] = first_hour(tls, lambda s: s["prestiged"] >= 1)
+		ms["5 cards prestiged"] = first_hour(tls, lambda s: s["prestiged"] >= 5)
 	for r in RARITIES:
-		ms["first %s card at max level" % r] = first_hour(tls, lambda s, r=r: s["maxed"][r] >= 1)
-	ms["all commons at max level"] = first_hour(tls, lambda s: s["maxed"]["common"] >= counts["common"])
+		ms["first %s card at max level (%d)" % (r, data.max_level)] = first_hour(tls, lambda s, r=r: s["maxed"][r] >= 1)
+	ms["all commons at max level (%d)" % data.max_level] = first_hour(tls, lambda s: s["maxed"]["common"] >= counts["common"])
 	ms["team average level 5"] = first_hour(tls, lambda s: s["def_avg"] >= 5)
 	ms["team average level 10"] = first_hour(tls, lambda s: s["def_avg"] >= 10)
+	if data.def_max >= 20:   # Update 11 (stream B): defender levels to 20
+		ms["team average level 15"] = first_hour(tls, lambda s: s["def_avg"] >= 15)
+		ms["team average level 20"] = first_hour(tls, lambda s: s["def_avg"] >= 20)
+		ms["first defender at level 20"] = first_hour(tls, lambda s: s["def_max"] >= 20)
 	all_defs = len(data.defenders)
 	ms["all %d defenders" % all_defs] = first_hour(tls, lambda s: s["defenders"] >= all_defs)
 	for i, dv in enumerate(data.divisions[1:], 1):
@@ -868,6 +946,9 @@ def main():
 	print("Rookie bundle: %d coins = %.2f h of coin income (without extra-copy coins); Pro bundle %d coins." % (data.bundle_price("rookie"),
 		data.bundle_price("rookie") / income, data.bundle_price("pro")))
 	print("Coin cost of the card upgrades still open at the end: median %d coins." % statistics.median(s["upgrade_coins_left"] for s in last))
+	if not data.u10:
+		print("Prestiges per player at the end: median %g (cards prestiged %g)." % (statistics.median(p.stats["prestiges"] for p in players),
+			statistics.median(s["prestiged"] for s in last)))
 	if u9:
 		seasons = [r for p in players for r in p.season_results]
 		t30 = [d for p in players for d in p.season_t30_day]

@@ -40,6 +40,8 @@ var s_crit := 0.05
 var s_special_power := 1.0
 var s_special_cd := 1.0
 var s_boss_damage := 0.0
+var s_pierce := 0.0                 # share of armor ignored (Armor Breaker trait, Update 11)
+var s_crit_damage := 0.0            # added to the critical multiplier (Big Game trait, Update 11)
 var aura_radius := 0.0              # Rico's home guard
 var ricochet := 0.0                 # from synergies
 
@@ -181,6 +183,8 @@ func recompute() -> void:
 	s_special_power = float(st.special_power) * (1.0 + float(pm.special_power))
 	s_special_cd = float(st.special_cooldown) * (1.0 + float(pm.special_cooldown))
 	s_boss_damage = float(pm.boss_damage)
+	s_pierce = clampf(float(pm.get("pierce", 0.0)), 0.0, 1.0)
+	s_crit_damage = maxf(0.0, float(pm.get("crit_damage", 0.0)))
 	stun_guard = int(pm.get("stun_guard", 0))
 	_range_ring.scale = Vector3(effective_range(), 1, effective_range())
 
@@ -435,6 +439,9 @@ func _build_payload(t: Enemy, fastball: bool) -> Dictionary:
 			p.skip_range = SKIP_RANGE
 	if t.is_boss or t.id == "captain":
 		dmg *= 1.0 + s_boss_damage
+	if s_pierce > 0.0:
+		p.pierce = 1.0 - (1.0 - float(p.get("pierce", 0.0))) * (1.0 - s_pierce)
+	crit_mult += s_crit_damage
 	var crit_chance := s_crit + dyn_crit + t.crit_bonus()
 	var crit := randf() < crit_chance
 	if crit:

@@ -1,5 +1,5 @@
 {
-  "_comment": "Permanent gear bought with coins. Each item is owned once and equipped on one defender. Uniforms are team-wide and bought with stars; season uniforms ('season': n, 'for_sale': false) are only earned at tier 30 of that Season Pass (data/season.json) and are never sold (Profile.uniform_for_sale).",
+  "_comment": "Permanent gear bought with coins. Each item is owned once and equipped on one defender. Uniforms are team-wide and bought with stars; season uniforms ('season': n, 'for_sale': false) are only earned at tier 30 of that Season Pass (data/season.json) and are never sold (Profile.uniform_for_sale). Training traits: one choice per tier (levels 3, 6, 9, 12, 16); effect keys are summed by Profile.defender_mods and read by Defender.recompute (pierce = share of armor ignored, crit_damage = added to the critical multiplier).",
   "gear": [
     {"id": "iron_wristband", "name": "Iron Wristband", "price": 400, "text": "+10% damage.", "effect": {"damage": 0.10}},
     {"id": "pro_glove", "name": "Pro Glove", "price": 350, "text": "+10 accuracy and +4% critical chance.", "effect": {"accuracy": 10, "crit": 0.04}},
@@ -19,7 +19,13 @@
       {"id": "eagle", "name": "Eagle Eye", "text": "+6% critical chance.", "effect": {"crit": 0.06}}]},
     {"level": 9, "options": [
       {"id": "clutch", "name": "Clutch", "text": "+25% damage to bosses and captains.", "effect": {"boss_damage": 0.25}},
-      {"id": "signature", "name": "Signature Move", "text": "+20% signature card power.", "effect": {"special_power": 0.20}}]}
+      {"id": "signature", "name": "Signature Move", "text": "+20% signature card power.", "effect": {"special_power": 0.20}}]},
+    {"level": 12, "options": [
+      {"id": "iron_man", "name": "Iron Man", "text": "+6% damage and shrugs off the first stun each wave.", "effect": {"damage": 0.06, "stun_guard": 1}},
+      {"id": "quick_release", "name": "Quick Release", "text": "+8% attack speed and +10% throw speed.", "effect": {"attack_speed": 0.08, "throw_speed": 0.10}}]},
+    {"level": 16, "options": [
+      {"id": "armor_breaker", "name": "Armor Breaker", "text": "Throws ignore 30% of armor and deal +10% damage to bosses and captains.", "effect": {"pierce": 0.30, "boss_damage": 0.10}},
+      {"id": "big_game", "name": "Big Game", "text": "Critical hits deal 0.5x more damage, and +4% critical chance.", "effect": {"crit_damage": 0.50, "crit": 0.04}}]}
   ],
   "uniforms": [
     {"id": "home", "name": "Home Whites", "price_stars": 0, "colors": {"Jersey": "#1C2E4A", "JerseyTrim": "#D7262E", "Pants": "#EDEBE6", "Cap": "#1C2E4A", "Socks": "#1C2E4A", "Number": "#F4F1EA"}},

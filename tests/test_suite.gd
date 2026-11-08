@@ -48,6 +48,7 @@ func _run() -> void:
 	test_upgrade_all()
 	test_deck_ai()
 	test_team_ai()
+	test_u11_defender_levels()
 	await test_menus()
 	await test_u9_screens()
 	test_update5_content()
@@ -61,6 +62,7 @@ func _run() -> void:
 	await test_battle_systems()
 	await test_u9_e2_screens()
 	test_update9_economy()
+	test_update11_cards()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -300,7 +302,7 @@ func test_economy() -> void:
 		ok(float(w.legendary) / total < 0.015, "%s packs: Legendary is the long tail (%.2f %% per slot)" % [t, 100.0 * float(w.legendary) / total])
 	ok(DB.pack("champion").slots[-1].get("min", "") == "epic", "Champion Packs still guarantee an Epic")
 	# Defender level road: slower curve, same rewards.
-	ok(int(DB.defender_xp_curve[DB.defender_xp_curve.size() - 1]) == 10200, "defender level 10 needs 10,200 XP")
+	ok(int(DB.defender_xp_curve[9]) == 10200, "defender level 10 needs 10,200 XP")
 	ok(str(DB.defender_level_rewards["10"].get("pack", "")) == "champion", "defender level 10 still gives a Champion Pack")
 	# Rewards for a won Quick Defense game (Standard, Steel Yard): coins, defender XP and one pack.
 	var level0 := int(Profile.data.level)
@@ -1214,6 +1216,8 @@ func test_battle_systems() -> void:
 	_clear()
 	await _test_update11_bosses()
 	_clear()
+	await _test_u11_traits_battle()
+	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
 	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
@@ -1221,6 +1225,62 @@ func test_battle_systems() -> void:
 	ok(not imp.has("field_vision"), "buff cards are not credited with damage")
 	battle.queue_free()
 	await _wait(0.2)
+
+
+## Update 11: trait tiers 4 and 5 in a live battle: Iron Man's stun guard and damage, Armor Breaker's
+## pierce (stacking with Cannon Arm), Big Game's critical multiplier and Quick Release's speed.
+func _test_u11_traits_battle() -> void:
+	section("update 11: trait tiers 4 and 5 (battle)")
+	var ace := _defender("ace")
+	var jax := _defender("jax")
+	if ace == null or jax == null:
+		ok(false, "ace and jax are on the field")
+		return
+	var saved := {}
+	for id in ["ace", "jax"]:
+		saved[id] = Profile.data.defenders[id].duplicate(true)
+	Profile.data.defenders.ace.level = 16
+	Profile.data.defenders.jax.level = 16
+	Profile.data.defenders.ace.traits = {}
+	Profile.data.defenders.jax.traits = {}
+	ace.recompute()
+	jax.recompute()
+	ace.reset_wave_state()
+	var ace_dmg := ace.s_damage
+	var ace_guard := ace.stun_guard
+	var jax_int := jax.s_interval
+	Profile.data.defenders.ace.traits = {"12": "iron_man", "16": "armor_breaker"}
+	Profile.data.defenders.jax.traits = {"12": "quick_release", "16": "big_game"}
+	ace.recompute()
+	jax.recompute()
+	ace.reset_wave_state()
+	ok(ace.s_damage > ace_dmg * 1.02, "Iron Man raises damage in battle (%.1f -> %.1f)" % [ace_dmg, ace.s_damage])
+	ok(ace.stun_guard == ace_guard + 1, "Iron Man adds a stun guard (%d)" % ace.stun_guard)
+	ace.stun(1.0)
+	ok(not ace.is_stunned() and ace.stun_guard == ace_guard, "the first stun is resisted")
+	ok(jax.s_interval < jax_int / 1.07, "Quick Release throws faster (%.2fs -> %.2fs)" % [jax_int, jax.s_interval])
+	var route := battle.routes[0]
+	var armored := battle.spawn_enemy("armored", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0})
+	var pa: Dictionary = ace._build_payload(armored, false)
+	ok(absf(float(pa.get("pierce", 0.0)) - 0.3) < 0.001, "Armor Breaker throws ignore 30 %% of armor (%.2f)" % float(pa.get("pierce", 0.0)))
+	jax.dyn_crit = 5.0
+	var pj: Dictionary = jax._build_payload(armored, false)
+	jax.dyn_crit = 0.0
+	var mult := float(pj.damage) / jax.effective_damage()
+	ok(bool(pj.crit) and absf(mult - 2.25) < 0.01, "Big Game crits deal 2.25x instead of 1.75x (%.2fx)" % mult)
+	ok(absf(float(pj.get("pierce", 0.0)) - 0.6) < 0.001, "Cannon Arm keeps its own 60 % pierce")
+	Profile.data.defenders.jax.traits = {"12": "quick_release", "16": "armor_breaker"}
+	jax.recompute()
+	ok(absf(float(jax._build_payload(armored, false).get("pierce", 0.0)) - 0.72) < 0.001, "Armor Breaker stacks with Cannon Arm (72 % pierce)")
+	var hp0 := armored.hp
+	battle.projectiles.hit(armored, pa, armored.center())
+	ok(hp0 - armored.hp > 0.0, "an Armor Breaker throw lands on an armored runner (%.0f of %.0f)" % [hp0 - armored.hp, float(pa.damage)])
+	for id in saved.keys():
+		Profile.data.defenders[id] = saved[id]
+	ace.recompute()
+	jax.recompute()
+	ace.reset_wave_state()
+	ok(is_zero_approx(ace.s_pierce) and is_zero_approx(jax.s_crit_damage), "back to the profile's own traits")
 
 
 # ---------------------------------------------------------------- tools (Update 5)
@@ -2991,7 +3051,7 @@ func _test_u9_streak_and_results() -> void:
 	ok(is_equal_approx(Profile.streak_bonus(), 0.1), "a streak of 1 gives the next win +10 %")
 	res = Rewards.apply(_u9_run("quick", 3, 3), true)
 	ok(int(res.streak) == 2 and int(res.streak_bonus_coins) == int(round(int(res.coins) * 0.1)) and int(res.first_win_today_coins) == 0,
-		"the second win in a row pays +10 % (%d of %d)" % [int(res.streak_bonus_coins), int(res.coins)])
+		"the second win in a row pays +10 %% (%d of %d)" % [int(res.streak_bonus_coins), int(res.coins)])
 	for i in 6:
 		res = Rewards.apply(_u9_run("quick", 3, 3), true)
 	ok(int(res.streak) == 8 and is_equal_approx(float(res.streak_bonus), 0.5) and int(res.streak_bonus_coins) == int(round(int(res.coins) * 0.5)),
@@ -3066,7 +3126,9 @@ func _test_u9_shop() -> void:
 	ok(Shop.deal_copies("power_throw") == 2, "a level 1 common needs 2 copies for level 2")
 	Profile.data.cards.power_throw.level = 4
 	ok(Shop.deal_copies("power_throw") == 4, "a level 4 common deal stops at 4 copies")
-	Profile.data.cards.power_throw.copies = 13
+	# Update 11: max level is 10 (Prestige ★5); one copy short of the last level-up.
+	Profile.data.cards.power_throw.level = DB.card_max_level - 1
+	Profile.data.cards.power_throw.copies = DB.upgrade_copies("common", DB.card_max_level - 1) - 1
 	ok(Shop.deal_copies("power_throw") == 1 and Shop.copies_to_max("power_throw") == 1, "a deal never exceeds the copies still needed for max level")
 	Profile.data.cards.power_throw.level = DB.card_max_level
 	ok(Shop.copies_to_max("power_throw") == 0, "a max-level card needs no copies")
@@ -3792,6 +3854,143 @@ func test_team_ai() -> void:
 
 # ---------------------------------------------------------------- runner routes
 
+# ---------------------------------------------------------------- Update 11: defender levels to 20
+
+## XP a team regular earns per hour (not the MVP), measured with tools/balance/economy.py (defaults,
+## standard difficulty, 65 % wins): about 1,580 XP/h; the game's MVP earns 1.5x.
+const U11_REGULAR_XP_PER_HOUR := 1580.0
+
+func test_u11_defender_levels() -> void:
+	section("update 11: defender levels to 20")
+	Profile.reset_profile()
+	# XP curve: 20 levels, smooth and rising, level 20 at about 40-60 h for a regular.
+	var curve: Array = DB.defender_xp_curve
+	ok(DB.defender_max_level == 20 and curve.size() == 20, "defenders level to 20 (%d levels in the curve)" % curve.size())
+	var smooth := true
+	for i in range(2, curve.size()):
+		var step := int(curve[i]) - int(curve[i - 1])
+		var prev := int(curve[i - 1]) - int(curve[i - 2])
+		smooth = smooth and step >= prev and (i < 10 or float(step) <= float(prev) * 1.35)
+	ok(smooth, "each level needs a little more XP than the one before, without jumps")
+	ok(int(curve[9]) == 10200, "levels 1-10 keep their XP (10,200 to level 10)")
+	var hours := float(curve[19]) / U11_REGULAR_XP_PER_HOUR
+	ok(hours >= 40.0 and hours <= 60.0, "a regular reaches level 20 in about %.0f h (an MVP every game: %.0f h)" % [hours, hours / 1.5])
+	ok(Profile.defender_xp_needed(10) == int(curve[10]) - int(curve[9]) and Profile.defender_xp_needed(19) > Profile.defender_xp_needed(18), "XP to the next level reads the extended curve")
+	ok(Profile.defender_xp_needed(20) == 0, "nothing more to earn at level 20")
+	# Rewards 11-20: every level pays; traits at 12 and 16, All-Star at 15, Hall of Famer at 20.
+	var missing: Array = []
+	for l in range(2, 21):
+		if Profile.defender_level_reward(l).is_empty():
+			missing.append(l)
+	ok(missing.is_empty(), "every level from 2 to 20 has a reward %s" % [missing])
+	ok(int(Profile.defender_level_reward(12).get("trait", 0)) == 4 and int(Profile.defender_level_reward(16).get("trait", 0)) == 5, "trait tiers 4 and 5 at levels 12 and 16")
+	ok(str(Profile.defender_level_reward(15).get("badge", "")) == "all_star" and str(Profile.defender_level_reward(20).get("badge", "")) == "hall_of_fame", "All-Star at 15, Hall of Famer at 20")
+	ok(str(Profile.defender_level_reward(20).get("pack", "")) == "champion", "level 20 also gives a Champion Pack")
+	ok(Profile.level_reward_text(Profile.defender_level_reward(15)) == "All-Star badge + 1,000 coins", "level 15 reward text (%s)" % Profile.level_reward_text(Profile.defender_level_reward(15)))
+	ok(Profile.level_reward_text(Profile.defender_level_reward(20)) == "Hall of Famer frame + Champion Pack", "level 20 reward text (%s)" % Profile.level_reward_text(Profile.defender_level_reward(20)))
+	ok(Profile.level_reward_text({"coins": 150}) == "150 coins" and Profile.level_reward_text({"trait": 1}) == "Choose a trait", "old reward texts unchanged")
+	ok(DefenderLevels.reward_icon(Profile.defender_level_reward(20)) == "trophy" and DefenderLevels.reward_icon(Profile.defender_level_reward(15)) == "crown", "milestone icons on the road")
+	var tiers: Array = DB.traits.map(func(t: Dictionary) -> int: return int(t.level))
+	ok(tiers == [3, 6, 9, 12, 16] and DB.traits.all(func(t: Dictionary) -> bool: return (t.options as Array).size() == 2), "five trait tiers of two choices %s" % [tiers])
+	# Growth: +6 % per level to 10, +3 % per level after.
+	ok(is_zero_approx(DefenderLevels.growth(1)) and absf(DefenderLevels.growth(10) - 0.54) < 0.0001, "growth +54 % at level 10 (unchanged)")
+	var steps_ok := true
+	for l in range(11, 21):
+		steps_ok = steps_ok and absf(DefenderLevels.growth_step(l) - 0.03) < 0.0001
+	ok(steps_ok and absf(DefenderLevels.growth(20) - 0.84) < 0.0001, "levels 11-20 add +3 %% each (+%.0f %% at 20)" % (DefenderLevels.growth(20) * 100.0))
+	ok(absf(DefenderLevels.growth(25) - 0.84) < 0.0001 and is_zero_approx(DefenderLevels.growth(0)), "growth is clamped to levels 1-20")
+	Profile.data.defenders.ace.level = 20
+	var pm := Profile.defender_mods("ace")
+	ok(absf(float(pm.damage) - 0.84) < 0.0001 and absf(float(pm.special_power) - 0.84) < 0.0001, "Profile.defender_mods uses the new growth (%.2f)" % float(pm.damage))
+	ok(absf(float(TeamAI.level_mods(20).damage) - 0.84) < 0.0001 and absf(float(TeamAI.level_mods(14).damage) - 0.66) < 0.0001, "TeamAI uses the same growth")
+	# XP flow from 10 to 20: rewards paid, two new trait tiers, XP stops at the top.
+	Profile.data.defenders.ace.level = 10
+	Profile.data.defenders.ace.xp = 0
+	Profile.data.defenders.ace.traits = {"3": "power", "6": "tempo", "9": "clutch"}
+	var coins0 := int(Profile.data.coins)
+	var packs0 := Profile.pack_count()
+	var gained := Profile.add_defender_xp("ace", int(curve[19]) - int(curve[9]) + 5000)
+	ok(gained == 10 and Profile.defender_level("ace") == 20 and Profile.defender_xp("ace") == 0, "XP raises a level-10 defender to 20 and stops there (%d levels)" % gained)
+	ok(int(Profile.data.coins) == coins0 + 750 + 900 + 1000 + 1200 + 1500, "levels 11-20 pay their coins (%d)" % (int(Profile.data.coins) - coins0))
+	ok(Profile.pack_count() == packs0 + 3, "levels 13, 17 and 20 give packs (%d)" % (Profile.pack_count() - packs0))
+	ok(Profile.pending_traits("ace") == 2, "trait tiers 4 and 5 wait to be chosen")
+	ok(Profile.stat("max_defender_level") == 20, "the max-defender-level stat follows")
+	# Trait tiers 4 and 5 apply.
+	var before := Profile.defender_mods("ace")
+	Profile.choose_trait("ace", 12, "iron_man")
+	Profile.choose_trait("ace", 16, "armor_breaker")
+	var after := Profile.defender_mods("ace")
+	ok(absf(float(after.damage) - float(before.damage) - 0.06) < 0.0001 and int(after.stun_guard) == int(before.stun_guard) + 1, "Iron Man: +6 % damage and a stun guard")
+	ok(absf(float(after.get("pierce", 0.0)) - 0.30) < 0.0001 and absf(float(after.boss_damage) - float(before.boss_damage) - 0.10) < 0.0001, "Armor Breaker: 30 % armor pierce and +10 % boss damage")
+	ok(Profile.pending_traits("ace") == 0, "choosing both clears the reminder")
+	Profile.data.defenders.jax.level = 13
+	Profile.choose_trait("jax", 16, "big_game")
+	ok(Profile.chosen_trait("jax", 16) == "", "a tier above the defender's level can't be chosen")
+	Profile.data.defenders.jax.level = 16
+	Profile.choose_trait("jax", 12, "quick_release")
+	Profile.choose_trait("jax", 16, "big_game")
+	var jm := Profile.defender_mods("jax")
+	ok(absf(float(jm.attack_speed) - 0.08) < 0.0001 and absf(float(jm.throw_speed) - 0.10) < 0.0001, "Quick Release: +8 % attack speed, +10 % throw speed")
+	ok(absf(float(jm.get("crit_damage", 0.0)) - 0.5) < 0.0001 and absf(float(jm.crit) - 0.04) < 0.0001, "Big Game: +0.5x critical damage, +4 % crit chance")
+	var all: Array = DB.defender_order.duplicate()
+	var r_plain := TeamAI.rate("jax", _team_ctx(all, {"jax": 16}), "boss")
+	var ctx := _team_ctx(all, {"jax": 16})
+	ctx["mods"] = {"jax": TeamAI.level_mods(16).merged({"pierce": 0.3, "boss_damage": 0.1}, true)}
+	ok(float(TeamAI.rate("jax", ctx, "boss").boss) > float(r_plain.boss) * 1.2, "TeamAI values Armor Breaker against bosses")
+	ctx["mods"] = {"jax": TeamAI.level_mods(16).merged({"crit_damage": 0.5, "crit": 0.04}, true)}
+	ok(float(TeamAI.rate("jax", ctx).dps) > float(r_plain.dps), "TeamAI values Big Game")
+	ok(float(TeamAI.rate("hana", _team_ctx(all, {"hana": 20})).eff) > float(TeamAI.rate("hana", _team_ctx(all, {"hana": 10})).eff) * 1.15, "level 20 rates higher than level 10")
+	var lv10 := {}
+	var lv20 := {}
+	var lvmix := {}
+	for id in all:
+		lv10[id] = 10
+		lv20[id] = 20
+		lvmix[id] = 20 if id == "nova" else 10
+	var b10 := TeamAI.best_team("balanced", _team_ctx(all, lv10))
+	var c20 := _team_ctx(all, lv20)
+	var b20 := TeamAI.best_team("balanced", c20)
+	ok(_valid_team(b20, c20) and float(b20.score) > float(b10.score) * 1.1, "Best Team handles a level-20 roster (score %.1f vs %.1f at level 10)" % [float(b20.score), float(b10.score)])
+	var cmix := _team_ctx(all, lvmix)
+	var bmix := TeamAI.best_team("balanced", cmix)
+	ok(_valid_team(bmix, cmix) and bmix.team.has("nova") and float(bmix.score) > float(b10.score), "a level-20 defender earns a place in the Best Team %s" % [bmix.team])
+	# Honours.
+	ok(DefenderLevels.honor(14) == "" and DefenderLevels.honor(15) == "all_star" and DefenderLevels.honor(19) == "all_star" and DefenderLevels.honor(20) == "hall_of_fame", "All-Star from 15, Hall of Famer at 20")
+	ok(DefenderLevels.is_hall_of_famer("ace") and DefenderLevels.is_all_star("jax") and not DefenderLevels.is_all_star("maya"), "honours follow the profile's levels")
+	ok(DefenderLevels.honor_of("nova") == "", "a locked defender has no honour")
+	var b1 := DefenderHonors.level_badge(9)
+	var b2 := DefenderHonors.level_badge(20)
+	ok(b2.custom_minimum_size.x > b1.custom_minimum_size.x and (b2.get_node("LevelText") as Label).text == "20", "two-digit level badges widen into a pill")
+	var fr := DefenderHonors.portrait("ace", 64)
+	var fr2 := DefenderHonors.portrait("maya", 64)
+	ok(fr.has_meta("hall_of_fame") and not fr2.has_meta("hall_of_fame"), "Hall of Famers get the gold frame")
+	var np := DefenderHonors.nameplate("ace")
+	var np2 := DefenderHonors.nameplate("jax")
+	ok(np != null and np.name == "HallOfFamePlate" and np2 != null and np2.name == "AllStarPlate" and DefenderHonors.nameplate("maya") == null, "nameplates: Hall of Famer, All-Star, none")
+	for n in [b1, b2, fr, fr2, np, np2]:
+		if n:
+			n.free()
+	# Old saves: a level-10 save keeps its level and traits and levels on; bad levels are clamped.
+	var old := Profile.default_profile()
+	old.defenders.ace.level = 10
+	old.defenders.ace.xp = 0
+	old.defenders.ace.traits = {"3": "power", "6": "tempo", "9": "clutch"}
+	old.defenders.rico.level = 31
+	old.defenders.maya.level = 7
+	old.defenders.maya.xp = 900
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Profile.load_status == "ok", "an Update 10 save loads (%s)" % Profile.load_status)
+	ok(Profile.defender_level("ace") == 10 and Profile.chosen_trait("ace", 9) == "clutch" and Profile.pending_traits("ace") == 0, "a level-10 defender keeps its level and traits")
+	ok(Profile.defender_level("maya") == 7 and Profile.defender_xp("maya") == 900, "lower levels and XP are untouched")
+	ok(Profile.defender_level("rico") == 20, "an impossible level is clamped to 20")
+	ok(absf(float(Profile.defender_mods("ace").damage) - (0.54 + 0.08)) < 0.0001, "an old level-10 defender has the same power as before (+54 % and Power Training)")
+	ok(Profile.add_defender_xp("ace", int(curve[10]) - int(curve[9])) == 1 and Profile.defender_level("ace") == 11, "an old max-level defender levels on to 11")
+	Profile.reset_profile()
+
+
 ## Every runner route leaves its gate straight through the doorway (gates face home plate), stays
 ## clear of the outfield wall away from its gate and never passes another gate. Iron Fortress's
 ## routes once cut sideways through the gate doors and along the wall.
@@ -3969,3 +4168,182 @@ func test_update11_boss_hp() -> void:
 	var raw24 := 1.0 + (WaveGenerator.hp_multiplier(en) - 1.0) * WaveGenerator.BOSS_HP_SHARE
 	var at24 := WaveGenerator.boss_hp_mult(WaveGenerator.hp_multiplier(en))
 	ok(at24 <= at6 * 2.2 and at24 < raw24 * 0.5, "an Endless inning-24 boss has at most 2.2x its inning-6 health (%.2fx vs %.2fx, was %.2fx)" % [at24, at6, raw24])
+
+
+# ---------------------------------------------------------------- Update 11: card levels 1-10 and Prestige (stream A)
+
+func test_update11_cards() -> void:
+	section("Update 11: card levels 1-10 and Prestige")
+	Profile.reset_profile()
+	# Data: max level 10, Prestige at 5, a cost for every step.
+	ok(DB.card_max_level == 10 and DB.PRESTIGE_LEVEL == 5, "cards go to level 10, Prestige at level 5 (%d / %d)" % [DB.card_max_level, DB.PRESTIGE_LEVEL])
+	ok(absf(DB.card_growth_rate - 0.12) < 0.0001 and absf(DB.card_prestige_growth - 0.05) < 0.0001, "growth +12 % to level 5, +5 % per Prestige level")
+	var old_copies := {"common": [0, 2, 4, 8, 14], "uncommon": [0, 2, 3, 6, 10], "rare": [0, 1, 3, 5, 8], "epic": [0, 1, 2, 4, 6], "legendary": [0, 1, 2, 3, 4]}
+	var old_coins := [0, 100, 250, 600, 1200]
+	for r in DB.RARITY_ORDER:
+		var t: Array = DB.COPIES_TO_UPGRADE[r]
+		ok(t.size() == DB.card_max_level, "%s copy table covers levels 1-10" % r)
+		var same := true
+		for l in range(1, DB.PRESTIGE_LEVEL):
+			same = same and DB.upgrade_copies(r, l) == int(old_copies[r][l]) and DB.upgrade_coins(r, l) == int(old_coins[l])
+		ok(same, "%s: levels 1-5 cost what they always did" % r)
+		ok(DB.upgrade_copies(r, 5) >= DB.upgrade_copies(r, 4) and DB.upgrade_coins(r, 5) >= 3 * DB.upgrade_coins(r, 4),
+			"%s: the Prestige step is the steepest step (%d copies, %d coins)" % [r, DB.upgrade_copies(r, 5), DB.upgrade_coins(r, 5)])
+		var rising := true
+		for l in range(6, DB.card_max_level - 1):
+			rising = rising and DB.upgrade_copies(r, l + 1) >= DB.upgrade_copies(r, l) and DB.upgrade_coins(r, l + 1) > DB.upgrade_coins(r, l)
+		ok(rising, "%s: Prestige levels 7-10 cost more each step" % r)
+		ok(DB.upgrade_copies(r, 10) == 0 and DB.upgrade_coins(r, 10) == 0, "%s: nothing past level 10" % r)
+	for l in range(5, 10):
+		ok(DB.upgrade_coins("legendary", l) > DB.upgrade_coins("common", l), "Prestige coins rise with rarity (step %d)" % l)
+	ok(DB.copies_to_max("common", 1) == 2 + 4 + 8 + 14 + 18 + 14 + 16 + 20 + 24, "copies from level 1 to 10 add up (%d)" % DB.copies_to_max("common", 1))
+	# Level math: 1-5 unchanged, then +5 % of the base per level.
+	var math_ok := true
+	for l in range(1, 6):
+		math_ok = math_ok and absf(DB.card_level_mult(l) - (1.0 + 0.12 * (l - 1))) < 0.0001
+	ok(math_ok, "levels 1-5 keep their power (×1.00 ... ×1.48)")
+	ok(absf(DB.card_level_mult(6) - 1.53) < 0.0001 and absf(DB.card_level_mult(10) - 1.73) < 0.0001, "level 6 ×1.53, level 10 ×1.73")
+	ok(absf(DB.card_level_mult(12) - 1.83) < 0.0001, "in-game bonus levels past 10 keep the gentle growth (×%.2f at 12)" % DB.card_level_mult(12))
+	ok(absf(DB.card_param("power_throw", "damage", 10) - 260.0 * 1.73) < 0.01 and absf(DB.card_param("power_throw", "knockback", 10) - 3.0) < 0.001,
+		"level 10 scales growth params only (damage %.0f)" % DB.card_param("power_throw", "damage", 10))
+	ok(DB.prestige_stars(5) == 0 and DB.prestige_stars(6) == 1 and DB.prestige_stars(10) == 5, "Prestige stars: level 6 = ★1, level 10 = ★5")
+	ok(DB.is_prestige_step(5) and not DB.is_prestige_step(4) and not DB.is_prestige_step(6), "the step from 5 is the Prestige step")
+	ok(DB.level_label(4) == "LV 4" and DB.level_label(8) == "P★3" and DB.level_label(10, true) == "PRESTIGE ★5", "level labels")
+	# Card text placeholders scale to level 10.
+	var text_ok := true
+	for cid in DB.card_order:
+		for l in [1, 5, 6, 10]:
+			if "{" in DB.card_text(cid, l) or "{" in DB.card_details(cid, l):
+				text_ok = false
+				print("  unresolved text: %s at %d" % [cid, l])
+	ok(text_ok, "every card's text resolves at levels 1, 5, 6 and 10")
+	ok(DB.card_text("curveball", 1).contains("+25%") and DB.card_text("curveball", 10).contains("+43%"), "{vulnerability%%} grows with the level (%s)" % DB.card_text("curveball", 10))
+	ok(DB.card_text("diamond_aura", 10).contains("+69%"), "Diamond Aura's bonus shows its level-10 value (%s)" % DB.card_text("diamond_aura", 10))
+	ok(DB.card_text("power_throw", 10).contains("450"), "Power Throw at level 10 says 450 (%s)" % DB.card_text("power_throw", 10))
+
+	# The Prestige gate.
+	var cid := "heat_wave"   # rare, a starter card
+	Profile.data.cards[cid].level = 4
+	Profile.data.cards[cid].copies = 0
+	Profile.data.coins = 0
+	ok(not bool(Profile.upgrade_cost(cid).prestige) and not Profile.can_prestige_card(cid), "level 4: the next step is an ordinary level")
+	Profile.data.cards[cid].level = 5
+	var cost := Profile.upgrade_cost(cid)
+	ok(bool(cost.prestige) and int(cost.copies) == DB.upgrade_copies("rare", 5) and int(cost.coins) == DB.upgrade_coins("rare", 5), "level 5: the next step is PRESTIGE (%s)" % cost)
+	ok(not Profile.can_prestige_card(cid) and not Profile.upgrade_card(cid), "no Prestige without the copies and coins")
+	Profile.data.cards[cid].copies = int(cost.copies)
+	Profile.data.coins = int(cost.coins) - 1
+	ok(not Profile.upgrade_card(cid) and Profile.card_level(cid) == 5, "one coin short: still level 5")
+	Profile.data.coins = int(cost.coins) + 10
+	ok(Profile.can_prestige_card(cid) and Profile.upgrade_card(cid), "Prestige with enough copies and coins")
+	ok(Profile.card_level(cid) == 6 and Profile.card_prestige(cid) == 1 and Profile.is_card_prestiged(cid), "the card is now Prestige ★1 (level 6)")
+	ok(int(Profile.data.coins) == 10 and Profile.card_copies(cid) == 0, "Prestige spent the copies and coins")
+	ok(Profile.stat("cards_prestiged") == 1.0 and Profile.stat("max_card_prestige") == 1.0, "Prestige is counted in the stats")
+	ok(not bool(Profile.upgrade_cost(cid).prestige), "after Prestige, ★1 -> ★2 is an ordinary level-up")
+	Profile.data.cards[cid].level = 10
+	ok(Profile.upgrade_cost(cid).is_empty() and not Profile.upgrade_card(cid), "level 10 is the max")
+	ok(Profile.prestiged_count() == 1, "one Prestige card in the collection")
+
+	# Upgrade All: the Prestige step only with the opt-in.
+	Profile.reset_profile()
+	Profile.data.cards.power_throw.level = 5
+	Profile.data.cards.power_throw.copies = DB.upgrade_copies("common", 5)
+	Profile.data.cards.curveball.level = 7
+	Profile.data.cards.curveball.copies = DB.upgrade_copies("common", 7)
+	Profile.data.coins = 50000
+	var plan := Profile.upgrade_all_plan()
+	var ids: Array = plan.cards.map(func(e: Dictionary) -> String: return e.id)
+	ok(not "power_throw" in ids and "power_throw" in plan.prestige_ready and plan.prestige.is_empty(), "Upgrade All leaves the Prestige step out by default")
+	ok("curveball" in ids, "Prestige levels of a card already prestiged are ordinary Upgrade All steps")
+	var plan2 := Profile.upgrade_all_plan(false, true)
+	ok("power_throw" in plan2.prestige and plan2.cards.any(func(e: Dictionary) -> bool: return e.id == "power_throw" and bool(e.prestige) and int(e.to) == 6),
+		"with Include Prestige the plan prestiges it (LV 5 -> ★1)")
+	ok(int(plan2.coins) == int(plan.coins) + DB.upgrade_coins("common", 5), "the opt-in adds exactly the Prestige coins")
+	var done := Profile.upgrade_all(false)
+	ok(Profile.card_level("power_throw") == 5 and Profile.card_level("curveball") == 8 and done.size() == plan.cards.size(), "Upgrade All without opt-in applies the plan, no Prestige")
+	done = Profile.upgrade_all(true)
+	ok(Profile.card_level("power_throw") == 6 and done.any(func(e: Dictionary) -> bool: return bool(e.prestige)), "Upgrade All with opt-in prestiges")
+
+	# Extra copies: coins only for copies the card can't use any more.
+	Profile.reset_profile()
+	var rc := "heat_wave"
+	var rar := "rare"
+	Profile.data.cards[rc].level = 5
+	Profile.data.cards[rc].copies = 0
+	var coins0 := int(Profile.data.coins)
+	Profile.add_pack("signature", "test", rc)
+	var res := Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(res.overflow_coins) == 0 and Profile.card_copies(rc) == 1, "a level-5 card keeps its new copies for Prestige")
+	Profile.data.cards[rc].copies = DB.copies_to_max(rar, 5)
+	Profile.add_pack("signature", "test", rc)
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(res.overflow_coins) == Profile.overflow_rate(rar) and Profile.card_copies(rc) == DB.copies_to_max(rar, 5),
+		"copies beyond what the card can still use (%d) become coins" % DB.copies_to_max(rar, 5))
+	ok(int(Profile.data.coins) == coins0 + Profile.overflow_rate(rar), "the extra copy's coins reach the wallet")
+	Profile.data.cards[rc].level = 10
+	Profile.data.cards[rc].copies = 0
+	Profile.add_pack("signature", "test", rc)
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(res.overflow_coins) == Profile.overflow_rate(rar) and Profile.card_copies(rc) == 0, "at level 10 every copy becomes coins")
+	# A common pull (2 copies) with room for one: split into a copy and coins.
+	var cc := "power_throw"
+	Profile.data.cards[cc].level = 9
+	Profile.data.cards[cc].copies = DB.upgrade_copies("common", 9) - 1
+	ok(Profile.spare_copies(cc, 2) == 1 and Profile.spare_copies(cc, 1) == 0, "spare copies: room for one of two")
+	Profile.data.cards[cc].level = 3
+	Profile.data.cards[cc].copies = 40
+	ok(Profile.spare_copies(cc, 2) == 0, "a level-3 card with 40 copies can still use more (%d to max)" % DB.copies_to_max("common", 3))
+
+	# Old saves: levels 1-5 and copies load unchanged; out-of-range levels are repaired.
+	Profile.reset_profile()
+	var old := Profile.default_profile()
+	old.cards.power_throw = {"owned": true, "level": 5, "copies": 9, "plays": 12}
+	old.cards.curveball = {"owned": true, "level": 3, "copies": 4, "plays": 0}
+	old.cards.heat_wave = {"owned": true, "level": 14, "copies": 0, "plays": 0}
+	old.cards.lockdown = {"owned": true, "level": 0, "copies": 2}
+	old.stats = {"max_card_level": 5.0}
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Profile.load_status == "ok", "an Update 10 save loads (%s)" % Profile.load_status)
+	ok(Profile.card_level("power_throw") == 5 and Profile.card_copies("power_throw") == 9 and Profile.card_plays("power_throw") == 12,
+		"a level-5 card keeps its level, copies and plays")
+	ok(Profile.card_level("curveball") == 3 and Profile.card_copies("curveball") == 4, "a level-3 card is unchanged")
+	ok(Profile.card_level("heat_wave") == 10 and Profile.card_level("lockdown") == 1, "levels outside 1-10 are repaired")
+	ok(not Profile.is_card_prestiged("power_throw") and bool(Profile.upgrade_cost("power_throw").prestige), "an old level-5 card is ready for its Prestige step")
+	Profile.data.cards.power_throw.level = 8
+	Profile.save_now()
+	Profile.load_profile()
+	ok(Profile.card_level("power_throw") == 8 and Profile.card_prestige("power_throw") == 3, "Prestige levels round-trip through a save")
+
+	# Auto Build, mastery and sets know about levels 6-10.
+	var p5 := float(DeckAI.analyze("power_throw", 5).power)
+	var p10 := float(DeckAI.analyze("power_throw", 10).power)
+	ok(p10 > p5 and p10 < p5 * 1.25, "Auto Build power grows gently past level 5 (%.2f -> %.2f)" % [p5, p10])
+	ok(absf(DeckAI.level_tiebreak(5) - 1.0) < 0.001 and absf(DeckAI.level_tiebreak(10) - 1.5) < 0.001, "the level tie-breaker: +0.25 per level, +0.1 per Prestige level")
+	Profile.data.cards.power_throw.plays = CardMastery.THRESHOLDS[2]
+	Profile.data.cards.power_throw.level = 10
+	ok(CardMastery.is_hall_of_fame("power_throw") and CardMastery.hall_of_fame_count() == 1, "mastered + Prestige ★5 = Hall of Fame")
+	ok(CardMastery.status_with_prestige("power_throw").contains("HALL OF FAME"), "the mastery status names it")
+	Profile.data.cards.power_throw.level = 7
+	ok(CardMastery.status_with_prestige("power_throw").contains("Prestige ★2") and not CardMastery.is_hall_of_fame("power_throw"), "a ★2 card shows its Prestige in the mastery status")
+	Profile.data.cards.heat_wave.level = 1
+	var pp := CollectionSets.prestige_progress("offense")
+	ok(int(pp.prestiged) == 1 and int(pp.maxed) == 0 and int(pp.total) == CollectionSets.cards_in("offense").size(), "sets count their Prestige cards (%s)" % pp)
+
+	# CardView: the Prestige look follows the real Prestige, never more than the view's level.
+	var cv := CardView.new("power_throw", 7)
+	cv.set_card("power_throw", 7)
+	ok(cv.prestige_stars() == 2, "a ★2 card shows ★2")
+	cv.set_card("power_throw", 5)
+	ok(cv.prestige_stars() == 0, "shown at level 5 it has no crest")
+	Profile.data.cards.curveball.level = 5
+	cv.set_card("curveball", 7)
+	ok(cv.prestige_stars() == 0, "a level-5 card raised to 7 in a game is not a Prestige card")
+	cv.prestige = 4
+	ok(cv.prestige_stars() == 4, "the override shows any Prestige level")
+	cv.owned = false
+	ok(cv.prestige_stars() == 0, "unowned cards are never Prestige cards")
+	cv.free()
+	Profile.reset_profile()

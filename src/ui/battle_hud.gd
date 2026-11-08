@@ -790,14 +790,13 @@ func _on_card_hover(cv: CardView, on: bool) -> void:
 	t += "Cost [color=#3FD0FF]%d energy[/color]" % int(c.cost)
 	if float(c.cooldown) > 0:
 		t += " · Cooldown %ds" % int(c.cooldown)
-	t += " · Level %d\n" % lvl
+	# Levels 6-10 are Prestige ★1-★5 (Update 11, DB.level_label).
+	var stars := DB.prestige_stars(lvl)
+	t += (" · Prestige ★%d\n" % stars) if stars > 0 else (" · Level %d\n" % lvl)
 	t += DB.card_text(cv.card_id, lvl)
-	var details := str(c.get("details", ""))
+	# The full rules text (the card face shows the short version).
+	var details := DB.card_details(cv.card_id, lvl)
 	if details != "":
-		# The full rules text (the card face shows the short version).
-		for key in c.get("params", {}).keys():
-			var v := DB.card_param(cv.card_id, key, lvl)
-			details = details.replace("{%s}" % key, str(int(round(v))) if absf(v - roundf(v)) < 0.05 or v >= 10.0 else "%.1f" % v)
 		t += "\n[color=#B8C4D6][font_size=17]%s[/font_size][/color]" % details
 	var linked: String = c.get("linked", "")
 	if linked != "":

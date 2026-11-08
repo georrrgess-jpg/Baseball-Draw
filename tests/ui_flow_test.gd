@@ -157,6 +157,14 @@ func _run() -> void:
 		await _test_u10_team()
 		_finish()
 		return
+	if "--ui-test-section=u11cards" in OS.get_cmdline_user_args():
+		await _test_u11_prestige()
+		_finish()
+		return
+	if "--ui-test-section=u11def" in OS.get_cmdline_user_args():
+		await _test_u11_defenders()
+		_finish()
+		return
 	if "--ui-test-section=u9screens" in OS.get_cmdline_user_args():
 		await _test_u9_hub_play_results()
 		_finish()
@@ -390,12 +398,14 @@ func _run() -> void:
 	await _test_scouting()
 	await _test_u9_e2()
 	await _test_u10_team()
+	await _test_u11_defenders()
 	await _test_title()
 	await _test_u9_hub_play_results()
 	await _test_u10_hub()
 	await _test_tutorial()
 	await _test_draft()
 	await _test_u11_boss_bar()
+	await _test_u11_prestige()
 	_finish()
 
 
@@ -2593,3 +2603,320 @@ func _test_u11_boss_bar() -> void:
 	_check(not state.visible and str(hud.get("boss_state")) == "", "u11: the boss bar returns to normal after the REVEALED window")
 	for df in battle.defenders:
 		df.attack_cd = 0.5
+
+
+# ---------------------------------------------------------------- Update 11: Prestige (stream A)
+
+func _find_ceremony() -> PrestigeCeremony:
+	var scr := get_tree().current_scene
+	return scr.find_child("PrestigeCeremony", true, false) as PrestigeCeremony if scr else null
+
+
+func _cardviews(n: Node, out: Array) -> Array:
+	if n is CardView:
+		out.append(n)
+	for c in n.get_children():
+		_cardviews(c, out)
+	return out
+
+
+## Run alone: godot --path . -- --ui-test --profile=uitest_u11 --fresh-profile --ui-test-section=u11cards
+## Prestige a card through the ceremony and skip it with a click, skip one with Esc, Upgrade All's
+## Include Prestige opt-in, reduce_flashes, the Prestige frame in Cards & Deck, and the battle hand
+## with Prestige cards (hit map: no dead points).
+func _test_u11_prestige() -> void:
+	var saved_deck: Array = Profile.data.deck.duplicate()
+	# Earlier sections leave copies on other cards: clear them so Upgrade All's plan is exactly what this sets up.
+	for cid in Profile.data.cards.keys():
+		Profile.data.cards[cid].copies = 0
+	for cid in ["lockdown", "wall_of_dirt", "power_throw", "curveball", "heat_wave"]:
+		Profile.data.cards[cid].owned = true
+	Profile.data.cards.lockdown.level = 5
+	Profile.data.cards.lockdown.copies = DB.upgrade_copies("rare", 5)
+	Profile.data.cards.wall_of_dirt.level = 5
+	Profile.data.cards.wall_of_dirt.copies = DB.upgrade_copies("common", 5)
+	Profile.data.cards.power_throw.level = 8
+	Profile.data.cards.heat_wave.level = 4
+	Profile.data.cards.heat_wave.copies = DB.upgrade_copies("rare", 4)
+	Profile.data.coins = 60000
+	Settings.set_value("accessibility", "reduce_flashes", false)
+	Router.goto("card_upgrades")
+	_check(await _wait_scene("card_upgrades"), "u11: Upgrade Cards opens")
+	await _wait(0.6)
+	var scr: Node = get_tree().current_scene
+	scr.set("selected", "lockdown")
+	scr.call("_rebuild")
+	await _wait(0.4)
+	var pb := _find_button(scr, "PRESTIGE")
+	_check(pb != null and not pb.disabled, "u11: a level-5 card with its copies shows PRESTIGE")
+	_check(_find_label(scr, "LEVEL 5  ▶  PRESTIGE ★1"), "u11: the detail says LEVEL 5 ▶ PRESTIGE ★1")
+	if pb == null:
+		return
+	await _click(_button_center(pb))
+	var cer: PrestigeCeremony = null
+	for i in 30:
+		await _wait(0.1)
+		cer = _find_ceremony()
+		if cer:
+			break
+	_check(cer != null, "u11: PRESTIGE starts the ceremony")
+	_check(Profile.card_level("lockdown") == 6, "u11: the card is Prestige ★1 as soon as it is paid (level %d)" % Profile.card_level("lockdown"))
+	if cer == null:
+		return
+	_check(not cer.calm, "u11: full ceremony with reduce_flashes off")
+	await _wait(1.0)
+	_check(not _closed(cer), "u11: the ceremony is still playing after a second")
+	var pre: bool = cer.get("_card").face_down == false
+	_check(pre, "u11: the card has finished its spin and faces the player")
+	var t_before: float = cer.get("_t")
+	await _click(get_viewport().get_final_transform() * get_viewport().get_visible_rect().get_center())
+	var skipped: bool = cer.skipped
+	await _wait(0.6)
+	_check(_closed(cer) and skipped and t_before < PrestigeCeremony.T_END, "u11: a click skips the ceremony (at %.1f s of %.1f)" % [t_before, PrestigeCeremony.T_END])
+	await _wait(0.4)
+	_check(Router.current == "card_upgrades", "u11: skipping stays on Upgrade Cards")
+	var dcard: CardView = scr.get("_d_card")
+	_check(dcard != null and is_instance_valid(dcard) and dcard.card_id == "lockdown" and dcard.prestige_stars() == 1 and dcard.modulate.a > 0.9,
+		"u11: the detail card shows the Prestige ★1 frame")
+	_check(dcard != null and dcard.material != null and (dcard.material as ShaderMaterial).shader == CardView.PRESTIGE_SHADER,
+		"u11: the Prestige holo shader is on the card")
+	_check(_find_label(scr, "PRESTIGE ★1  ▶  ★2"), "u11: the next step is ★1 ▶ ★2")
+	# Esc skips too, without leaving the screen.
+	scr.set("selected", "wall_of_dirt")
+	scr.call("_rebuild")
+	await _wait(0.4)
+	pb = _find_button(scr, "PRESTIGE")
+	if pb:
+		await _click(_button_center(pb))
+	cer = null
+	for i in 30:
+		await _wait(0.1)
+		cer = _find_ceremony()
+		if cer:
+			break
+	_check(cer != null, "u11: a second ceremony starts")
+	await _wait(0.5)
+	await _key("pause")
+	await _wait(0.6)
+	_check(_closed(cer) and Router.current == "card_upgrades", "u11: Esc skips the ceremony and stays on the screen")
+	_check(Profile.card_level("wall_of_dirt") == 6, "u11: the skipped card is still prestiged")
+	await _wait(0.3)
+	# Upgrade All: Prestige only with the opt-in.
+	Profile.data.cards.curveball.level = 5
+	Profile.data.cards.curveball.copies = DB.upgrade_copies("common", 5)
+	Settings.set_value("accessibility", "reduce_flashes", true)
+	scr.call("_rebuild")
+	await _wait(0.3)
+	scr.call("_confirm_upgrade_all")
+	await _wait(0.4)
+	var check := scr.find_child("IncludePrestige", true, false) as CheckBox
+	var summary := scr.find_child("UpgradeAllSummary", true, false) as Label
+	_check(check != null and check.is_visible_in_tree() and not check.button_pressed, "u11: Upgrade All offers Include Prestige, unticked")
+	_check(summary != null and not summary.text.contains("PRESTIGE"), "u11: without the opt-in the summary has no Prestige (%s)" % (summary.text if summary else "?"))
+	var rows := scr.find_child("UpgradeAllRows", true, false)
+	var n_before := rows.get_child_count() if rows else 0
+	if check:
+		await _click(get_viewport().get_final_transform() * check.get_global_rect().get_center())
+		await _wait(0.3)
+	_check(check != null and check.button_pressed and summary.text.contains("1 PRESTIGE"), "u11: ticking it adds the Prestige to the summary (%s)" % (summary.text if summary else "?"))
+	_check(rows != null and rows.get_child_count() > n_before - 0 and _find_label(rows, "LV 5  ▶  PRESTIGE ★1"), "u11: the list shows LV 5 ▶ PRESTIGE ★1")
+	var go := scr.find_child("UpgradeAllGo", true, false) as Button
+	_check(go != null and not go.disabled, "u11: UPGRADE ALL is enabled")
+	if go:
+		await _click(_button_center(go))
+	cer = null
+	for i in 30:
+		await _wait(0.1)
+		cer = _find_ceremony()
+		if cer:
+			break
+	_check(cer != null and cer.calm, "u11: Upgrade All plays the ceremony, calm with reduce_flashes")
+	_check(Profile.card_level("curveball") == 6 and Profile.card_level("heat_wave") == 5, "u11: Upgrade All prestiged the opted-in card and levelled the other")
+	if cer:
+		await _wait(0.4)
+		await _click(get_viewport().get_final_transform() * get_viewport().get_visible_rect().get_center())
+		await _wait(0.6)
+		_check(_closed(cer), "u11: the Upgrade All ceremony can be skipped")
+	await _wait(1.4)
+	Settings.set_value("accessibility", "reduce_flashes", false)
+	# Cards & Deck: the Prestige frame on collection cards.
+	Profile.data.deck = ["lockdown", "wall_of_dirt", "power_throw", "curveball", "heat_wave", "frost_field", "twin_play", "rally_cry"]
+	Router.goto("deck_builder")
+	_check(await _wait_scene("deck_builder"), "u11: Cards & Deck opens")
+	await _wait(0.8)
+	var views := _cardviews(get_tree().current_scene, [])
+	var pres_views := views.filter(func(v: CardView) -> bool: return v.prestige_stars() > 0 and v.is_visible_in_tree())
+	var ids := {}
+	for v: CardView in pres_views:
+		ids[v.card_id] = true
+	_check(ids.has("lockdown") and ids.has("power_throw") and ids.has("wall_of_dirt"), "u11: Prestige cards show the Prestige frame in Cards & Deck (%s)" % [ids.keys()])
+	var plain := views.filter(func(v: CardView) -> bool: return v.card_id == "heat_wave" and v.is_visible_in_tree())
+	_check(not plain.is_empty() and plain.all(func(v: CardView) -> bool: return v.prestige_stars() == 0), "u11: a level-5 card has no Prestige frame")
+	Profile.data.cards.power_throw.level = 8   # (Upgrade All may have levelled it further)
+	Router.goto("deck_builder")
+	await _wait(1.5)
+	views = _cardviews(get_tree().current_scene, [])
+	pres_views = views.filter(func(v: CardView) -> bool: return v.prestige_stars() > 0 and v.is_visible_in_tree())
+	var pt: CardView = null
+	for v: CardView in pres_views:
+		if v.card_id == "power_throw":
+			pt = v
+	_check(pt != null and pt.prestige_stars() == 3 and pt.get("_overlay") != null and pt.get_child_count() == 0,
+		"u11: Power Throw shows ★3 with its crest overlay")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(0.5)
+	# The battle hand with Prestige cards: every point clickable.
+	battle = null
+	await _test_card_clicks()
+	if battle:
+		var hand_pres := 0
+		for v in battle.hud.get("_card_views"):
+			if is_instance_valid(v) and (v as CardView).prestige_stars() > 0:
+				hand_pres += 1
+		_check(hand_pres >= 1 or battle.state != "wave", "u11: the battle hand shows Prestige cards (%d)" % hand_pres)
+	Profile.data.deck = saved_deck
+
+
+# ---------------------------------------------------------------- Update 11: defender levels to 20
+
+## Run alone: godot --path . -- --ui-test --profile=uitest_u11 --fresh-profile --ui-test-section=u11def
+## A level-20 defender on the Team screen: the gold frame on the tile and in the starting six, the
+## two-digit level badge, the HALL OF FAMER nameplate and the 20-level road in two readable rows; an
+## All-Star; the lineup nameplate on the main menu; and the Results screen levelling past 10.
+func _test_u11_defenders() -> void:
+	Profile.data.flags["tutorial_done"] = true
+	var seen := {}
+	for h in Hints.HINTS:
+		seen[h] = true
+	Profile.data.flags["hints_seen"] = seen
+	Profile.set_team(Profile.STARTER_TEAM.duplicate(), "ace")
+	var saved := {}
+	for id in ["ace", "jax", "maya"]:
+		saved[id] = Profile.data.defenders[id].duplicate(true)
+	Profile.data.defenders.ace.level = 20
+	Profile.data.defenders.ace.xp = 0
+	Profile.data.defenders.jax.level = 15
+	Profile.data.defenders.jax.xp = 500
+	# Every trait chosen, so the tiles show the honour instead of NEW TRAIT.
+	Profile.data.defenders.ace.traits = {"3": "power", "6": "tempo", "9": "clutch", "12": "iron_man", "16": "armor_breaker"}
+	Profile.data.defenders.jax.traits = {"3": "power", "6": "eagle", "9": "signature", "12": "quick_release"}
+	Router.goto("roster")
+	_check(await _wait_scene("roster"), "u11: Team screen opens")
+	await _wait(1.0)
+	var rs: Node = get_tree().current_scene
+	var tiles: Dictionary = rs.get("tiles")
+	var ta: Button = tiles.get("ace")
+	_check(ta != null and ta.find_child("HallOfFameFrame", true, false) != null, "u11: the level-20 tile has the gold Hall of Famer frame")
+	var badge: Control = ta.find_child("LevelBadge", true, false) if ta else null
+	var bt: Label = badge.find_child("LevelText", true, false) if badge else null
+	_check(bt != null and bt.text == "20", "u11: the tile's level badge shows 20")
+	if badge and bt:
+		var br := badge.get_global_rect()
+		_check(br.size.x >= bt.get_minimum_size().x and ta.get_global_rect().encloses(br), "u11: the two-digit badge fits its pill and the tile (%s)" % br)
+	var sub: Label = ta.find_child("SubLine", true, false) if ta else null
+	_check(sub != null and "HALL OF FAMER" in sub.text, "u11: the tile says HALL OF FAMER (%s)" % (sub.text if sub else "none"))
+	var tj: Button = tiles.get("jax")
+	var tjb: Label = tj.find_child("LevelText", true, false) if tj else null
+	var tjs: Label = tj.find_child("SubLine", true, false) if tj else null
+	_check(tjb != null and tjb.text == "15" and tjs != null and "ALL-STAR" in tjs.text and tj.find_child("HallOfFameFrame", true, false) == null, "u11: the level-15 tile is an All-Star without the gold frame")
+	# The info panel: nameplate, badge and the 20-level road.
+	var info: Control = rs.get("_info")
+	_check(info != null and info.find_child("HallOfFamePlate", true, false) != null, "u11: the info panel shows the HALL OF FAMER nameplate")
+	var sec: Control = info.find_child("LevelSection", true, false) if info else null
+	var road: Control = sec.find_child("LevelRoad", true, false) if sec else null
+	_check(road != null and road.find_child("RoadRow1", false, false) != null and road.find_child("RoadRow2", false, false) != null, "u11: the level road has two rows")
+	if road:
+		var r1: Control = road.find_child("RoadRow1", false, false)
+		var r2: Control = road.find_child("RoadRow2", false, false)
+		_check(r1 and r2 and r1.get_child_count() == 10 and r2.get_child_count() == 10, "u11: ten levels per row, 20 in all")
+		var panel_rect: Rect2 = info.get_parent().get_global_rect()
+		var inside := true
+		var readable := true
+		var prev_end := -1.0e9
+		for l in range(1, 21):
+			var node: Control = road.find_child("RoadLevel%d" % l, true, false)
+			if node == null:
+				inside = false
+				continue
+			if l == 11:
+				prev_end = -1.0e9
+			var nr := node.get_global_rect()
+			inside = inside and panel_rect.encloses(nr)
+			readable = readable and nr.position.x >= prev_end - 0.5 and nr.size.x >= 32.0
+			prev_end = nr.end.x
+			var lab: Label = node.find_child("*", true, false) as Label
+			for c in node.find_children("*", "Label", true, false):
+				lab = c
+			if lab:
+				readable = readable and lab.get_line_count() == 1 and lab.get_minimum_size().x <= nr.size.x
+		_check(inside, "u11: every road level is inside the panel (no horizontal overflow)")
+		_check(readable, "u11: road levels don't overlap and every number fits")
+		var n20: Control = road.find_child("RoadLevel20", true, false)
+		_check(n20 != null and "Hall of Famer" in n20.tooltip_text, "u11: level 20 on the road is the Hall of Famer reward (%s)" % (n20.tooltip_text if n20 else ""))
+		var n15: Control = road.find_child("RoadLevel15", true, false)
+		_check(n15 != null and "All-Star" in n15.tooltip_text, "u11: level 15 on the road is the All-Star badge")
+	var lb: Control = sec.find_child("LevelBadge", true, false) if sec else null
+	var lbt: Label = lb.find_child("LevelText", true, false) if lb else null
+	_check(lbt != null and lbt.text == "20" and lb.get_global_rect().size.x >= lbt.get_minimum_size().x, "u11: the big level badge fits 20")
+	_check(_find_label(info, "LEVEL 20 / 20  ·  MAX"), "u11: LEVEL 20 / 20 · MAX")
+	# Trait tiers 4 and 5 are offered.
+	_check(_find_button(info, "Iron Man") != null and _find_button(info, "Armor Breaker") != null, "u11: trait tiers 4 and 5 can be chosen")
+	# The starting six: the gold frame in the strip.
+	var strip: Control = rs.get("_team_strip")
+	var sa: Control = strip.find_child("Strip_ace", true, false) if strip else null
+	_check(sa != null and sa.find_child("HallOfFameFrame", true, false) != null, "u11: the starting six shows the Hall of Famer's gold frame")
+	# The All-Star's own page.
+	if tj:
+		await _click(_button_center(tj))
+		await _wait(0.5)
+		info = rs.get("_info")
+		_check(info.find_child("AllStarPlate", true, false) != null and info.find_child("HallOfFamePlate", true, false) == null, "u11: the All-Star's page shows the ALL-STAR plate")
+		_check(_find_label(info, "NEXT REWARD — Level 16: Choose a trait"), "u11: the next reward after 15 is trait tier 5")
+	# The main menu lineup.
+	Router.goto("main_menu")
+	_check(await _wait_scene("main_menu"), "u11: back to the main menu")
+	await _wait(1.0)
+	var plates := get_tree().current_scene.find_children("HonorPlate", "Label3D", true, false)
+	var hof := plates.filter(func(p: Label3D) -> bool: return "HALL OF FAMER" in p.text and "ACE" in p.text)
+	var star := plates.filter(func(p: Label3D) -> bool: return "ALL-STAR" in p.text and "LV 15" in p.text and str(p.get_parent().get("model_id")) == "jax")
+	_check(hof.size() == 1 and star.size() == 1 and plates.size() == 2, "u11: the lineup shows Ace's Hall of Famer and Jax's All-Star nameplates (%d plates)" % plates.size())
+	# The Results screen: levels 11-20 fill, ALL-STAR! and HALL OF FAMER! appear.
+	Profile.data.defenders.ace.level = 20
+	Profile.data.defenders.maya.level = 11
+	var res: Control = load("res://src/ui/results_screen.gd").new()
+	res.result = {"won": true, "mode": "quick", "difficulty": "standard", "arena": "steel_yard", "coins": 80, "xp": 150, "rp": 0,
+		"levels": 0, "innings_cleared": 3, "outs": 40, "runs": 1, "run_limit": 3, "score": 5200, "mvp": "ace", "packs": [],
+		"stats": {"cards_played": 6},
+		"defender_xp": {
+			"ace": {"xp": 9000, "levels": 1, "level": 20, "level_before": 19, "xp_before": 8000, "xp_after": 0, "outs": 9,
+				"rewards": [Profile.level_reward_text(Profile.defender_level_reward(20))]},
+			"maya": {"xp": 4000, "levels": 1, "level": 11, "level_before": 10, "xp_before": 2000, "xp_after": 1000, "outs": 4,
+				"rewards": [Profile.level_reward_text(Profile.defender_level_reward(11))]},
+			"jax": {"xp": 3000, "levels": 1, "level": 15, "level_before": 14, "xp_before": 4000, "xp_after": 500, "outs": 5,
+				"rewards": [Profile.level_reward_text(Profile.defender_level_reward(15))]}}}
+	get_tree().current_scene.add_child(res)
+	await _wait(6.0)
+	var pa: Control = res.find_child("Progress_ace", true, false)
+	var pm: Control = res.find_child("Progress_maya", true, false)
+	var pj: Control = res.find_child("Progress_jax", true, false)
+	for i in 150:   # a loaded machine renders slowly: give the XP bars time to fill
+		if pa == null or pm == null or pj == null or (_find_label(pa, "LV 20") and _find_label(pj, "LV 15") and _find_label(pm, "LV 11")):
+			break
+		await _wait(0.2)
+	await _wait(0.5)
+	_check(pa != null and pa.find_child("HallOfFameFrame", true, false) != null and pa.find_child("HallOfFamePlate", true, false) != null, "u11: Results: Ace gets the gold frame and nameplate at 20")
+	_check(pa != null and _find_label(pa, "LV 20") and _find_label(pa, "HALL OF FAMER!") and "Champion Pack" in pa.tooltip_text and _find_label(pa, "ACE"), "u11: Results: HALL OF FAMER!, Ace's name on the gold plate, the Champion Pack in the tooltip")
+	_check(pj != null and _find_label(pj, "ALL-STAR!") and "1,000 coins" in pj.tooltip_text and pj.find_child("AllStarPlate", true, false) != null, "u11: Results: ALL-STAR! at 15")
+	_check(pm != null and _find_label(pm, "LV 11") and _find_label(pm, "LEVEL UP!  +750 coins"), "u11: Results: a level-up past 10 (10 -> 11)")
+	var lv_ok := true
+	for p in [pa, pm, pj]:
+		if p:
+			var ll: Label = p.find_child("LevelLabel", true, false)
+			lv_ok = lv_ok and ll != null and p.get_global_rect().encloses(ll.get_global_rect())
+	_check(lv_ok, "u11: Results: the two-digit LV labels fit their tiles")
+	res.queue_free()
+	for id in saved.keys():
+		Profile.data.defenders[id] = saved[id]
+	Profile.save_now()
+	await _wait(0.3)

@@ -72,6 +72,28 @@ static func apply_run(run: RunState) -> Array:
 	return out
 
 
+## Update 11: a Hall of Fame card is mastered (three stars) and at max Prestige (level 10).
+static func is_hall_of_fame(card_id: String) -> bool:
+	return stars(card_id) >= MAX_STARS and Profile.card_level(card_id) >= DB.card_max_level
+
+
+## Mastery status with the card's Prestige level ("23 plays · 17 more for ★★ · Prestige ★2").
+static func status_with_prestige(card_id: String) -> String:
+	var t := status_text(Profile.card_plays(card_id))
+	if is_hall_of_fame(card_id):
+		return t + " · HALL OF FAME"
+	var p := Profile.card_prestige(card_id)
+	return t + (" · Prestige ★%d" % p if p > 0 else "")
+
+
+static func hall_of_fame_count() -> int:
+	var n := 0
+	for cid in DB.card_order:
+		if is_hall_of_fame(cid):
+			n += 1
+	return n
+
+
 static func mastered_count() -> int:
 	var n := 0
 	for cid in DB.card_order:

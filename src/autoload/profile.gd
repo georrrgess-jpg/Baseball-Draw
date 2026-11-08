@@ -391,13 +391,7 @@ func defender_level_reward(level: int) -> Dictionary:
 
 
 func level_reward_text(r: Dictionary) -> String:
-	if r.has("coins"):
-		return "%d coins" % int(r.coins)
-	if r.has("pack"):
-		return DB.pack(str(r.pack)).name
-	if r.has("trait"):
-		return "Choose a trait"
-	return ""
+	return DefenderLevels.reward_text(r)   # also names the All-Star / Hall of Famer badges (Update 11)
 
 
 func _grant_level_reward(id: String, level: int) -> void:
@@ -480,8 +474,9 @@ func defender_mods(id: String) -> Dictionary:
 	var mods := {"damage": 0.0, "range": 0.0, "attack_speed": 0.0, "throw_speed": 0.0, "accuracy": 0.0,
 		"crit": 0.0, "special_power": 0.0, "special_cooldown": 0.0, "boss_damage": 0.0, "stun_guard": 0}
 	var lvl := defender_level(id)
-	mods.damage += DB.defender_level_growth * (lvl - 1)
-	mods.special_power += DB.defender_level_growth * (lvl - 1)
+	var growth := DefenderLevels.growth(lvl)   # +6 % per level to 10, then +3 % (Update 11)
+	mods.damage += growth
+	mods.special_power += growth
 	var g := equipped_gear(id)
 	if g != "" and DB.gear.has(g):
 		for k in DB.gear[g].effect.keys():
@@ -638,8 +633,9 @@ func open_packs(type: String, count: int, card := "") -> Dictionary:
 
 
 ## Opens one pack. Update 9: the pity counters can raise the last slot to Epic or Legendary (the result's
-## "pity" names the guarantee that kicked in), and copies of max-level cards turn into coins: such a card
-## has "copies": 0 and "overflow": coins, and the pack's "overflow_coins" adds them up.
+## "pity" names the guarantee that kicked in), and copies a card can't use turn into coins: such a card
+## has "overflow": coins (and "copies": the ones kept), and the pack's "overflow_coins" adds them up.
+## Update 11: "can't use" = the card is at level 10, or already holds every copy it needs to get there.
 func _open_one(index: int) -> Dictionary:
 	if index < 0 or index >= data.packs.size():
 		return {}
@@ -663,10 +659,15 @@ func _open_one(index: int) -> Dictionary:
 		var rarity: String = DB.card(cid).rarity
 		best = maxi(best, DB.rarity_index(rarity))
 		var copies := 2 if rarity == "common" else 1
-		if is_card_owned(cid) and card_level(cid) >= DB.card_max_level:
-			var coins := copies * overflow_rate(rarity)
+		# Update 11: only copies the card can no longer use (it is at level 10, or already holds every
+		# copy it needs up to level 10) become coins; a pull can be split ("copies": 1, "overflow": 20).
+		var extra := spare_copies(cid, copies) if is_card_owned(cid) else 0
+		if extra > 0:
+			var coins := extra * overflow_rate(rarity)
 			overflow += coins
-			cards.append({"id": cid, "rarity": rarity, "new": false, "copies": 0, "overflow": coins})
+			if extra < copies:
+				grant_card(cid, copies - extra)
+			cards.append({"id": cid, "rarity": rarity, "new": false, "copies": copies - extra, "overflow": coins})
 			continue
 		var is_new := grant_card(cid, copies)
 		cards.append({"id": cid, "rarity": rarity, "new": is_new, "copies": 0 if is_new else copies})
@@ -748,12 +749,21 @@ func mark_card_seen(id: String) -> void:
 		save_soon()
 
 
+## How many of `incoming` new copies of an owned card it could never use: everything above the copies
+## it still needs on the way to level 10 (Update 11; before, only copies of max-level cards).
+func spare_copies(id: String, incoming: int) -> int:
+	var room := maxi(0, DB.copies_to_max(str(DB.card(id).get("rarity", "common")), card_level(id)) - card_copies(id))
+	return maxi(0, incoming - room)
+
+
+## The next level-up of an owned card: {"copies", "coins", "prestige" (true for the Prestige step 5 -> 6)};
+## empty at max level.
 func upgrade_cost(id: String) -> Dictionary:
 	var lvl := card_level(id)
 	if lvl >= DB.card_max_level:
 		return {}
 	var rarity: String = DB.card(id).rarity
-	return {"copies": int(DB.COPIES_TO_UPGRADE[rarity][lvl]), "coins": int(DB.COINS_TO_UPGRADE[lvl])}
+	return {"copies": DB.upgrade_copies(rarity, lvl), "coins": DB.upgrade_coins(rarity, lvl), "prestige": DB.is_prestige_step(lvl)}
 
 
 func can_upgrade_card(id: String) -> bool:
@@ -761,6 +771,29 @@ func can_upgrade_card(id: String) -> bool:
 	return is_card_owned(id) and not cost.is_empty() and card_copies(id) >= cost.copies and data.coins >= cost.coins
 
 
+## Update 11: Prestige stars of a card (0 below level 6, 1-5 for levels 6-10).
+func card_prestige(id: String) -> int:
+	return DB.prestige_stars(card_level(id))
+
+
+func is_card_prestiged(id: String) -> bool:
+	return card_prestige(id) > 0
+
+
+## True when the card's next step is the Prestige step and it can be paid now.
+func can_prestige_card(id: String) -> bool:
+	return DB.is_prestige_step(card_level(id)) and can_upgrade_card(id)
+
+
+func prestiged_count() -> int:
+	var n := 0
+	for id in data.cards.keys():
+		if is_card_owned(id) and is_card_prestiged(id):
+			n += 1
+	return n
+
+
+## Levels a card up (the Prestige step included). Returns false when it can't be paid.
 func upgrade_card(id: String) -> bool:
 	if not can_upgrade_card(id):
 		return false
@@ -770,6 +803,9 @@ func upgrade_card(id: String) -> bool:
 	data.cards[id].level += 1
 	set_stat_max("max_card_level", data.cards[id].level)
 	bump_stat("cards_upgraded")
+	if bool(cost.prestige):
+		bump_stat("cards_prestiged")
+	set_stat_max("max_card_prestige", DB.prestige_stars(int(data.cards[id].level)))
 	changed.emit()
 	save_soon()
 	return true
@@ -777,54 +813,71 @@ func upgrade_card(id: String) -> bool:
 
 ## Upgrade All: the level-ups the player can afford right now, applied in a fixed order (cheapest
 ## coin cost first, then rarer cards), repeating while copies and coins last. A card may gain several
-## levels. Returns [{"id", "from", "to"}] and the total coins spent; `apply` = false only previews.
-func upgrade_all_plan(apply := false) -> Dictionary:
+## levels. Update 11: the Prestige step (level 5 -> 6) is only taken with `include_prestige` (the
+## player's opt-in); Prestige levels 7-10 of cards already prestiged are ordinary level-ups.
+## Returns {"cards": [{"id", "from", "to", "prestige" (crossed the Prestige step)}], "coins", "levels",
+## "prestige": [ids prestiged], "prestige_ready": [ids whose Prestige step is affordable but left out]};
+## `apply` = false only previews.
+func upgrade_all_plan(apply := false, include_prestige := false) -> Dictionary:
 	var coins := int(data.coins)
 	var levels := {}
 	var copies := {}
+	var start := {}
 	for id in DB.card_order:
 		if is_card_owned(id):
 			levels[id] = card_level(id)
+			start[id] = levels[id]
 			copies[id] = card_copies(id)
 	var spent := 0
 	var steps := 0
+	var prestiged: Array = []
 	while true:
 		var best := ""
 		var best_cost := 0
 		for id in levels.keys():
 			var lvl: int = levels[id]
-			if lvl >= DB.card_max_level:
+			if lvl >= DB.card_max_level or (DB.is_prestige_step(lvl) and not include_prestige):
 				continue
-			var need := int(DB.COPIES_TO_UPGRADE[DB.card(id).rarity][lvl])
-			var cost := int(DB.COINS_TO_UPGRADE[lvl])
+			var rarity: String = DB.card(id).rarity
+			var need := DB.upgrade_copies(rarity, lvl)
+			var cost := DB.upgrade_coins(rarity, lvl)
 			if copies[id] < need or coins < cost:
 				continue
-			if best == "" or cost < best_cost or (cost == best_cost and DB.rarity_index(DB.card(id).rarity) > DB.rarity_index(DB.card(best).rarity)):
+			if best == "" or cost < best_cost or (cost == best_cost and DB.rarity_index(rarity) > DB.rarity_index(DB.card(best).rarity)):
 				best = id
 				best_cost = cost
 		if best == "":
 			break
-		copies[best] -= int(DB.COPIES_TO_UPGRADE[DB.card(best).rarity][levels[best]])
+		if DB.is_prestige_step(levels[best]):
+			prestiged.append(best)
+		copies[best] -= DB.upgrade_copies(DB.card(best).rarity, levels[best])
 		levels[best] += 1
 		coins -= best_cost
 		spent += best_cost
 		steps += 1
 		if apply:
 			upgrade_card(best)
+	# Prestige steps the plan leaves out that could still be paid after it (for the opt-in checkbox).
+	var ready: Array = []
+	if not include_prestige:
+		for id in levels.keys():
+			var lv: int = levels[id]
+			var rr: String = DB.card(id).rarity
+			if DB.is_prestige_step(lv) and copies[id] >= DB.upgrade_copies(rr, lv) and coins >= DB.upgrade_coins(rr, lv):
+				ready.append(id)
 	var cards: Array = []
-	if not apply:   # after applying, card_level() already equals the new level
-		for id in DB.card_order:
-			if levels.has(id) and int(levels[id]) > card_level(id):
-				cards.append({"id": id, "from": card_level(id), "to": int(levels[id])})
-	return {"cards": cards, "coins": spent, "levels": steps}
+	for id in DB.card_order:
+		if levels.has(id) and int(levels[id]) > int(start[id]):
+			cards.append({"id": id, "from": int(start[id]), "to": int(levels[id]), "prestige": id in prestiged})
+	return {"cards": cards, "coins": spent, "levels": steps, "prestige": prestiged, "prestige_ready": ready}
 
 
-## Applies the Upgrade All plan; returns what changed ([{"id", "from", "to"}]).
-func upgrade_all() -> Array:
-	var plan := upgrade_all_plan(false)
+## Applies the Upgrade All plan; returns what changed ([{"id", "from", "to", "prestige"}]).
+func upgrade_all(include_prestige := false) -> Array:
+	var plan := upgrade_all_plan(false, include_prestige)
 	if plan.cards.is_empty():
 		return []
-	upgrade_all_plan(true)
+	upgrade_all_plan(true, include_prestige)
 	return plan.cards
 
 

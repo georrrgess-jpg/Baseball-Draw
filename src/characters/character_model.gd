@@ -407,6 +407,34 @@ func chest_position() -> Vector3:
 
 # ---------------------------------------------------------------- feedback
 
+## Update 11: a floating nameplate over an honoured defender (the main menu lineup): a gold
+## "HALL OF FAMER" plate at level 20, a blue "ALL-STAR" plate from level 15. "" removes it.
+func show_honor_plate(honor: String, name_text: String, level: int) -> Label3D:
+	var old := get_node_or_null("HonorPlate")
+	if old:
+		old.queue_free()
+	if honor == "":
+		return null
+	var hof := honor == "hall_of_fame"
+	var l := Label3D.new()
+	l.name = "HonorPlate"
+	l.text = ("HALL OF FAMER\n%s  ·  LV %d" % [name_text.to_upper(), level]) if hof else "ALL-STAR · LV %d" % level
+	l.font = UITheme.font_display()
+	l.font_size = 46
+	l.line_spacing = -6.0
+	l.pixel_size = 0.0032 if hof else 0.0026
+	l.outline_size = 16
+	l.modulate = Color("#FFD35A") if hof else Color(0.72, 0.84, 1.0)
+	l.outline_modulate = Color(0.24, 0.14, 0.0, 0.95) if hof else Color(0.05, 0.12, 0.38, 0.95)
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.render_priority = 2
+	l.outline_render_priority = 1
+	l.position = Vector3(0, height / maxf(scale.y, 0.01) + (0.5 if hof else 0.35), 0)
+	add_child(l)
+	return l
+
+
 func flash(amount := 1.0) -> void:
 	_flash = maxf(_flash, amount)
 	_update_overlay()
