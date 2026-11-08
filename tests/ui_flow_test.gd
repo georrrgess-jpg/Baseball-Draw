@@ -2543,6 +2543,9 @@ func _cardviews(n: Node, out: Array) -> Array:
 ## with Prestige cards (hit map: no dead points).
 func _test_u11_prestige() -> void:
 	var saved_deck: Array = Profile.data.deck.duplicate()
+	# Earlier sections leave copies on other cards: clear them so Upgrade All's plan is exactly what this sets up.
+	for cid in Profile.data.cards.keys():
+		Profile.data.cards[cid].copies = 0
 	for cid in ["lockdown", "wall_of_dirt", "power_throw", "curveball", "heat_wave"]:
 		Profile.data.cards[cid].owned = true
 	Profile.data.cards.lockdown.level = 5
@@ -2666,6 +2669,11 @@ func _test_u11_prestige() -> void:
 	_check(ids.has("lockdown") and ids.has("power_throw") and ids.has("wall_of_dirt"), "u11: Prestige cards show the Prestige frame in Cards & Deck (%s)" % [ids.keys()])
 	var plain := views.filter(func(v: CardView) -> bool: return v.card_id == "heat_wave" and v.is_visible_in_tree())
 	_check(not plain.is_empty() and plain.all(func(v: CardView) -> bool: return v.prestige_stars() == 0), "u11: a level-5 card has no Prestige frame")
+	Profile.data.cards.power_throw.level = 8   # (Upgrade All may have levelled it further)
+	Router.goto("deck_builder")
+	await _wait(1.5)
+	views = _cardviews(get_tree().current_scene, [])
+	pres_views = views.filter(func(v: CardView) -> bool: return v.prestige_stars() > 0 and v.is_visible_in_tree())
 	var pt: CardView = null
 	for v: CardView in pres_views:
 		if v.card_id == "power_throw":
