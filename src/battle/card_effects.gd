@@ -145,7 +145,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 			var df := nearest_thrower(e.global_position)
 			var last_pos := e.center()
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					fx.lost_throw(_origin(df), last_pos, Color(1.0, 0.42, 0.18))
 					return
 				battle.projectiles.launch(_origin(df), e, 42.0, {"source": df, "card": card_id, "damage": p(card_id, "damage", level),
@@ -250,7 +250,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 				return
 			var last_pos := e.center()
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					fx.chain_arc(_origin(caster), last_pos, Color(1.0, 0.92, 0.4))
 					fx.fizzle(last_pos, "NO TARGET")
 					return
@@ -286,7 +286,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 			var df := nearest_thrower(e.global_position)
 			var last_pos := e.center()
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					fx.lost_throw(_origin(df), last_pos, Color(0.8, 0.6, 1.0), "wobble")
 					return
 				battle.projectiles.launch_at(_origin(df), e.center(), 18.0, {"color": Color(0.8, 0.6, 1.0), "arc_mult": 1.2, "trail": "wobble"}, func(at: Vector3) -> void:
@@ -338,7 +338,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 				return
 			var last_pos := e.center()
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					fx.pickoff_strike(_origin(caster), last_pos, false)
 					fx.fizzle(last_pos, "NO TARGET")
 					return
@@ -463,7 +463,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 				return
 			var e: Enemy = lead[0]
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					var again := battle.lead_runners(1)
 					if again.is_empty():
 						fx.hook_whiff(_origin(caster))
@@ -492,7 +492,7 @@ func _execute_card(card_id: String, level: int, target: Dictionary) -> void:
 			Audio.play("crowd_ooh", -8.0)
 			fx.lock_on(e, Defender.RELEASE.special / 1.3 + 0.35, GOLD)
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					var again := battle.lead_runners(1)
 					if again.is_empty():
 						fx.called_shot_impact(last_pos, false)
@@ -669,7 +669,7 @@ func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3
 			var df := nearest_thrower(e.global_position)
 			var last_pos := e.center()
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					fx.lost_throw(_origin(df), last_pos, BEAN)
 					return
 				var mult := p(card_id, "fast_mult", level) if is_fast(e) else 1.0
@@ -753,7 +753,7 @@ func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3
 			var df := nearest_thrower(e.global_position)
 			var last_pos := e.center()
 			var go := func() -> void:
-				if not is_instance_valid(e) or not e.targetable():
+				if not is_instance_valid(e) or not e.hittable():
 					fx.lost_throw(_origin(df), last_pos, DB.category_color("control"))
 					return
 				battle.projectiles.launch_at(_origin(df), e.center(), 30.0, {"color": Color(0.5, 0.45, 1.0), "arc_mult": 0.4, "trail": "comet"}, func(_at: Vector3) -> void:
@@ -894,7 +894,7 @@ func _execute_u7(card_id: String, level: int, target: Dictionary, point: Vector3
 			var rc := DB.card(rid)
 			if rc.target == "enemy":
 				var e0: Variant = tgt.get("enemy")
-				if e0 == null or not is_instance_valid(e0) or not (e0 as Enemy).targetable():
+				if e0 == null or not is_instance_valid(e0) or not (e0 as Enemy).hittable():
 					var lead := battle.lead_runners(1)
 					if lead.is_empty():
 						battle.cards.add_energy(float(DB.card(card_id).cost))
@@ -1200,7 +1200,7 @@ func _tick_reliever(it: Dictionary, delta: float) -> bool:
 					battle.later(0.3 / 1.6, func() -> void:
 						var m := mw.get_ref() as CharacterModel
 						var en := tw.get_ref() as Enemy
-						if m == null or en == null or not en.targetable():
+						if m == null or en == null or not en.hittable():
 							return
 						battle.vfx.arm_swoosh(m, RELIEF)
 						battle.projectiles.launch(m.hand_position(), en, 30.0, {"card": "relief_pitcher", "damage": dmg, "crit": crit,
@@ -1503,7 +1503,7 @@ func echo_target(card_id: String, target: Dictionary) -> Dictionary:
 	match String(DB.card(card_id).get("target", "none")):
 		"enemy":
 			var e0: Variant = tgt.get("enemy")
-			if e0 == null or not is_instance_valid(e0) or not (e0 as Enemy).targetable():
+			if e0 == null or not is_instance_valid(e0) or not (e0 as Enemy).hittable():
 				var lead := battle.lead_runners(1)
 				if lead.is_empty():
 					return {}

@@ -1317,7 +1317,8 @@ func _update_buffs(delta: float) -> void:
 		var ar := float(e.data.get("aura_radius", 0.0))
 		if ar > 0.0:
 			for o in enemies:
-				if o != e and o.alive and Field.v2(o.global_position).distance_to(Field.v2(e.global_position)) <= ar:
+				# Captains rally runners, not bosses (Update 11: a rallied boss took 20 % less damage).
+				if o != e and o.alive and not o.is_boss and Field.v2(o.global_position).distance_to(Field.v2(e.global_position)) <= ar:
 					o.aura_speed = 1.2
 					o.aura_dr = 0.2
 	for df in defenders:
@@ -1822,7 +1823,9 @@ func _pick_enemy(mp: Vector2, radius := 50.0) -> Enemy:
 	var best: Enemy = null
 	var best_d := radius
 	for e in enemies:
-		if not e.targetable():
+		# A phased Phantom Captain can still be picked for a card (the card lands); its decoys
+		# never steal the pick (Update 11).
+		if not e.hittable() or e.decoy_of != null:
 			continue
 		if cam.camera.is_position_behind(e.global_position):
 			continue

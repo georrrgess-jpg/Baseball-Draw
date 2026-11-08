@@ -149,6 +149,10 @@ func _run() -> void:
 		await _test_draft()
 		_finish()
 		return
+	if "--ui-test-section=u11boss" in OS.get_cmdline_user_args():
+		await _test_u11_boss_bar()
+		_finish()
+		return
 	if "--ui-test-section=u10team" in OS.get_cmdline_user_args():
 		await _test_u10_team()
 		_finish()
@@ -391,6 +395,7 @@ func _run() -> void:
 	await _test_u10_hub()
 	await _test_tutorial()
 	await _test_draft()
+	await _test_u11_boss_bar()
 	_finish()
 
 
@@ -2510,3 +2515,81 @@ func _test_u10_team() -> void:
 	Profile.set_team(Profile.STARTER_TEAM.duplicate(), "ace")
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+# ---------------------------------------------------------------- Update 11: boss bar states (stream C)
+
+## Boss Rush inning 2 (the Phantom Captain): the boss bar shows PHASED while it is out of reality and
+## REVEALED (+25 % damage) right after, then goes back to normal. With `--u11-shot=<file.jpg>` it saves
+## a screenshot of the REVEALED bar.
+func _test_u11_boss_bar() -> void:
+	Profile.data.flags["battle_help"] = true
+	Profile.data.flags["battle_tutorial_done"] = true
+	Engine.time_scale = 1.0
+	var cfg := Session.new_run_config("boss_rush")
+	cfg.difficulty = "standard"
+	cfg.seed = 1111
+	cfg.start_inning = 2
+	cfg.start_wave = 2
+	Session.start(cfg)
+	battle = null
+	for i in 300:
+		await _wait(0.1)
+		var sc := get_tree().current_scene
+		if sc is Battle and (sc as Battle).state == "setup":
+			battle = sc
+			break
+	_check(battle != null and battle.run.inning == 2, "u11: Boss Rush inning 2 loaded")
+	if battle == null:
+		return
+	await _wait(0.8)
+	await _key("start_wave")
+	var boss: Enemy = null
+	for i in 200:
+		await _wait(0.1)
+		if battle.boss_alive and is_instance_valid(battle.boss_alive):
+			boss = battle.boss_alive
+			break
+	_check(boss != null and boss.id == "phantom_captain", "u11: the Phantom Captain arrives")
+	if boss == null:
+		return
+	# Let the entrance finish, then hold it in view and in the middle of the field.
+	for i in 60:
+		await _wait(0.1)
+		if not battle.cam.cinematic:
+			break
+	boss.base_speed = 0.05
+	boss.ability_t = 999.0
+	for df in battle.defenders:
+		df.attack_cd = 1.0e9
+	var hud: Node = battle.hud
+	var panel: Control = hud.get("_boss_panel")
+	var state: Label = hud.get("_boss_state")
+	boss.telegraph_kind = "phase"
+	boss._resolve_telegraph()
+	await _wait(0.2)
+	_check(panel.visible and state.visible and state.text.begins_with("PHASED") and str(hud.get("boss_state")) == "phased",
+		"u11: the boss bar shows PHASED (%s)" % state.text)
+	_check(not boss.targetable() and boss.hittable(), "u11: phased: nothing new can aim at it, hits on the way still land")
+	for i in 40:
+		await _wait(0.1)
+		if boss.is_revealed():
+			break
+	await _wait(0.3)
+	var name_lbl: Label = hud.get("_boss_name")
+	_check(state.visible and state.text.begins_with("REVEALED") and "REVEALED" in name_lbl.text and str(hud.get("boss_state")) == "revealed",
+		"u11: after the phase the boss bar shows REVEALED (%s / %s)" % [name_lbl.text, state.text])
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--u11-shot="):
+			await _wait(0.4)
+			var img := get_viewport().get_texture().get_image()
+			img.save_jpg(a.split("=")[1], 0.9)
+			print("[UITEST] saved ", a.split("=")[1])
+	for i in 50:
+		await _wait(0.1)
+		if not boss.is_revealed():
+			break
+	await _wait(0.2)
+	_check(not state.visible and str(hud.get("boss_state")) == "", "u11: the boss bar returns to normal after the REVEALED window")
+	for df in battle.defenders:
+		df.attack_cd = 0.5

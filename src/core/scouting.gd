@@ -41,8 +41,8 @@ const BEHAVIOR_TEXT := {
 		"Reveal it, or let splash damage pop it on the way to the real runners."],
 	"boss_iron": ["Ground slam", "Nearly impervious iron plating ({armor} armor). After each ground slam its armor cracks open and it is VULNERABLE for a few seconds.",
 		"Save your big cards for the VULNERABLE window. Armor piercing and damage based on max health work all the time."],
-	"boss_phantom": ["Phase and conjure", "Phases out of reality (it can't be hit while phased), conjures decoys and rallies runners within {aura_radius} m.",
-		"Hit it while it is solid: boss cards and big single hits. Clear the decoys with splash damage."],
+	"boss_phantom": ["Phase and conjure", "Every few seconds it phases out for {phase_time} s and conjures three decoys: your defenders lose sight of it and throw at the decoys. Throws, burns and cards already on their way still land. Rallies runners within {aura_radius} m.",
+		"When it turns solid it is REVEALED: +{reveal_bonus} damage for {reveal_time} s, the moment for your big cards. Cards aimed at it never hit a decoy, burns keep ticking through a phase, and the decoys fade on their own or pop to splash damage."],
 	"boss_slammer": ["Home-run swing", "Home-run swings stun and scatter defenders. Calls in reinforcements as it weakens. Scores {runs} runs.",
 		"Keep boss and max-health damage for it, spread your defenders, and shake off stuns with a team buff."],
 }
@@ -200,12 +200,15 @@ static func _behavior(key: String) -> String:
 	return b
 
 
-static func _fill(text: String, e: Dictionary) -> String:
+static func _fill(text: String, enemy: Dictionary) -> String:
+	var e := enemy.duplicate()
+	# The Phantom Captain's phase numbers live in Enemy (Update 11).
+	e.merge({"phase_time": Enemy.PHASE_TIME, "reveal_time": Enemy.REVEAL_TIME, "reveal_bonus": Enemy.REVEAL_BONUS})
 	for k in e.keys():
 		var v: Variant = e[k]
 		if typeof(v) in [TYPE_FLOAT, TYPE_INT]:
 			var s := str(int(v)) if absf(float(v) - roundf(float(v))) < 0.01 else "%.1f" % float(v)
-			if k in ["armor", "evasion", "slow_resist"]:
+			if k in ["armor", "evasion", "slow_resist", "reveal_bonus"]:
 				s = "%d%%" % int(round(float(v) * 100.0))
 			text = text.replace("{%s}" % k, s)
 	return text

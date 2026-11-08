@@ -38,6 +38,10 @@ var _boss_panel: PanelContainer
 var _boss_bar: ProgressBar
 var _boss_name: Label
 var _boss_enemy: Enemy
+var _boss_fill: StyleBoxFlat
+var _boss_state: Label            # Update 11: PHASED / REVEALED / VULNERABLE line under the bar
+var _boss_window: ProgressBar     # time left in that state
+var boss_state := ""              # "", "phased", "revealed", "vulnerable" (read by tests)
 var _start_btn: Button
 var _speed_btn: Button
 var _setup_panel: PanelContainer
@@ -384,8 +388,64 @@ func _build_boss_bar() -> void:
 	_boss_bar = ProgressBar.new()
 	_boss_bar.custom_minimum_size = Vector2(0, 16)
 	_boss_bar.show_percentage = false
-	_boss_bar.add_theme_stylebox_override("fill", UITheme.panel_style(Color(1.0, 0.3, 0.15), Color(0, 0, 0, 0), 0, 4, 0))
+	_boss_fill = UITheme.panel_style(BOSS_FILL[""], Color(0, 0, 0, 0), 0, 4, 0)
+	_boss_bar.add_theme_stylebox_override("fill", _boss_fill)
 	vb.add_child(_boss_bar)
+	_boss_window = ProgressBar.new()
+	_boss_window.custom_minimum_size = Vector2(0, 5)
+	_boss_window.show_percentage = false
+	_boss_window.max_value = 1.0
+	_boss_window.add_theme_stylebox_override("fill", UITheme.panel_style(Color(1, 1, 1, 0.9), Color(0, 0, 0, 0), 0, 2, 0))
+	_boss_window.add_theme_stylebox_override("background", UITheme.panel_style(Color(1, 1, 1, 0.08), Color(0, 0, 0, 0), 0, 2, 0))
+	_boss_window.modulate.a = 0.0
+	vb.add_child(_boss_window)
+	_boss_state = UITheme.label("", 17, Color(1, 1, 1), UITheme.font_display())
+	_boss_state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_state.visible = false
+	vb.add_child(_boss_state)
+
+
+## Boss bar fill per state (Update 11).
+const BOSS_FILL := {"": Color(1.0, 0.3, 0.15), "phased": Color(0.55, 0.35, 0.95, 0.45), "revealed": Color(1.0, 0.85, 0.35),
+	"vulnerable": Color(1.0, 0.75, 0.2)}
+const BOSS_STATE_TEXT := {"phased": "PHASED — defenders can't see it · throws and cards already on the way still land",
+	"revealed": "REVEALED — +25% DAMAGE · HIT IT NOW!", "vulnerable": "ARMOR CRACKED — +25% DAMAGE, NO ARMOR"}
+const BOSS_STATE_COLOR := {"phased": Color(0.78, 0.62, 1.0), "revealed": Color(1.0, 0.9, 0.5), "vulnerable": Color(1.0, 0.8, 0.3)}
+
+
+## The boss bar's state line: PHASED (violet, the fill turns ghostly), REVEALED / VULNERABLE (gold,
+## pulsing) with a thin meter for the time left in the window.
+func _fill_boss_state(e: Enemy) -> void:
+	var st := ""
+	var left := 0.0
+	var total := 1.0
+	if e.is_phased():
+		st = "phased"
+		left = e.phased_t
+		total = Enemy.PHASE_TIME
+	elif e.is_revealed():
+		st = "revealed"
+		left = e.revealed_t
+		total = Enemy.REVEAL_TIME
+	elif e.vulnerable_t > 0.0:
+		st = "vulnerable"
+		left = e.vulnerable_t
+		total = 4.0
+	if st != boss_state:
+		boss_state = st
+		_boss_fill.bg_color = BOSS_FILL[st]
+		_boss_state.visible = st != ""
+		if st != "":
+			_boss_state.text = BOSS_STATE_TEXT[st]
+			_boss_state.add_theme_color_override("font_color", BOSS_STATE_COLOR[st])
+			var wf: StyleBoxFlat = _boss_window.get_theme_stylebox("fill")
+			wf.bg_color = BOSS_STATE_COLOR[st]
+	_boss_window.modulate.a = 1.0 if st != "" else 0.0
+	_boss_window.value = clampf(left / maxf(total, 0.01), 0.0, 1.0)
+	if st == "revealed" or st == "vulnerable":
+		var calm := bool(Settings.get_value("accessibility", "reduce_flashes", false))
+		var k := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+		_boss_fill.bg_color = BOSS_FILL[st].lerp(Color(1, 1, 0.9), (0.1 if calm else 0.35) * k)
 
 
 func _build_controls() -> void:
@@ -979,9 +1039,12 @@ func refresh() -> void:
 		var tag := ""
 		if _boss_enemy.vulnerable_t > 0.0:
 			tag = "  — VULNERABLE!"
-		elif _boss_enemy.untargetable_t > 0.0:
+		elif _boss_enemy.is_revealed():
+			tag = "  — REVEALED!"
+		elif _boss_enemy.is_phased() or _boss_enemy.untargetable_t > 0.0:
 			tag = "  — PHASED"
 		_boss_name.text = _boss_enemy.data.name.to_upper() + tag
+		_fill_boss_state(_boss_enemy)
 	# Hints
 	_hint.text = _context_hint()
 	_hint.visible = _hint.text != ""
@@ -1271,11 +1334,20 @@ func show_boss(e: Enemy) -> void:
 	_boss_panel.visible = true
 	_boss_bar.max_value = e.max_hp
 	_boss_bar.value = e.hp
+	_reset_boss_state()
 
 
 func hide_boss() -> void:
 	_boss_enemy = null
 	_boss_panel.visible = false
+	_reset_boss_state()
+
+
+func _reset_boss_state() -> void:
+	boss_state = ""
+	_boss_fill.bg_color = BOSS_FILL[""]
+	_boss_state.visible = false
+	_boss_window.modulate.a = 0.0
 
 
 func drag_info(df: Defender, p: Vector3, err: String) -> void:
