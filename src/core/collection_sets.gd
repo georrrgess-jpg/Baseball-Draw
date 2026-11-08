@@ -53,6 +53,20 @@ static func progress(set_id: String) -> Dictionary:
 	return {"owned": owned, "total": cards.size()}
 
 
+## Update 11: how many of the set's cards are Prestige cards (level 6+) and at max Prestige (level 10).
+## {"prestiged", "maxed", "total"}. Shown on the set tiles; there is no reward for it.
+static func prestige_progress(set_id: String) -> Dictionary:
+	var cards := cards_in(set_id)
+	var pres := 0
+	var maxed := 0
+	for cid in cards:
+		if Profile.is_card_owned(cid) and Profile.is_card_prestiged(cid):
+			pres += 1
+			if Profile.card_level(cid) >= DB.card_max_level:
+				maxed += 1
+	return {"prestiged": pres, "maxed": maxed, "total": cards.size()}
+
+
 static func is_complete(set_id: String) -> bool:
 	var p := progress(set_id)
 	return int(p.total) > 0 and int(p.owned) >= int(p.total)

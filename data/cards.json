@@ -1,7 +1,8 @@
 {
-  "_comment": "Ability cards. 'params' are level-1 values; 'growth' lists params that scale by +growth_rate per upgrade level. Targets: none | enemy | area | path | defender. 'role' (damage, aoe, control, defense, run_stop, economy, buff or boss) says what the card is for; the deck builder reads it.",
+  "_comment": "Ability cards. 'params' are level-1 values; 'growth' lists params that scale by +growth_rate (of the level-1 value) per level up to level 5, then by +prestige_growth per level for the Prestige levels 6-10 (Update 11). In 'text', {param} shows a value and {param%} shows a fraction as a percentage. Targets: none | enemy | area | path | defender. 'role' (damage, aoe, control, defense, run_stop, economy, buff or boss) says what the card is for; the deck builder reads it.",
   "growth_rate": 0.12,
-  "max_level": 5,
+  "prestige_growth": 0.05,
+  "max_level": 10,
   "cards": [
     {"id": "heat_wave", "name": "Heat Wave", "category": "offense", "role": "aoe", "rarity": "rare", "cost": 4, "cooldown": 12, "target": "area", "radius": 2.0, "linked": "ace",
      "params": {"damage": 120, "burn_dps": 22, "burn_time": 4.0, "width": 4.4, "length": 20.0}, "growth": ["damage", "burn_dps"],
@@ -40,7 +41,7 @@
      "art": "An electric yellow baseball crackling with forked lightning bolts."},
     {"id": "curveball", "name": "Curveball", "category": "control", "role": "control", "rarity": "common", "cost": 2, "cooldown": 0, "target": "area", "radius": 3.5,
      "params": {"slow": 0.4, "duration": 4.0, "vulnerability": 0.25}, "growth": ["duration", "vulnerability"],
-     "text": "Slow runners 40% for {duration}s. They take +25% damage.",
+     "text": "Slow runners 40% for {duration}s. They take +{vulnerability%} damage.",
      "details": "Slows runners by 40% and marks them for {duration}s. Marked runners take +25% damage (+50% from fire).",
      "art": "A baseball bending along a sweeping blue curved trail with spin lines."},
     {"id": "knuckleball", "name": "Knuckleball", "category": "control", "role": "control", "rarity": "uncommon", "cost": 3, "cooldown": 6, "target": "enemy",
@@ -110,7 +111,7 @@
      "art": "A glowing eye with a baseball iris over a tactical map of the diamond."},
     {"id": "diamond_aura", "ai_weight": 0.75, "name": "Diamond Aura", "category": "utility", "role": "buff", "rarity": "epic", "cost": 5, "cooldown": 12, "target": "defender",
      "params": {"radius": 7.0, "damage_bonus": 0.4, "speed_bonus": 0.25, "duration": 12.0}, "growth": ["damage_bonus", "duration"],
-     "text": "Aura on a defender: nearby allies +40% damage.",
+     "text": "Aura on a defender: nearby allies +{damage_bonus%} damage.",
      "details": "A defender radiates a diamond aura for {duration}s: allies within {radius}m deal +40% damage and throw 25% faster.",
      "art": "A radiant blue-white diamond gem with beams of light over a baseball diamond."},
     {"id": "rally_cry", "name": "Rally Cry", "category": "utility", "role": "buff", "rarity": "uncommon", "cost": 3, "cooldown": 10, "target": "none",
