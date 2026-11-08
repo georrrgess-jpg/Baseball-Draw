@@ -1036,3 +1036,79 @@ Plan: `docs/plans/UPDATE_10_PLAN.md`. Two parallel streams; the lead merged and 
   The other three layouts already passed.
 
 ![Iron Fortress gates](screenshots/u10/iron_fortress_gates_fixed.jpg)
+
+## 20. Update 11: "Hall of Fame"
+
+Plan: `docs/plans/UPDATE_11_PLAN.md`. Three parallel streams; the lead merged and verified.
+
+### Card levels 1–10 and Prestige
+* **Levels and power:**
+  * Cards go to level 10. At level 5, PRESTIGE unlocks levels 6–10 (Prestige ★1–★5).
+  * Power after level 5 is +5 % of base per level: ×1.48 at level 5, ×1.73 at level 10.
+* **Costs:**
+  * Levels 1–5 are unchanged.
+  * The Prestige step costs 5–18 copies and 4,000–9,000 coins by rarity; later steps rise from there.
+  * Extra copies become coins only when a card can't use them any more.
+* **Look:** an iridescent holo frame, a gold crowned crest with stars, and five gold stars instead of level
+  pips. It appears everywhere cards are drawn; in the battle hand the crest is a seal on the art.
+* **Ceremony** (about 5.6 s, skippable, gentler with reduce_flashes): lift and spin, cracks of light, the frame
+  shatters into shards, a comet traces the new frame, the crest slams down, confetti.
+* **Upgrade All:** "Include Prestige" (off by default).
+* **Also aware of Prestige:** Auto Build, compare, mastery ("Hall of Fame" cards), sets and pack results.
+* **Two achievements:** Hall of Fame Material (first Prestige) and Gold Standard (★5).
+* **Simulator** (Standard Siege, starter team): a level-10 deck wins 83 % against 75 % at level 5.
+* **Economy model:**
+  * first Prestige at 9.1 h;
+  * first common at level 10 at 29 h;
+  * whole collection 30 → 35 h, because extra copies now feed Prestige instead of buying packs.
+
+![Prestige cards](screenshots/u11/card_faces_before_after.jpg)
+![Prestige ceremony](screenshots/u11/ceremony_4_crest_slam.jpg)
+
+### Defender levels to 20
+* **Growth:** +3 % per level after level 10 (+84 % at level 20).
+* **XP:** the XP curve reaches 90,100 at level 20: about 57 h for a regular team member, about 39 h for a
+  defender who is always MVP.
+* **Rewards for levels 11–20:** coins, Pro and Champion Packs, and new trait tiers at 12 (Iron Man / Quick
+  Release) and 16 (Armor Breaker / Big Game).
+* **Honours:** an All-Star badge at 15; a Hall of Famer gold frame and nameplate at 20, shown on the Team
+  screen, the lineup and Results.
+* **Level road:** two rows of ten. Level badges handle two digits.
+
+![Hall of Famer](screenshots/u11/team_level20_hall_of_famer.jpg)
+
+### Phantom Captain and boss fairness
+**Causes found with a new per-boss simulator log:**
+* Decoys soaked 18–30 % of the boss's health in damage: balls in flight and delayed cards re-aimed at decoys.
+* Burns stopped while it was phased.
+* It was untargetable 22–31 % of the time, with no reward window afterwards.
+* Captains gave it 20 % damage reduction.
+* Boss health grew without a limit in Endless: the Phantom reached 24,000 at inning 24.
+
+**Fixes:**
+* A phased Phantom still takes damage from balls in flight, burns and cards already aimed at it. Only new aims
+  ignore it.
+* After every phase it is REVEALED for 3 s and takes +25 % damage, and its decoys shatter.
+* Decoys fade after 6 s.
+* Captains no longer rally bosses.
+* Boss health growth is softened above 2× and capped at 3.6×.
+* The boss bar shows PHASED / REVEALED / VULNERABLE with a timer.
+* The Scouting Book and the boss intro explain the counterplay.
+
+| Phantom beaten | Before | After |
+|---|---|---|
+| Boss Rush, Standard (fresh / mid) | 33 / 92 % | 50 / 92 % |
+| Boss Rush, Veteran mid | 42 % | 75 % |
+| Boss Rush, Legend high | 33 % | 75 % |
+| Siege inning 6, Legend high | 64 % | 58 % |
+| Endless inning 6, Legend | 50 % | 75 % |
+
+* The Grand Slammer in Boss Rush went from 33–58 % to 44–75 %.
+* Deep Endless (innings 18+) relies on the health cap: the autopilot rarely gets that far.
+
+![Boss bar revealed](screenshots/u11/boss_bar_revealed.jpg)
+
+### Verification
+* Script check: 100 scripts, 0 failed.
+* System suite: 3,196 checks, 0 failed.
+* The hand hit map with Prestige cards: 0 of 175 points dead.
