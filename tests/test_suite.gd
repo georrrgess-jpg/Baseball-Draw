@@ -3047,7 +3047,7 @@ func _test_u9_streak_and_results() -> void:
 	ok(is_equal_approx(Profile.streak_bonus(), 0.1), "a streak of 1 gives the next win +10 %")
 	res = Rewards.apply(_u9_run("quick", 3, 3), true)
 	ok(int(res.streak) == 2 and int(res.streak_bonus_coins) == int(round(int(res.coins) * 0.1)) and int(res.first_win_today_coins) == 0,
-		"the second win in a row pays +10 % (%d of %d)" % [int(res.streak_bonus_coins), int(res.coins)])
+		"the second win in a row pays +10 %% (%d of %d)" % [int(res.streak_bonus_coins), int(res.coins)])
 	for i in 6:
 		res = Rewards.apply(_u9_run("quick", 3, 3), true)
 	ok(int(res.streak) == 8 and is_equal_approx(float(res.streak_bonus), 0.5) and int(res.streak_bonus_coins) == int(round(int(res.coins) * 0.5)),
