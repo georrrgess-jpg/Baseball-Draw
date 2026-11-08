@@ -16,7 +16,7 @@ const T_END := 2.7
 
 const THREATS := {
 	"iron_slugger": "Iron plating shrugs off throws. Hit it hard after each ground slam.",
-	"phantom_captain": "Phases out and conjures decoys. Strike when it turns solid.",
+	"phantom_captain": "Phases out and conjures decoys. Hit it hard when it is REVEALED (+25% damage).",
 	"grand_slammer": "Home-run swings stun your fielders. Calls in backup as it weakens.",
 }
 const TAGS := {"grand_slammer": "FINAL BOSS"}
