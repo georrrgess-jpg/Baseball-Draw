@@ -43,6 +43,16 @@ var chill_t := 0.0
 var chill_crit := 0.0
 var armor_break_t := 0.0
 var untargetable_t := 0.0
+## Phantom Captain (Update 11): while phased, nothing new can aim at it (defenders throw at its
+## decoys instead), but whatever is already on its way still lands: throws in flight, burns and
+## cards aimed at it before it phased. Each phase ends in a REVEALED window (+25 % damage taken).
+var phased_t := 0.0
+var revealed_t := 0.0
+const PHASE_TIME := 1.6
+const REVEAL_TIME := 3.0
+const REVEAL_BONUS := 0.25
+const DECOY_LIFE := 6.0            # Phantom decoys shatter when it is REVEALED (or after this long)
+var _life_t := 0.0
 var magnet_t := 0.0
 var magnet_center := Vector3.ZERO
 var rundown_t := 0.0                # Rundown card: runs back and forth between rundown_lo and rundown_hi
@@ -119,6 +129,11 @@ var bar_stack := 0.0                # target row for the health bar (set by Batt
 var _bar_stack := 0.0
 var _stop_t := 0.0                  # cosmetic hit-stop left (real seconds)
 var _stop_pos := Vector3.INF
+# Boss encounter log (Update 11 balance): what happened to this boss, printed as one
+# `[BOSS] {json}` line in auto tests when it leaves the field (tools/balance/simulate.py).
+var boss_log: Dictionary = {}
+var decoy_of: Enemy = null         # a Phantom Captain decoy: the boss that conjured it
+var _boss_logged := false
 
 ## Health bar styles: world size of the quad, minimum on-screen width, accent trim, ticks.
 const BAR_STYLES := {
@@ -141,8 +156,9 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	is_boss = bool(data.get("boss", false))
 	var hp_mult: float = opts.get("hp_mult", 1.0)
 	if is_boss:
-		# Bosses have hand-tuned health; they only take part of the inning scaling.
-		hp_mult = 1.0 + (hp_mult - 1.0) * 0.45
+		# Bosses have hand-tuned health; they only take part of the inning scaling, softened and
+		# capped deep into a run (Update 11, WaveGenerator.boss_hp_mult).
+		hp_mult = WaveGenerator.boss_hp_mult(hp_mult)
 		# Tuning hook (Update 8): per-mode / per-difficulty boss health from data/modes.json "boss_hp".
 		if battle and battle.run:
 			hp_mult *= WaveGenerator.boss_hp_tuning(battle.run, enemy_id)
@@ -162,6 +178,11 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 			shield_hits = int(a.get("shield", 0))
 			coins = int(coins * 1.5) + 2
 	hp = max_hp
+	var owner_boss: Variant = opts.get("decoy_of")
+	if owner_boss is Enemy:
+		decoy_of = owner_boss
+	if is_boss:
+		_start_boss_log()
 	ability_cd = float(DB.difficulty(battle.run.difficulty_id).get("ability_cd", 1.0))
 	ability_t = randf_range(1.5, 3.0) * ability_cd
 
@@ -279,8 +300,24 @@ static func _blob_texture() -> Texture2D:
 
 # ---------------------------------------------------------------- queries
 
+## Can something new aim at this runner? (defender targeting, area sweeps, picking a card target)
 func targetable() -> bool:
+	return alive and untargetable_t <= 0.0 and phased_t <= 0.0
+
+
+## Does a hit that is already on its way still land? A phased Phantom Captain can't be aimed at, but
+## throws in flight, damage over time and cards aimed at it still connect (Update 11). A blinking
+## Trickster is truly out of reach.
+func hittable() -> bool:
 	return alive and untargetable_t <= 0.0
+
+
+func is_phased() -> bool:
+	return alive and phased_t > 0.0
+
+
+func is_revealed() -> bool:
+	return alive and revealed_t > 0.0
 
 
 func is_airborne() -> bool:
@@ -452,7 +489,11 @@ func crit_bonus() -> float:
 func take_damage(amount: float, info: Dictionary = {}) -> float:
 	if not alive:
 		return 0.0
+	if decoy_of and is_instance_valid(decoy_of) and decoy_of.is_boss:
+		decoy_of._log_decoy_hit(amount, info)
 	if untargetable_t > 0.0 and not info.get("true", false):
+		if is_boss:
+			_log_blocked(amount, info)
 		return 0.0
 	if shield_hits > 0 and amount > 0.0:
 		# Shielded elite: the bubble soaks the whole hit, then pops.
@@ -473,6 +514,8 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 		mult += 0.10
 	if vulnerable_t > 0.0:
 		mult += 0.25
+	if revealed_t > 0.0:
+		mult += REVEAL_BONUS
 	if scout_t > 0.0:
 		mult += scout_amt
 	if signal_t > 0.0:
@@ -490,6 +533,8 @@ func take_damage(amount: float, info: Dictionary = {}) -> float:
 		var ab: Dictionary = battle.run.stats.get_or_add("assist_by", {})
 		ab["home_guard"] = float(ab.get("home_guard", 0.0)) + minf(dmg, dmg + hp) * 0.10 / mult
 	var before := clampf(hp / max_hp, 0.0, 1.0)
+	if is_boss:
+		_log_damage(minf(dmg, maxf(hp, 0.0)), info)
 	hp -= dmg
 	_last_hit_info = info
 	if info.has("card") and battle.run:
@@ -636,6 +681,8 @@ func die(info: Dictionary = {}) -> void:
 	_clear_status_fx()
 	model.play_action("defeat", 1.0)
 	_death_t = 0.0
+	if is_boss:
+		_finish_boss_log("out")
 	battle.on_enemy_out(self, info)
 
 
@@ -656,6 +703,8 @@ func tick(delta: float) -> void:
 			queue_free()
 		return
 	_tick_status(delta)
+	if is_boss:
+		_tick_boss_log(delta)
 	if not alive:
 		return
 	_tick_behavior(delta)
@@ -708,6 +757,16 @@ func _tick_status(delta: float) -> void:
 			_rim_dirty = true
 	armor_break_t = maxf(0.0, armor_break_t - delta)
 	untargetable_t = maxf(0.0, untargetable_t - delta)
+	if revealed_t > 0.0:
+		revealed_t -= delta
+		if revealed_t <= 0.0:
+			revealed_t = 0.0
+			_rim_dirty = true
+	if phased_t > 0.0:
+		phased_t -= delta
+		if phased_t <= 0.0:
+			phased_t = 0.0
+			_reveal()
 	magnet_t = maxf(0.0, magnet_t - delta)
 	rundown_t = maxf(0.0, rundown_t - delta)
 	dash_t = maxf(0.0, dash_t - delta)
@@ -877,9 +936,11 @@ func _update_visuals() -> void:
 			rim = Color(1.0, 0.45, 0.1, 0.95)
 		if vulnerable_t > 0.0:
 			rim = Color(1.0, 0.8, 0.2, 1.0)
+		if revealed_t > 0.0:
+			rim = Color(1.0, 0.92, 0.55, 1.0)
 		if frozen:
 			rim = Color(0.6, 0.9, 1.0, 1.0)
-		if id != "decoy" and untargetable_t <= 0.0:
+		if id != "decoy" and untargetable_t <= 0.0 and phased_t <= 0.0:
 			model.set_rim(rim)
 
 
@@ -901,7 +962,7 @@ func _update_status_fx(delta: float) -> void:
 	var stunned := stun_t > 0.0
 	var confused := confuse_t > 0.0
 	var marked := mark_t > 0.0 or scout_t > 0.0 or signal_t > 0.0
-	var broken := armor_break_t > 0.0 or vulnerable_t > 0.0
+	var broken := armor_break_t > 0.0 or vulnerable_t > 0.0 or revealed_t > 0.0
 	var frozen := freeze_t > 0.0
 	var key := int(rooted) | int(slowed) << 1 | int(chilled) << 2 | int(magnet) << 3 | int(stunned) << 4 \
 		| int(confused) << 5 | int(marked) << 6 | int(broken) << 7 | int(frozen) << 8
@@ -1040,6 +1101,12 @@ func _tick_behavior(delta: float) -> void:
 			_resolve_telegraph()
 		return
 	match data.get("behavior", "basic"):
+		"decoy":
+			# Phantom decoys vanish when their boss is gone (and at the latest after DECOY_LIFE).
+			if decoy_of != null:
+				_life_t += delta
+				if _life_t >= DECOY_LIFE or not is_instance_valid(decoy_of) or not decoy_of.alive:
+					die({"color": Color(0.6, 0.35, 1.0)})
 		"sprinter":
 			if ability_t <= 0.0:
 				ability_t = randf_range(3.5, 4.5) * ability_cd
@@ -1198,16 +1265,19 @@ func _resolve_telegraph() -> void:
 			_rim_dirty = true
 			battle.notify("ARMOR CRACKED — ATTACK NOW!", Color(1.0, 0.8, 0.2))
 		"phase":
-			untargetable_t = 1.6
+			phased_t = PHASE_TIME
+			revealed_t = 0.0
+			# The next phase never cuts the REVEALED window short (Legend's 0.7 ability_cd included).
+			ability_t = maxf(ability_t, PHASE_TIME + REVEAL_TIME + 0.8)
 			model.set_ghost(0.3)
+			_rim_dirty = true
 			battle.vfx.boss_impact(telegraph_pos, 3.0, Color(0.7, 0.4, 1.0), "phase")
+			if not boss_log.is_empty():
+				boss_log.phases += 1
+				boss_log.decoys += 3
 			for i in 3:
 				battle.spawn_enemy("decoy", route, minf(d + randf_range(-2.0, 2.0), route.length - 2.0),
-					{"lateral": randf_range(-1.6, 1.6), "hp_mult": 1.0})
-			battle.later(1.6, func() -> void:
-				if is_instance_valid(self) and alive:
-					model.set_ghost(1.0)
-					_rim_dirty = true)
+					{"lateral": randf_range(-1.6, 1.6), "hp_mult": 1.0, "decoy_of": self})
 		"homerun":
 			Audio.play("bat_crack")
 			Audio.play("boss_slam", -3.0)
@@ -1215,6 +1285,21 @@ func _resolve_telegraph() -> void:
 			_stun_defenders(telegraph_pos, 3.6, 3.0)
 			battle.vfx.boss_impact(telegraph_pos, 3.6, Color(1.0, 0.6, 0.15), "homerun")
 			battle.vfx.burst("explosion", telegraph_pos + Vector3(0, 0.5, 0), Color(1.0, 0.7, 0.2))
+
+
+## End of a phase: solid again and REVEALED (+25 % damage taken) for REVEAL_TIME seconds.
+func _reveal() -> void:
+	revealed_t = REVEAL_TIME
+	_rim_dirty = true
+	model.set_ghost(1.0)
+	model.flash(0.35 if battle.vfx.reduce_flashes else 0.7)
+	battle.vfx.puff(center(), Color(1.0, 0.9, 0.55))
+	battle.notify("REVEALED — +25% DAMAGE!", Color(1.0, 0.88, 0.45))
+	Audio.play("shield_block", -6.0)
+	# The illusions shatter with the reveal, so the REVEALED window isn't spent on decoys.
+	for e in battle.enemies.duplicate():
+		if e.decoy_of == self and e.alive:
+			e.die({"color": Color(0.6, 0.35, 1.0)})
 
 
 func _stun_defenders(pos: Vector3, radius: float, time: float) -> void:
@@ -1239,3 +1324,86 @@ func _check_summons() -> void:
 func _set_anim(a: String) -> void:
 	_anim_state = a
 	model.play_base(a, 0.0)
+
+
+# ---------------------------------------------------------------- boss encounter log (Update 11)
+
+func _start_boss_log() -> void:
+	var r: RunState = battle.run if battle else null
+	boss_log = {"id": id, "max_hp": roundf(max_hp), "armor": armor,
+		"mode": r.mode_id if r else "", "difficulty": r.difficulty_id if r else "", "inning": r.inning if r else 0,
+		"alive_t": 0.0, "phased_t": 0.0, "dmg_phased": 0.0, "revealed_t": 0.0, "vulnerable_t": 0.0, "rallied_t": 0.0, "phases": 0,
+		"dmg": 0.0, "dmg_card": 0.0, "dmg_throw": 0.0, "dmg_dot": 0.0, "dmg_revealed": 0.0,
+		"blocked": 0.0, "blocked_hits": 0, "blocked_card": 0.0, "blocked_dot": 0.0,
+		"decoy_hits": 0, "decoy_card_hits": 0, "decoy_dmg": 0.0, "decoys": 0, "healed": 0.0}
+
+
+func _tick_boss_log(delta: float) -> void:
+	if boss_log.is_empty() or not alive:
+		return
+	boss_log.alive_t += delta
+	if untargetable_t > 0.0 or phased_t > 0.0:
+		boss_log.phased_t += delta
+	if revealed_t > 0.0:
+		boss_log.revealed_t += delta
+	if vulnerable_t > 0.0:
+		boss_log.vulnerable_t += delta
+	if aura_dr > 0.0:
+		boss_log.rallied_t += delta
+
+
+func _log_damage(dmg: float, info: Dictionary) -> void:
+	if boss_log.is_empty():
+		return
+	boss_log.dmg += dmg
+	if info.get("dot", false):
+		boss_log.dmg_dot += dmg
+	elif str(info.get("card", "")) != "":
+		boss_log.dmg_card += dmg
+	else:
+		boss_log.dmg_throw += dmg
+	if vulnerable_t > 0.0 or revealed_t > 0.0:
+		boss_log.dmg_revealed += dmg
+	if phased_t > 0.0:
+		boss_log.dmg_phased = float(boss_log.get("dmg_phased", 0.0)) + dmg
+
+
+func _log_blocked(amount: float, info: Dictionary) -> void:
+	if boss_log.is_empty():
+		return
+	boss_log.blocked += amount
+	boss_log.blocked_hits += 1
+	if info.get("dot", false):
+		boss_log.blocked_dot += amount
+	elif str(info.get("card", "")) != "":
+		boss_log.blocked_card += amount
+
+
+## A throw or card hit one of this boss's decoys instead (the raw damage it would have dealt).
+func _log_decoy_hit(amount: float, info: Dictionary) -> void:
+	if boss_log.is_empty() or amount <= 0.0:
+		return
+	boss_log.decoy_hits += 1
+	boss_log.decoy_dmg += amount
+	if str(info.get("card", "")) != "":
+		boss_log.decoy_card_hits += 1
+
+
+## Closes the log: result is "out" (beaten), "scored" (reached the plate) or "alive" (the game
+## ended first). Prints `[BOSS] {json}` in auto tests.
+func _finish_boss_log(result: String) -> void:
+	if _boss_logged or boss_log.is_empty():
+		return
+	_boss_logged = true
+	boss_log.result = result
+	boss_log.hp_left = snappedf(clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0), 0.001)
+	for k in boss_log.keys():
+		if typeof(boss_log[k]) == TYPE_FLOAT:
+			boss_log[k] = snappedf(boss_log[k], 0.01)
+	if battle and battle.auto_test:
+		print("[BOSS] ", JSON.stringify(boss_log))
+
+
+func _exit_tree() -> void:
+	if is_boss and not _boss_logged:
+		_finish_boss_log("out" if hp <= 0.0 else ("scored" if not alive else "alive"))

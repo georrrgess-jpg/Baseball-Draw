@@ -54,6 +54,7 @@ func _run() -> void:
 	test_update5_content()
 	test_update7_content()
 	test_update9_modes()
+	test_update11_boss_hp()
 	test_update9_models()
 	test_update9_cards_content()
 	test_routes()
@@ -1212,6 +1213,8 @@ func test_battle_systems() -> void:
 	await _test_update9_defenders()
 	_clear()
 	await _test_update9_cards_battle()
+	_clear()
+	await _test_update11_bosses()
 	_clear()
 	await _test_u11_traits_battle()
 	_clear()
@@ -2384,7 +2387,7 @@ func test_update9_modes() -> void:
 			if str(wv.boss) != want:
 				plan_ok = false
 		# The boss's real health: data health x its share of the inning scaling x the mode's boss tuning (Enemy.setup).
-		var hp := float(DB.enemy(bosses[i]).hp) * (1.0 + (WaveGenerator.hp_multiplier(br) - 1.0) * 0.45) * WaveGenerator.boss_hp_tuning(br, bosses[i])
+		var hp := float(DB.enemy(bosses[i]).hp) * WaveGenerator.boss_hp_mult(WaveGenerator.hp_multiplier(br)) * WaveGenerator.boss_hp_tuning(br, bosses[i])
 		rising = rising and hp > last_hp
 		last_hp = hp
 	ok(plan_ok, "Boss Rush: only each inning's last wave has the boss")
@@ -4022,6 +4025,149 @@ func test_routes() -> void:
 			ok(wall_ok, "%s/%s stays clear of the outfield wall" % [lid, r.id])
 			ok(gate_ok, "%s/%s never passes another gate" % [lid, r.id])
 	ok(Battle.GATE_LEAD >= 0.5, "runners wait for the gate doors to open before stepping through")
+
+
+# ---------------------------------------------------------------- Update 11: boss fairness (stream C)
+
+## A phased boss: makes `boss` phase now (as if its telegraph just resolved), without waiting.
+func _phase_now(boss: Enemy) -> void:
+	boss.telegraph_kind = "phase"
+	boss.telegraph_t = 0.0
+	boss._resolve_telegraph()
+
+
+func _boss_decoys(boss: Enemy) -> Array:
+	return battle.enemies.filter(func(en: Enemy) -> bool: return en.alive and en.decoy_of == boss)
+
+
+## The Phantom Captain's phase, its REVEALED window, decoys and what still lands while it is phased.
+func _test_update11_bosses() -> void:
+	section("update 11: Phantom Captain and boss fairness (battle)")
+	_hold_fire(true)
+	var route := battle.routes[0]
+	var boss := battle.spawn_enemy("phantom_captain", route, route.length * 0.35, {"lateral": 0.0, "hp_mult": 4.0, "speed_mult": 0.01})
+	boss.ability_t = 999.0
+	await _wait(0.1)
+	# Phase timing: phased for PHASE_TIME, then REVEALED for REVEAL_TIME, and the next phase waits.
+	_phase_now(boss)
+	ok(boss.is_phased() and not boss.targetable() and boss.hittable(), "a phased Phantom Captain can't be aimed at, but hits on the way still land")
+	ok(is_equal_approx(boss.phased_t, Enemy.PHASE_TIME), "the phase lasts %.1f s" % Enemy.PHASE_TIME)
+	ok(boss.ability_t >= Enemy.PHASE_TIME + Enemy.REVEAL_TIME, "the next phase can't start before the REVEALED window ends (%.1f s)" % boss.ability_t)
+	boss.ability_t = 0.0
+	_phase_now(boss)
+	ok(boss.ability_t >= Enemy.PHASE_TIME + Enemy.REVEAL_TIME, "...even on Legend's quicker abilities")
+	boss.ability_t = 999.0
+	var decoys := _boss_decoys(boss)
+	ok(decoys.size() >= 3 and decoys.all(func(dc: Enemy) -> bool: return dc.id == "decoy" and dc.runs == 0), "a phase conjures three decoys tied to the boss (%d)" % decoys.size())
+	# Defenders, area sweeps and card picks never choose the phased boss; its decoys never take a card pick.
+	var picked := false
+	for df in battle.defenders:
+		if df._acquire_target() == boss:
+			picked = true
+	ok(not picked and not battle.enemies_in_radius(boss.global_position, 3.0).has(boss), "defenders and area sweeps skip the phased boss")
+	var sp := battle.cam.camera.unproject_position(decoys[0].center())
+	var card_pick := battle._pick_enemy(sp, 4000.0)
+	ok(card_pick == boss, "aiming a card at a decoy picks the boss instead (%s)" % (card_pick.id if card_pick else "none"))
+	# Damage over time keeps burning while it is phased.
+	boss.apply_burn(80.0, 3.0, null)
+	var hp_dot := boss.hp
+	boss._tick_status(0.55)
+	ok(boss.is_phased() and boss.hp < hp_dot - 1.0, "a burn keeps ticking while the boss is phased (%.0f)" % (hp_dot - boss.hp))
+	boss.burn_t = 0.0
+	boss.burn_dps = 0.0
+	# A blinking Trickster is still truly out of reach (only the Phantom's phase changed).
+	var tr := battle.spawn_enemy("trickster", battle.routes[1 % battle.routes.size()], 6.0, {"lateral": 0.0, "hp_mult": 4.0, "speed_mult": 0.01})
+	tr.untargetable_t = 0.3
+	ok(not tr.hittable() and tr.take_damage(50.0, {"kind": "throw"}) == 0.0, "a blinking Trickster still can't be hit")
+	tr.die({})
+	# REVEALED: solid again, +25 % damage taken for REVEAL_TIME seconds.
+	boss._tick_status(Enemy.PHASE_TIME)
+	ok(not boss.is_phased() and boss.is_revealed() and boss.targetable(), "the phase ends in a REVEALED window")
+	ok(_boss_decoys(boss).is_empty(), "its decoys shatter when it is REVEALED")
+	ok(absf(boss.revealed_t - Enemy.REVEAL_TIME) < 0.01, "REVEALED lasts %.0f s" % Enemy.REVEAL_TIME)
+	var hud: Node = battle.hud
+	await _wait(0.1)
+	ok(str(hud.get("boss_state")) == "revealed", "the boss bar shows the REVEALED state (%s)" % hud.get("boss_state"))
+	var revealed_hit := boss.take_damage(100.0, {"kind": "throw"})
+	boss._tick_status(Enemy.REVEAL_TIME + 0.05)
+	ok(not boss.is_revealed(), "the REVEALED window closes")
+	await _wait(0.1)
+	ok(str(hud.get("boss_state")) == "", "the boss bar goes back to normal")
+	var plain_hit := boss.take_damage(100.0, {"kind": "throw"})
+	ok(plain_hit > 0.0 and absf(revealed_hit / plain_hit - (1.0 + Enemy.REVEAL_BONUS)) < 0.02,
+		"REVEALED takes +%d %% damage (%.1f vs %.1f)" % [roundi(Enemy.REVEAL_BONUS * 100.0), revealed_hit, plain_hit])
+	# A throw already in flight lands on the boss when it phases (it used to re-aim at a decoy).
+	for dc in _boss_decoys(boss):
+		dc.die({})
+	var hp_throw := boss.hp
+	battle.projectiles.launch(boss.center() + Vector3(6, 2, 0), boss, 12.0, {"damage": 90.0, "accuracy": 200.0})
+	_phase_now(boss)
+	await _wait(1.0)
+	var decoys2 := _boss_decoys(boss)
+	ok(boss.hp < hp_throw - 1.0, "a throw in flight still lands when the boss phases (%.0f)" % (hp_throw - boss.hp))
+	ok(decoys2.size() == 3, "...and no decoy soaks it (%d of 3 decoys left)" % decoys2.size())
+	await _wait(1.0)
+	# A card aimed at the boss lands even if it phases during the wind-up.
+	boss.ability_t = 999.0
+	var hp_card := boss.hp
+	var decoy_cards := int(boss.boss_log.decoy_card_hits)
+	battle.effects.execute("power_throw", 1, {"enemy": boss, "point": boss.global_position, "valid": true})
+	_phase_now(boss)
+	for i in 30:
+		await _wait(0.1)
+		if boss.hp < hp_card - 1.0:
+			break
+	ok(boss.hp < hp_card - 1.0 and int(boss.boss_log.decoy_card_hits) == decoy_cards, "a Power Throw aimed at the boss lands while it is phased (%.0f), not on a decoy" % (hp_card - boss.hp))
+	# It never heals: no damage taken through a whole phase cycle means no health change.
+	var hp_flat := boss.hp
+	boss._tick_status(Enemy.PHASE_TIME + 0.05)
+	boss._tick_status(Enemy.REVEAL_TIME + 0.05)
+	ok(is_equal_approx(boss.hp, hp_flat) and not boss.is_phased() and not boss.is_revealed(), "the Phantom Captain never heals itself")
+	# Rallies: a Captain's aura can't shield a boss (it rallies runners, not bosses).
+	var cap := battle.spawn_enemy("captain", route, boss.d + 0.5, {"lateral": 0.0, "hp_mult": 4.0, "speed_mult": 0.01})
+	await _wait(0.15)
+	var r_hit := boss.take_damage(100.0, {"kind": "throw"})
+	ok(cap.alive and absf(r_hit - plain_hit) < 0.5, "a rallying Captain doesn't shield the boss (%.1f vs %.1f)" % [r_hit, plain_hit])
+	cap.die({})
+	# Phantom decoys fade after a few seconds at the latest.
+	_phase_now(boss)
+	var old := _boss_decoys(boss)
+	for dc in old:
+		dc._tick_behavior(Enemy.DECOY_LIFE + 0.1)
+	ok(old.all(func(dc: Enemy) -> bool: return not dc.alive), "Phantom decoys fade after %.0f s" % Enemy.DECOY_LIFE)
+	# The boss log for the balance tools.
+	ok(int(boss.boss_log.get("phases", 0)) >= 4 and float(boss.boss_log.get("dmg_phased", 0.0)) > 0.0, "the boss log counts phases and damage taken while phased")
+	_clear()
+	_hold_fire(false)
+	await _wait(0.1)
+
+
+## Boss health growth (Update 11): unchanged early, softened past the knee, capped deep in Endless.
+func test_update11_boss_hp() -> void:
+	section("update 11: boss health curve")
+	ok(is_equal_approx(WaveGenerator.boss_hp_mult(2.0), 1.0 + 1.0 * WaveGenerator.BOSS_HP_SHARE), "below the knee bosses keep their old share of the scaling")
+	var mono := true
+	var last := 0.0
+	for i in 400:
+		var v := WaveGenerator.boss_hp_mult(1.0 + i * 0.1)
+		mono = mono and v >= last - 0.0001
+		last = v
+	ok(mono and absf(last - WaveGenerator.BOSS_HP_CAP) < 0.001, "boss health never shrinks as innings rise and stops at %.1fx" % WaveGenerator.BOSS_HP_CAP)
+	# Siege bosses up to inning 6 are untouched on every difficulty; Endless is softened.
+	for diff in ["rookie", "standard", "veteran", "legend"]:
+		var cfg := _cfg("standard")
+		cfg.difficulty = diff
+		var r := RunState.create(cfg)
+		r.inning = 6
+		var m := WaveGenerator.hp_multiplier(r)
+		ok(is_equal_approx(WaveGenerator.boss_hp_mult(m), 1.0 + (m - 1.0) * WaveGenerator.BOSS_HP_SHARE), "Siege inning 6 boss health is unchanged on %s" % diff)
+	var en := RunState.create(_cfg("endless"))
+	en.inning = 6
+	var at6 := WaveGenerator.boss_hp_mult(WaveGenerator.hp_multiplier(en))
+	en.inning = 24
+	var raw24 := 1.0 + (WaveGenerator.hp_multiplier(en) - 1.0) * WaveGenerator.BOSS_HP_SHARE
+	var at24 := WaveGenerator.boss_hp_mult(WaveGenerator.hp_multiplier(en))
+	ok(at24 <= at6 * 2.2 and at24 < raw24 * 0.5, "an Endless inning-24 boss has at most 2.2x its inning-6 health (%.2fx vs %.2fx, was %.2fx)" % [at24, at6, raw24])
 
 
 # ---------------------------------------------------------------- Update 11: card levels 1-10 and Prestige (stream A)

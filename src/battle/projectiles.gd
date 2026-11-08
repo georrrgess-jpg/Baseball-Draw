@@ -438,7 +438,7 @@ func _arrive(b: Ball) -> void:
 		return
 	var t := b.target
 	var p := b.payload
-	if t == null or not is_instance_valid(t) or not t.targetable():
+	if t == null or not is_instance_valid(t) or not t.hittable():
 		# The runner is gone: re-aim at a nearby runner if possible.
 		var alt := battle.nearest_enemy(b.end, 3.5)
 		if alt and not p.get("retargeted", false):

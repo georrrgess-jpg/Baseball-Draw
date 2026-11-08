@@ -17,6 +17,14 @@ Extra game arguments go through --extra (write it as --extra=... because the val
   --extra="--card-level=3 --defender-level=5"     a "mid" profile: deck cards and team at those levels
   --extra=--boon-pick=random                      Dugout Draft picks at random (default: by ai_value)
   --extra=--boon=giant_killer                     always take that boon when it is offered
+Boss encounters (Update 11): `boss` plays only the boss wave of one inning (--start-inning, --start-wave=2)
+and stops once the boss is beaten or scores, logging what happened to it (the `[BOSS] {json}` line from
+src/battle/enemy.gd: health, time alive, time phased / revealed, damage taken by source, damage blocked
+while phased and damage its decoys soaked):
+  tools/balance/simulate.py boss --mode standard --inning 6 --difficulty standard,veteran,legend --games 12 --out build/balance/boss
+  tools/balance/simulate.py boss --mode endless --inning 6,15,24 --extra="--card-level=5 --defender-level=10" --out build/balance/boss
+  tools/balance/simulate.py bossreport build/balance/boss
+Full games (`run`) also keep every boss's log in "boss_logs".
 Modes: standard, quick, endless, boss_rush (Update 9), ranked, daily. Games with different --extra arguments
 are reported as separate rows (the extra arguments are shown next to the difficulty).
 The report adds per-card damage / outs per energy, the card's win rate and runs per inning against its
@@ -58,9 +66,11 @@ def play(mode, diff, seed, deck, speed, extra, timeout):
 	except subprocess.TimeoutExpired:
 		return None, "timeout", time.time() - t0
 	errors = [l for l in out.splitlines() if "SCRIPT ERROR" in l]
+	boss_logs = [json.loads(l[len("[BOSS] "):]) for l in out.splitlines() if l.startswith("[BOSS] ")]
 	for line in out.splitlines():
 		if line.startswith("[AUTO] STATS "):
 			d = json.loads(line[len("[AUTO] STATS "):])
+			d["boss_logs"] = boss_logs
 			d["wall_s"] = round(time.time() - t0, 1)
 			d["script_errors"] = len(errors)
 			if deck:
@@ -69,6 +79,106 @@ def play(mode, diff, seed, deck, speed, extra, timeout):
 				d["extra_tag"] = " ".join(extra)
 			return d, "", time.time() - t0
 	return None, (errors[0] if errors else "no STATS line"), time.time() - t0
+
+
+def play_boss(mode, diff, inning, seed, extra, timeout):
+	"""One boss encounter: starts at the boss wave of `inning` and returns the boss's [BOSS] log."""
+	args = ["godot", "--headless", "--path", ROOT, "--fixed-fps", "30", "--",
+		"--test-battle=" + mode, "--difficulty=" + diff, "--auto", "--seed=%d" % seed, "--start-inning=%d" % inning, "--start-wave=2",
+		"--profile=bossbal_%s_%s_%d_%d_%d" % (mode, diff, inning, seed, os.getpid()), "--fresh-profile"] + extra
+	t0 = time.time()
+	proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+	res, err = None, "no [BOSS] line"
+	try:
+		for line in proc.stdout:
+			if "SCRIPT ERROR" in line and err == "no [BOSS] line":
+				err = line.strip()
+			if line.startswith("[BOSS] "):
+				d = json.loads(line[len("[BOSS] "):])
+				if d.get("inning") == inning:
+					res = d
+					break
+			if time.time() - t0 > timeout:
+				err = "timeout"
+				break
+	finally:
+		proc.kill()
+		proc.wait()
+	if res is not None:
+		res.update({"mode": mode, "difficulty": diff, "seed": seed, "extra_tag": " ".join(extra), "wall_s": round(time.time() - t0, 1)})
+	return res, err
+
+
+def cmd_boss(a):
+	os.makedirs(a.out, exist_ok=True)
+	path = os.path.join(a.out, "bosses.jsonl")
+	extra = a.extra.split() if a.extra else []
+	done = set()
+	if os.path.exists(path):
+		for l in open(path):
+			d = json.loads(l)
+			done.add((d["mode"], d["difficulty"], d["inning"], d["seed"], d.get("extra_tag", "")))
+	jobs = []
+	for i in range(a.games):
+		for inning in [int(x) for x in a.inning.split(",")]:
+			for diff in a.difficulty.split(","):
+				if (a.mode, diff, inning, a.seed_base + i, " ".join(extra)) not in done:
+					jobs.append((diff, inning, a.seed_base + i))
+	print("%d boss encounters to play" % len(jobs), flush=True)
+	with cf.ThreadPoolExecutor(a.jobs) as ex, open(path, "a") as f:
+		futs = {ex.submit(play_boss, a.mode, d, inn, s, extra, a.timeout): (d, inn, s) for d, inn, s in jobs}
+		for fu in cf.as_completed(futs):
+			d, inn, s = futs[fu]
+			res, err = fu.result()
+			if res is None:
+				print("  %s/%s inning %d seed %d FAILED: %s" % (a.mode, d, inn, s, err), flush=True)
+				continue
+			f.write(json.dumps(res) + "\n")
+			f.flush()
+			print("  %s/%s inning %d seed %d: %s %s hp %.0f, %.0fs alive, %.0f %% phased, left %.0f %%" % (a.mode, d, inn, s, res["id"],
+				res["result"], res["max_hp"], res["alive_t"], 100.0 * res["phased_t"] / max(res["alive_t"], 0.1), 100.0 * res["hp_left"]), flush=True)
+
+
+def boss_summary(logs):
+	"""Per (mode, difficulty, inning, boss, extra): beat rate, time to kill, health, phased / revealed share,
+	team damage per second while it could be hit, damage blocked while phased and soaked by decoys."""
+	groups = collections.defaultdict(list)
+	for b in logs:
+		groups[(b["mode"], b["difficulty"], b["inning"], b["id"], b.get("extra_tag", ""))].append(b)
+	order = sorted(groups, key=lambda k: (k[0], k[4], k[3], DIFFS.index(k[1]) if k[1] in DIFFS else 9, k[2]))
+	out = ["| Mode | Difficulty | Inning | Boss | Profile | n | Beaten | Median time to kill (s) | Health | Untargetable % | Revealed % | Team DPS while hittable | "
+		"Blocked while phased (% of damage) | Decoy hits / soaked dmg | Card dmg share | Health left when not beaten |",
+		"|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+	for k in order:
+		bs = groups[k]
+		won = [b for b in bs if b["result"] == "out"]
+		lost = [b for b in bs if b["result"] != "out"]
+		alive = sum(b["alive_t"] for b in bs) or 1.0
+		phased = sum(b["phased_t"] for b in bs)
+		hittable = max(alive - phased, 1.0)
+		dmg = sum(b["dmg"] for b in bs)
+		out.append("| %s | %s | %d | %s | %s | %d | %s | %s | %.0f | %.1f %% | %.1f %% | %.0f | %.0f %% | %.1f / %.0f | %.0f %% | %s |" % (k[0], k[1], k[2], k[3],
+			k[4] or "fresh", len(bs), pct(len(won) / len(bs)), "%.0f" % median([b["alive_t"] for b in won]) if won else "-",
+			mean([b["max_hp"] for b in bs]), 100.0 * phased / alive, 100.0 * sum(b.get("revealed_t", 0.0) for b in bs) / alive,
+			dmg / hittable, 100.0 * sum(b["blocked"] for b in bs) / max(dmg, 1.0),
+			mean([b["decoy_hits"] for b in bs]), mean([b["decoy_dmg"] for b in bs]), 100.0 * sum(b["dmg_card"] for b in bs) / max(dmg, 1.0),
+			"%.0f %%" % (100.0 * median([b["hp_left"] for b in lost])) if lost else "-"))
+	return "\n".join(out) + "\n"
+
+
+def cmd_bossreport(a):
+	logs = []
+	for fo in a.folders:
+		p = os.path.join(fo, "bosses.jsonl") if os.path.isdir(fo) else fo
+		logs += [json.loads(l) for l in open(p) if l.strip()]
+	if not logs:
+		sys.exit("no boss logs found")
+	text = boss_summary(logs)
+	print(text)
+	if a.write:
+		folder = a.folders[0] if os.path.isdir(a.folders[0]) else os.path.dirname(a.folders[0])
+		with open(os.path.join(folder, "bosses.md"), "w") as f:
+			f.write("# Boss encounters\n\n%d encounters. Autopilot proxy: see tools/balance/simulate.py.\n\n" % len(logs) + text)
 
 
 def random_deck(seed):
@@ -200,6 +310,10 @@ def summarize(games):
 			lost_here = sum(1 for b, g in lst if not g["won"] and g["inning"] == b["inning"])
 			out.append("| %s | %s | %s | %d | %d | %d | %.1f | %d |" % (k[0], label(k), bid, len(lst), len(kills), scored, mean(kills), lost_here))
 
+	logs = [dict(b, extra_tag=g.get("extra_tag", "")) for g in games for b in g.get("boss_logs", [])]
+	if logs:
+		out.append("\n### Boss encounters (Update 11 boss log)\n")
+		out.append(boss_summary(logs))
 	out += boon_table(games)
 	out += card_table(games)
 	out += defender_table(games)
@@ -393,6 +507,21 @@ def main():
 	r.add_argument("--extra", default="", help="extra game arguments, e.g. --no-cards or \"--card-level=3 --defender-level=5\"")
 	r.add_argument("--out", default=os.path.join(ROOT, "build", "balance", "latest"))
 	r.set_defaults(fn=cmd_run)
+	b = sub.add_parser("boss", help="boss encounters only (the boss wave of --inning)")
+	b.add_argument("--mode", default="standard")
+	b.add_argument("--inning", default="6", help="comma-separated innings whose boss wave is played")
+	b.add_argument("--difficulty", default="standard")
+	b.add_argument("--games", type=int, default=12)
+	b.add_argument("--seed-base", type=int, default=1000)
+	b.add_argument("--jobs", type=int, default=2)
+	b.add_argument("--timeout", type=int, default=900)
+	b.add_argument("--extra", default="")
+	b.add_argument("--out", default=os.path.join(ROOT, "build", "balance", "boss"))
+	b.set_defaults(fn=cmd_boss)
+	br = sub.add_parser("bossreport")
+	br.add_argument("folders", nargs="+")
+	br.add_argument("--write", action="store_true", help="also write bosses.md into the first folder")
+	br.set_defaults(fn=cmd_bossreport)
 	s = sub.add_parser("report")
 	s.add_argument("folders", nargs="+")
 	s.set_defaults(fn=cmd_report)

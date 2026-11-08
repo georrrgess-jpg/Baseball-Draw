@@ -60,6 +60,27 @@ static func boss_hp_tuning(run: RunState, boss_id: String) -> float:
 	return mult
 
 
+## Boss health (Update 11). Bosses take BOSS_HP_SHARE of the run's health multiplier (they have
+## hand-tuned health), and above BOSS_HP_KNEE the growth slows to a gentle power curve with a hard
+## cap, so a deep Endless run or a Legend Siege can't stack boss health past what a team can chew
+## through before the boss walks home. Before Update 11 the share grew without limit: a Phantom
+## Captain at Endless inning 24 had 8x its base health (24,000) against a team that out-damages
+## inning-6 bosses only about 1.5x.
+const BOSS_HP_SHARE := 0.45
+const BOSS_HP_KNEE := 2.0
+const BOSS_HP_SOFT := 0.6       # above the knee: + BOSS_HP_SOFT * excess ^ BOSS_HP_EXP
+const BOSS_HP_EXP := 0.6
+const BOSS_HP_CAP := 3.6
+
+
+## The boss health multiplier for a run health multiplier `hp_mult` (WaveGenerator.hp_multiplier).
+static func boss_hp_mult(hp_mult: float) -> float:
+	var m := 1.0 + (hp_mult - 1.0) * BOSS_HP_SHARE
+	if m > BOSS_HP_KNEE:
+		m = BOSS_HP_KNEE + BOSS_HP_SOFT * pow(m - BOSS_HP_KNEE, BOSS_HP_EXP)
+	return minf(m, BOSS_HP_CAP)
+
+
 static func hp_multiplier(run: RunState) -> float:
 	var ei := effective_inning(run)
 	var mult := 1.0 + 0.24 * (ei - 1.0)
