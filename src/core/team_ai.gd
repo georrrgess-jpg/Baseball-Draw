@@ -10,7 +10,10 @@ extends RefCounted
 ##   damage     = damage × (1 + level, gear, traits, zone) / interval × (1 + speed bonuses)
 ##                × crits × accuracy × √(range / 11) × the trait's damage factor
 ##   crowd      = damage × extra runners hit (trait splash / chains / skips, Double-Play Duo ricochet)
-##   boss       = damage × the trait's boss factor × (1 + boss damage from the Clutch trait)
+##   boss       = damage × the trait's boss factor × (1 + boss damage from the Clutch / Armor Breaker traits)
+##                × (1 + armor ignored × 0.5; bosses and captains wear the most armor)
+##   level      = DefenderLevels.growth: +6 % per level to 10, then +3 % per level to 20 (Update 11);
+##                training traits from all five tiers (levels 3, 6, 9, 12, 16) count through the mods
 ##   control    = the trait's slow / stun / knock-back value, in damage units
 ##   team boost = auras that make everyone hit harder (Home Guard, Long Stretch, Pitch Framing)
 ##   zone       = the battle's position bonus, when the formation puts the defender in a slot of their role
@@ -60,6 +63,8 @@ const TRAITS := {
 }
 const CRIT_MULT := 1.75
 const CRIT_MULT_PRECISION := 2.5
+const PIERCE_DMG := 0.15           # armor ignored: worth this much damage on ordinary waves (armored runners)…
+const PIERCE_BOSS := 0.5           # …and this much against bosses and captains
 const SCALE := 4.0                 # damage units per score point
 const ZONE_BONUS := {"pitcher": {"damage": 0.20, "throw_speed": 0.15}, "catcher": {"damage": 0.15},
 	"infielder": {"attack_speed": 0.15}, "outfielder": {"range": 0.20}}
@@ -99,7 +104,7 @@ static func profile_context() -> Dictionary:
 
 ## Level-only modifiers (what Profile.defender_mods gives with no gear or traits).
 static func level_mods(level: int) -> Dictionary:
-	var g := DB.defender_level_growth * float(maxi(level, 1) - 1)
+	var g := DefenderLevels.growth(level)
 	return {"damage": g, "range": 0.0, "attack_speed": 0.0, "throw_speed": 0.0, "accuracy": 0.0,
 		"crit": 0.0, "special_power": g, "special_cooldown": 0.0, "boss_damage": 0.0, "stun_guard": 0}
 
@@ -233,12 +238,13 @@ static func rate(id: String, ctx: Dictionary, mode := "balanced", in_pos := true
 	var rng := float(st.range) * (1.0 + rng_b)
 	var acc := clampf(float(st.accuracy) + float(pm.get("accuracy", 0.0)), 0.0, 100.0)
 	var crit := clampf(0.05 + (acc - 50.0) * 0.002 + float(pm.get("crit", 0.0)), 0.0, 0.8)
-	var cm := CRIT_MULT_PRECISION if tid == "precision" else CRIT_MULT
+	var cm := (CRIT_MULT_PRECISION if tid == "precision" else CRIT_MULT) + float(pm.get("crit_damage", 0.0))
+	var pierce := clampf(float(pm.get("pierce", 0.0)), 0.0, 1.0)
 	var dps := damage / maxf(interval, 0.05) * (1.0 + crit * (cm - 1.0)) * (0.75 + 0.25 * acc / 100.0)
 	var reach := sqrt(rng / 11.0)
-	var eff := dps * reach * float(tr.get("dmg", 1.0))
+	var eff := dps * reach * float(tr.get("dmg", 1.0)) * (1.0 + PIERCE_DMG * pierce)
 	var crowd := dps * reach * (float(tr.get("crowd", 0.0)) + float(syn.get("ricochet", 0.0)))
-	var boss := dps * reach * float(tr.get("boss", 1.0)) * (1.0 + float(pm.get("boss_damage", 0.0)))
+	var boss := dps * reach * float(tr.get("boss", 1.0)) * (1.0 + float(pm.get("boss_damage", 0.0))) * (1.0 + PIERCE_BOSS * pierce)
 	var ctrl := float(tr.get("ctrl", 0.0)) * reach
 	var own := (eff * float(w.dmg) + crowd * float(w.crowd) + boss * float(w.boss) + ctrl * float(w.ctrl)) / SCALE
 	var sig := signature_value(id, ctx)

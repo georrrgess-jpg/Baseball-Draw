@@ -89,6 +89,8 @@ func _spawn_team() -> void:
 		c["Undershirt"] = DB.defender(id).accent
 		cm.setup(id, {"accent": DB.defender_accent(id), "colors": c, "cache_key": id, "base": spots[i][1]})
 		cm.position = spots[i][0]
+		# Update 11: All-Stars and Hall of Famers wear their nameplate over the lineup.
+		cm.show_honor_plate(DefenderLevels.honor_of(id), str(DB.defender(id).name), Profile.defender_level(id))
 		var to := Vector3(0.5, 0, 17.0) - cm.position
 		cm.rotation.y = atan2(to.x, to.z) + randf_range(-0.2, 0.2)
 		models.append(cm)

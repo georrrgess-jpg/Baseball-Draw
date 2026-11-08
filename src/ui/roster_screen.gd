@@ -11,6 +11,7 @@ extends Node3D
 const GRID_COLS := 3
 const PORTRAIT := 88.0
 const TILE_H := 168.0
+const ROAD_ROW := 10   # level road nodes per row (20 levels = two rows)
 
 var selected := "ace"
 var model: CharacterModel
@@ -111,6 +112,18 @@ func _ready() -> void:
 	selected = Profile.data.team[0]
 	if DB.defenders.has(Router.open_arg):   # opened on a defender (e.g. from the Shop)
 		selected = Router.open_arg
+	# Screenshot helper: `--team-levels=ace:20,jax:15` sets defender levels (in memory) first and picks
+	# the first option of every trait tier reached.
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--team-levels="):
+			for spec in a.split("=")[1].split(","):
+				var kv := spec.split(":")
+				if kv.size() == 2 and Profile.data.defenders.has(kv[0]):
+					Profile.data.defenders[kv[0]].level = clampi(int(kv[1]), 1, DB.defender_max_level)
+					Profile.data.defenders[kv[0]].xp = 0 if int(kv[1]) >= DB.defender_max_level else Profile.defender_xp_needed(int(kv[1])) / 3
+					for tier in DB.traits:
+						if Profile.chosen_trait(kv[0], int(tier.level)) == "":
+							Profile.choose_trait(kv[0], int(tier.level), str(tier.options[0].id))
 	_refresh()
 	_focus_tile.call_deferred(selected)
 	# Screenshot helper: `--team-demo=<id>` selects a defender, `--team-demo=<id>:sign` also opens
@@ -297,6 +310,7 @@ func _tile(id: String) -> Button:
 	var in_team: bool = id in Profile.data.team
 	var captain: bool = id == Profile.data.captain
 	var traits := Profile.pending_traits(id) if unlocked else 0
+	var honor := DefenderLevels.honor_of(id)
 	var b := Button.new()
 	b.name = "Tile_" + id
 	b.toggle_mode = true
@@ -313,8 +327,8 @@ func _tile(id: String) -> Button:
 	b.add_theme_stylebox_override("focus", UITheme.panel_style(Color(0, 0, 0, 0), Color(UITheme.GOLD, 0.95), 2, 10, 4))
 	var tip := "%s — %s, %s" % [d.name, d.title, DB.roles[d.role].name]
 	if unlocked:
-		tip += "\nLevel %d%s%s" % [Profile.defender_level(id), "  ·  captain" if captain else ("  ·  in the starting six" if in_team else ""),
-			"\nNew trait to choose!" if traits > 0 else ""]
+		tip += "\nLevel %d%s%s%s" % [Profile.defender_level(id), "  ·  captain" if captain else ("  ·  in the starting six" if in_team else ""),
+			("\n" + DefenderLevels.BADGE_NAMES[honor]) if honor != "" else "", "\nNew trait to choose!" if traits > 0 else ""]
 	else:
 		tip += "\nLocked: " + unlock_text(id)
 	b.tooltip_text = tip
@@ -332,7 +346,7 @@ func _tile(id: String) -> Button:
 	ph.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(ph)
-	var pr := MenuScreen.portrait_rect(id, PORTRAIT - 4, accent if unlocked else Color(0.3, 0.3, 0.36))
+	var pr := DefenderHonors.portrait(id, PORTRAIT - 4, accent if unlocked else Color(0.3, 0.3, 0.36), honor)
 	pr.position = Vector2(6, 0)
 	pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ph.add_child(pr)
@@ -342,15 +356,10 @@ func _tile(id: String) -> Button:
 		lk.position = Vector2(6 + (PORTRAIT - 4 - 34) * 0.5, (PORTRAIT - 4 - 34) * 0.5)
 		ph.add_child(lk)
 	else:
-		var lb := PanelContainer.new()
-		lb.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.05, 0.07, 0.12, 0.96), UITheme.GOLD, 2, 14, 0))
-		lb.custom_minimum_size = Vector2(30, 30)
-		lb.position = Vector2(PORTRAIT - 14, PORTRAIT - 30)
-		lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var ll := UITheme.label(str(Profile.defender_level(id)), 19, UITheme.GOLD, UITheme.font_header())
-		ll.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		ll.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lb.add_child(ll)
+		# Level badge: round for one digit, a pill for two (Update 11), in the honour's colours.
+		var dl := Profile.defender_level(id)
+		var lb := DefenderHonors.level_badge(dl, 30.0, 19, honor)
+		lb.position = Vector2(PORTRAIT + 16 - DefenderHonors.badge_width(dl, 30.0), PORTRAIT - 30)
 		ph.add_child(lb)
 	if captain:
 		var cb := UITheme.badge("C", UITheme.GOLD.darkened(0.25), UITheme.FS_MIN)
@@ -367,8 +376,15 @@ func _tile(id: String) -> Button:
 	v.add_child(nl)
 	var u: Dictionary = d.get("unlock", {})
 	if unlocked:
-		var sub := UITheme.label("NEW TRAIT" if traits > 0 else str(DB.roles[d.role].name), UITheme.FS_MIN,
-			UITheme.GREEN if traits > 0 else UITheme.OFFWHITE.darkened(0.15), UITheme.font_body_bold())
+		var sub_text := str(DB.roles[d.role].name)
+		if traits > 0:
+			sub_text = "NEW TRAIT"
+		elif honor != "":
+			sub_text = "★ " + str(DefenderLevels.BADGE_NAMES[honor]).to_upper()
+		var sub := UITheme.label(sub_text, UITheme.FS_MIN,
+			UITheme.GREEN if traits > 0 else DefenderHonors.color(honor, UITheme.OFFWHITE.darkened(0.15)), UITheme.font_body_bold())
+		sub.name = "SubLine"
+		sub.clip_text = true
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(sub)
@@ -432,7 +448,20 @@ func _fill_info() -> void:
 		var fa := UITheme.badge("FREE AGENT", UITheme.GOLD.darkened(0.3), UITheme.FS_MIN)
 		fa.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		_info.add_child(fa)
-	_info.add_child(UITheme.title(d.name.to_upper(), 72, accent.lightened(0.25)))
+	var honor := DefenderLevels.honor_of(selected)
+	if honor == "":
+		_info.add_child(UITheme.title(d.name.to_upper(), 72, accent.lightened(0.25)))
+	else:
+		# All-Star / Hall of Famer: the nameplate sits beside the name (Update 11).
+		var tr := HBoxContainer.new()
+		tr.name = "NameRow"
+		tr.add_theme_constant_override("separation", 16)
+		var tl := UITheme.title(d.name.to_upper(), 72, DefenderHonors.HOF_GOLD if honor == DefenderLevels.HALL_OF_FAME else accent.lightened(0.25))
+		tr.add_child(tl)
+		var plate := DefenderHonors.nameplate(selected, UITheme.FS_BODY, honor)
+		plate.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		tr.add_child(plate)
+		_info.add_child(tr)
 	_info.add_child(UITheme.label("%s — #%d %s" % [d.title, int(d.number), DB.roles[d.role].name], 24, UITheme.OFFWHITE, UITheme.font_header()))
 	var bio := UITheme.label(d.bio, 19, UITheme.MUTED)
 	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -621,20 +650,24 @@ func _sign_row(id: String) -> Control:
 	return row
 
 
-## Level badge, XP to the next level and the level road (a reward at every level).
+## Level badge, XP to the next level and the level road (a reward at every level). Update 11: 20 levels
+## in two rows of ten (the second row is the Hall of Fame road: trait tiers 4 and 5, All-Star at 15,
+## Hall of Famer at 20), a pill badge for two digits and the growth of the next level.
 func _level_section(id: String, lvl: int, accent: Color, unlocked: bool) -> Control:
 	var box := VBoxContainer.new()
+	box.name = "LevelSection"
 	box.add_theme_constant_override("separation", 6)
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
 	box.add_child(head)
-	var badge := PanelContainer.new()
-	badge.add_theme_stylebox_override("panel", UITheme.panel_style(Color(accent, 0.25), UITheme.GOLD, 2, 30, 6))
-	badge.custom_minimum_size = Vector2(64, 64)
-	var bl := UITheme.label(str(lvl), 38, UITheme.GOLD, UITheme.font_display())
-	bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	bl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.add_child(bl)
+	var honor := DefenderLevels.honor(lvl) if unlocked else ""
+	var badge := DefenderHonors.level_badge(lvl, 64.0, 38, honor)
+	if honor == "":
+		badge.add_theme_stylebox_override("panel", UITheme.panel_style(Color(accent, 0.25), UITheme.GOLD, 2, 30, 6))
+	badge.name = "LevelBadge"
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var bl: Label = badge.get_node("LevelText")
+	bl.add_theme_font_override("font", UITheme.font_display())
 	head.add_child(badge)
 	var xv := VBoxContainer.new()
 	xv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -642,53 +675,77 @@ func _level_section(id: String, lvl: int, accent: Color, unlocked: bool) -> Cont
 	var need := Profile.defender_xp_needed(lvl)
 	var have := Profile.defender_xp(id)
 	var maxed := lvl >= DB.defender_max_level
-	xv.add_child(UITheme.label("LEVEL %d%s" % [lvl, "  ·  MAX" if maxed else ""], 22, UITheme.OFFWHITE, UITheme.font_header()))
+	xv.add_child(UITheme.label("LEVEL %d / %d%s" % [lvl, DB.defender_max_level, "  ·  MAX" if maxed else ""], 22, UITheme.OFFWHITE, UITheme.font_header()))
 	var bar := ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, 16)
 	bar.show_percentage = false
-	bar.max_value = maxi(need, 1)
-	bar.value = need if maxed else have
-	bar.add_theme_stylebox_override("fill", UITheme.panel_style(accent.lightened(0.1), Color(0, 0, 0, 0), 0, 6, 0))
+	bar.max_value = 1 if maxed else maxi(need, 1)
+	bar.value = 1 if maxed else have
+	bar.add_theme_stylebox_override("fill", UITheme.panel_style(DefenderHonors.HOF_GOLD if maxed else accent.lightened(0.1), Color(0, 0, 0, 0), 0, 6, 0))
 	bar.add_theme_stylebox_override("background", UITheme.panel_style(Color(0, 0, 0, 0.45), Color(1, 1, 1, 0.12), 1, 6, 0))
 	xv.add_child(bar)
-	var growth := int(round(DB.defender_level_growth * 100.0 * (lvl - 1)))
-	xv.add_child(UITheme.label(("Max level reached" if maxed else "%d XP to level %d" % [need - have, lvl + 1]) + "   ·   Power +%d%%" % growth, 16, UITheme.MUTED, UITheme.font_body_bold()))
-	# Level road
-	var road := HBoxContainer.new()
-	road.add_theme_constant_override("separation", 4)
+	var growth := int(round(DefenderLevels.growth(lvl) * 100.0))
+	var line := "Hall of Famer — the top of the road" if maxed else "%s XP to level %d (+%d%%)" % [
+		UITheme.format_int(need - have), lvl + 1, int(round(DefenderLevels.growth_step(lvl + 1) * 100.0))]
+	xv.add_child(UITheme.label(line + "   ·   Power +%d%%" % growth, 16, UITheme.MUTED, UITheme.font_body_bold()))
+	# Level road: two rows of ten.
+	var road := VBoxContainer.new()
+	road.name = "LevelRoad"
+	road.add_theme_constant_override("separation", 2)
 	box.add_child(road)
 	_road_box = road
 	var next_text := ""
+	var row: HBoxContainer = null
 	for l in range(1, DB.defender_max_level + 1):
+		if row == null or (l - 1) % ROAD_ROW == 0:
+			row = HBoxContainer.new()
+			row.name = "RoadRow%d" % ((l - 1) / ROAD_ROW + 1)
+			row.add_theme_constant_override("separation", 4)
+			road.add_child(row)
 		var r := Profile.defender_level_reward(l)
 		var reached := l <= lvl
+		var milestone := str(r.get("badge", ""))
 		var node := VBoxContainer.new()
+		node.name = "RoadLevel%d" % l
 		node.add_theme_constant_override("separation", 1)
 		node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var circ := PanelContainer.new()
 		var fill := Color(accent, 0.85) if reached else Color(0.08, 0.1, 0.16, 0.95)
 		var border := UITheme.GOLD if l == lvl + 1 else (Color(accent.lightened(0.3), 0.9) if reached else Color(1, 1, 1, 0.15))
-		circ.add_theme_stylebox_override("panel", UITheme.panel_style(fill, border, 2, 16, 2))
-		circ.custom_minimum_size = Vector2(32, 32)
+		if milestone == DefenderLevels.HALL_OF_FAME:
+			fill = DefenderHonors.HOF_GOLD if reached else Color(DefenderHonors.HOF_DEEP, 0.55)
+			border = Color(1.0, 0.97, 0.82) if reached or l == lvl + 1 else Color(DefenderHonors.HOF_GOLD, 0.7)
+		elif milestone == DefenderLevels.ALL_STAR:
+			fill = DefenderHonors.STAR_BLUE if reached else Color(DefenderHonors.STAR_BLUE, 0.35)
+			border = DefenderHonors.STAR_RED if not l == lvl + 1 else UITheme.GOLD
+		var cs := UITheme.panel_style(fill, border, 2, 16, 0)
+		circ.add_theme_stylebox_override("panel", cs)
+		circ.custom_minimum_size = Vector2(34, 32)
 		circ.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		var nl := UITheme.label(str(l), 17, Color.WHITE if reached else UITheme.MUTED, UITheme.font_header())
+		var ink := Color.WHITE if reached else UITheme.MUTED
+		if milestone == DefenderLevels.HALL_OF_FAME and reached:
+			ink = DefenderHonors.HOF_INK
+		elif milestone != "" and not reached:
+			ink = UITheme.OFFWHITE
+		var nl := UITheme.label(str(l), 17 if l < 10 else 15, ink, UITheme.font_header())
 		nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		nl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		circ.add_child(nl)
 		node.add_child(circ)
-		var icon := "upgrade"
-		if r.has("coins"):
-			icon = "coin"
-		elif r.has("pack"):
-			icon = "deck"
-		elif r.has("trait"):
-			icon = "star"
 		if not r.is_empty():
-			var ic := UITheme.icon_rect(icon, 18, (UITheme.GOLD if not reached else Color(1, 1, 1, 0.45)))
+			var tint := Color(1, 1, 1, 0.45) if reached else UITheme.GOLD
+			if milestone == DefenderLevels.HALL_OF_FAME:
+				tint = DefenderHonors.HOF_GOLD if not reached else Color(DefenderHonors.HOF_GOLD, 0.6)
+			elif milestone == DefenderLevels.ALL_STAR:
+				tint = Color(0.62, 0.78, 1.0) if not reached else Color(0.62, 0.78, 1.0, 0.55)
+			var ic := UITheme.icon_rect(DefenderLevels.reward_icon(r), 18, tint)
 			ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			node.add_child(ic)
 		node.tooltip_text = "Level %d: %s" % [l, Profile.level_reward_text(r) if not r.is_empty() else "Starting level"]
+		if l > 1:
+			node.tooltip_text += "\nPower +%d%% (+%d%% this level)" % [int(round(DefenderLevels.growth(l) * 100.0)), int(round(DefenderLevels.growth_step(l) * 100.0))]
 		node.mouse_filter = Control.MOUSE_FILTER_PASS
-		road.add_child(node)
+		row.add_child(node)
 		if l == lvl + 1 and not r.is_empty():
 			next_text = "NEXT REWARD — Level %d: %s" % [l, Profile.level_reward_text(r)]
 	if next_text != "" and unlocked:
@@ -722,8 +779,31 @@ func _fill_team() -> void:
 	for id in Profile.data.team:
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 0)
-		vb.add_child(MenuScreen.portrait_rect(id, 58, DB.defender_accent(id)))
-		var l := UITheme.label(DB.defender(id).name + (" (C)" if id == Profile.data.captain else ""), 16, DB.defender_accent(id).lightened(0.3), UITheme.font_body_bold())
+		var honor := DefenderLevels.honor_of(id)
+		vb.name = "Strip_" + id
+		var pf := DefenderHonors.portrait(id, 58, DB.defender_accent(id), honor)
+		if honor == "":
+			vb.add_child(pf)
+		else:
+			# All-Star / Hall of Famer: the level badge on the portrait's corner (Update 11).
+			var holder := MarginContainer.new()
+			holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			holder.add_child(pf)
+			var overlay := Control.new()
+			overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			holder.add_child(overlay)
+			var dl := Profile.defender_level(id)
+			var lb := DefenderHonors.level_badge(dl, 22.0, 14, honor)
+			var bw := DefenderHonors.badge_width(dl, 22.0)
+			lb.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			lb.offset_left = -bw + 6
+			lb.offset_right = 6
+			lb.offset_top = -6
+			lb.offset_bottom = 16
+			overlay.add_child(lb)
+			vb.add_child(holder)
+		var l := UITheme.label(DB.defender(id).name + (" (C)" if id == Profile.data.captain else ""), 16,
+			DefenderHonors.HOF_GOLD if honor == DefenderLevels.HALL_OF_FAME else DB.defender_accent(id).lightened(0.3), UITheme.font_body_bold())
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(l)
 		_team_strip.add_child(vb)
@@ -941,7 +1021,7 @@ func _focus_named(n: String) -> void:
 func _mini_player(id: String, col: Color) -> Control:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 6)
-	hb.add_child(MenuScreen.portrait_rect(id, 44, DB.defender_accent(id)))
+	hb.add_child(DefenderHonors.portrait(id, 44, DB.defender_accent(id)))
 	var l := UITheme.label("%s  Lv %d" % [DB.defender(id).name, Profile.defender_level(id)], UITheme.FS_BODY, col, UITheme.font_header())
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hb.add_child(l)
@@ -959,7 +1039,7 @@ func _pick_card(id: String, r: Dictionary) -> Control:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 10)
 	p.add_child(hb)
-	hb.add_child(MenuScreen.portrait_rect(id, 64, accent))
+	hb.add_child(DefenderHonors.portrait(id, 64, accent))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 1)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
