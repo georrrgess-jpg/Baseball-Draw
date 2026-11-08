@@ -2,7 +2,7 @@ class_name CardCompare
 extends Control
 ## Card comparison overlay (Cards & Deck): two cards side by side. Each side shows the card, its rarity,
 ## role tags, level, mastery and its combos with the current deck; the middle table lists cost, cooldown,
-## target, level, mastery, Auto Build power and every stat at the current level (and the next level), with
+## target, level (with the Prestige stars), mastery, Auto Build power and every stat at the current level (and the next level), with
 ## the better value of each row highlighted. CHANGE under a side asks the host to pick a new card for it.
 ## Esc (via the host's overlay stack), CLOSE or a click on the dim background closes it.
 
@@ -214,7 +214,7 @@ func _table() -> Control:
 	rows.append(["Cooldown", _secs(float(ca.cooldown)), _secs(float(cb.cooldown)), float(ca.cooldown), float(cb.cooldown), -1, "", ""])
 	rows.append(["Target", str(TARGET_TEXT.get(str(ca.target), ca.target)), str(TARGET_TEXT.get(str(cb.target), cb.target)), 0.0, 0.0, 0, "", ""])
 	rows.append(["Rarity", str(ca.rarity).capitalize(), str(cb.rarity).capitalize(), 0.0, 0.0, 0, "", ""])
-	rows.append(["Level", "%d / %d" % [la, DB.card_max_level], "%d / %d" % [lb, DB.card_max_level], float(la), float(lb), 1, "", ""])
+	rows.append(["Level", _level_text(la), _level_text(lb), float(la), float(lb), 1, "", ""])
 	var ma := CardMastery.stars(a)
 	var mb := CardMastery.stars(b)
 	rows.append(["Mastery", "★".repeat(ma) + "☆".repeat(CardMastery.MAX_STARS - ma), "★".repeat(mb) + "☆".repeat(CardMastery.MAX_STARS - mb), float(ma), float(mb), 1, "", ""])
@@ -330,6 +330,12 @@ func _next_power(cid: String, lvl: int) -> String:
 	if lvl >= DB.card_max_level:
 		return ""
 	return "%.1f" % float(DeckAI.analyze(cid, lvl + 1).get("power", 0.0))
+
+
+## "4 / 10", or "8 / 10 · ★3" for a Prestige card (Update 11).
+static func _level_text(lvl: int) -> String:
+	var p := DB.prestige_stars(lvl)
+	return "%d / %d" % [lvl, DB.card_max_level] + ("  ·  ★%d" % p if p > 0 else "")
 
 
 static func _secs(v: float) -> String:

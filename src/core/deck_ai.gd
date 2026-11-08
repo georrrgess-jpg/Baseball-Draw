@@ -8,7 +8,7 @@ extends RefCounted
 ##   deck score = Σ card score + combos + role coverage + energy curve
 ##   card score = power × mode weight of its role × 0.75 if linked and the defender is absent
 ##                + signature bonus (linked defender on the team, more for the captain)
-##                + small level / mastery tie-breakers
+##                + small level / mastery tie-breakers (Update 11: +0.25 per level to 5, +0.1 per Prestige level)
 ##   power      = what the card does at its current level, per resource spent. For each kind of value
 ##                (damage, control, defense, buff, economy) the card's value is divided by
 ##                (cost + cooldown / 8): 8 s of cooldown counts like one energy. Each kind is scaled so the
@@ -109,7 +109,7 @@ static func analyze(cid: String, level := 1) -> Dictionary:
 	for i in parts.size():
 		pp += float(parts[i]) * (1.0 if i == 0 else 0.4)
 	pp = minf(pp, 15.0)
-	var growth := 1.0 + DB.card_growth_rate * float(maxi(level, 1) - 1)
+	var growth := DB.card_level_mult(level)   # Update 11: the gentler Prestige growth above level 5
 	var rarity_power := (4.0 + 1.5 * DB.rarity_index(str(c.get("rarity", "common")))) * growth
 	var power := rarity_power if pp <= 0.01 else 0.75 * pp + 0.25 * rarity_power
 	# Measured calibration (simulator, Update 8): `ai_weight` in cards.json corrects cards whose
@@ -285,8 +285,16 @@ static func card_score(a: Dictionary, mode: String, ctx: Dictionary) -> float:
 			lv += float(dl[d])
 		if not dl.is_empty():
 			s += 0.15 * (lv / dl.size() - 1.0)
-	s += 0.25 * float(int(a.level) - 1) + 0.15 * float(ctx.get("mastery", {}).get(a.id, 0))
+	s += level_tiebreak(int(a.level)) + 0.15 * float(ctx.get("mastery", {}).get(a.id, 0))
 	return s
+
+
+## The small level tie-breaker in a card's score: +0.25 per level up to 5, then +0.1 per Prestige level, so a
+## Prestige card is preferred over an equal card but the tie-breaker never outweighs the card's real power
+## (which already grows with the level through the parameters).
+static func level_tiebreak(level: int) -> float:
+	var l := maxi(level, 1)
+	return 0.25 * float(mini(l, DB.PRESTIGE_LEVEL) - 1) + 0.1 * float(maxi(0, l - DB.PRESTIGE_LEVEL))
 
 
 static func _count(info: Dictionary, deck: Array) -> Dictionary:
@@ -458,11 +466,11 @@ static func _explain(deck: Array, info: Dictionary, mode: String, ctx: Dictionar
 				var other: String = cb.cards[0] if cb.cards[1] == cid else cb.cards[1]
 				r.append(["COMBO", "Combo with %s: %s" % [DB.card(other).name, cb.text]])
 		if ranked.find(cid) < 3:
-			r.append(["POWER %.1f" % float(a.power), "One of your strongest cards (power %.1f at level %d)." % [float(a.power), int(a.level)]])
+			r.append(["POWER %.1f" % float(a.power), "One of your strongest cards (power %.1f at %s)." % [float(a.power), _lvl_text(int(a.level))]])
 		if int(a.cost) <= 2:
 			r.append(["CHEAP", "Costs %d: keeps the curve low and the hand moving." % int(a.cost)])
 		if r.is_empty():
-			r.append([ROLE_NAMES.get(a.role, "Card").to_upper(), "%s · power %.1f at level %d." % [ROLE_NAMES.get(a.role, "Card"), float(a.power), int(a.level)]])
+			r.append([ROLE_NAMES.get(a.role, "Card").to_upper(), "%s · power %.1f at %s." % [ROLE_NAMES.get(a.role, "Card"), float(a.power), _lvl_text(int(a.level))]])
 		reasons[cid] = r
 	# Summary line.
 	var covered: Array = []
@@ -495,6 +503,10 @@ static func _explain(deck: Array, info: Dictionary, mode: String, ctx: Dictionar
 		summary += " · you own only %d cards" % deck.size()
 	return {"deck": deck, "mode": mode, "summary": summary, "reasons": reasons, "missing": missing, "avg_cost": avg,
 		"combos": combos, "signatures": sigs, "score": float(sc.total), "parts": sc, "counts": n}
+
+
+static func _lvl_text(level: int) -> String:
+	return "Prestige ★%d" % DB.prestige_stars(level) if DB.prestige_stars(level) > 0 else "level %d" % level
 
 
 ## Short role tags for a card ("AoE", "Boss" ...) at a level, for the compare panel and tooltips.

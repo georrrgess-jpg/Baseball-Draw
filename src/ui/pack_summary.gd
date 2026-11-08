@@ -53,6 +53,7 @@ func setup(result: Dictionary, star_tex: Texture2D) -> void:
 		e.overflow += int(c.get("overflow", 0))
 	for e in entries:
 		e["upgrade"] = Profile.can_upgrade_card(e.id)
+		e["prestige_ready"] = Profile.can_prestige_card(e.id)   # Update 11: the next step is the Prestige step
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var ra := DB.rarity_index(a.rarity)
 		var rb := DB.rarity_index(b.rarity)
@@ -172,17 +173,21 @@ func _build_slot(e: Dictionary) -> void:
 	var copies_text := "+%d cop%s" % [int(e.copies), "y" if int(e.copies) == 1 else "ies"]
 	if int(e.copies) == 0 and int(e.overflow) > 0:
 		copies_text = "+%s coins" % UITheme.format_int(int(e.overflow))
+	elif int(e.overflow) > 0:   # Update 11: some copies kept, the ones the card can't use became coins
+		copies_text += " +%s coins" % UITheme.format_int(int(e.overflow))
+	var ready_text := "PRESTIGE READY" if bool(e.get("prestige_ready", false)) else "UPGRADE READY"
+	var ready_col := CardView.PRESTIGE_GOLD if bool(e.get("prestige_ready", false)) else UITheme.GREEN
 	if e.new:
 		main_text = "NEW!"
 		main_col = UITheme.GOLD
 		if e.upgrade:
-			sub_text = "UPGRADE READY"
-			sub_col = UITheme.GREEN
+			sub_text = ready_text
+			sub_col = ready_col
 		elif int(e.copies) > 0:
 			sub_text = copies_text
 	elif e.upgrade:
-		main_text = "UPGRADE READY"
-		main_col = UITheme.GREEN
+		main_text = ready_text
+		main_col = ready_col
 		sub_text = copies_text
 	else:
 		main_text = copies_text.to_upper()
@@ -319,9 +324,7 @@ func flip(e: Dictionary, fast: bool) -> void:
 	var r := DB.rarity_index(e.rarity)
 	var c := DB.card(e.id)
 	# The grid cards are small: hovering a revealed card shows its full text.
-	var details := str(c.get("details", ""))
-	for key in c.get("params", {}).keys():
-		details = details.replace("{%s}" % key, str(int(round(DB.card_param(e.id, key, Profile.card_level(e.id))))))
+	var details := DB.card_details(e.id, Profile.card_level(e.id))
 	(e.view as CardView).tooltip_text = "%s — %s\n%s\n\n%s" % [c.name, str(c.rarity).capitalize(), DB.card_text(e.id, Profile.card_level(e.id)), details]
 	var h: Control = e.holder
 	var rays: Rays = e.rays

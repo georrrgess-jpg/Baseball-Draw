@@ -60,6 +60,7 @@ func _run() -> void:
 	await test_battle_systems()
 	await test_u9_e2_screens()
 	test_update9_economy()
+	test_update11_cards()
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -3063,7 +3064,9 @@ func _test_u9_shop() -> void:
 	ok(Shop.deal_copies("power_throw") == 2, "a level 1 common needs 2 copies for level 2")
 	Profile.data.cards.power_throw.level = 4
 	ok(Shop.deal_copies("power_throw") == 4, "a level 4 common deal stops at 4 copies")
-	Profile.data.cards.power_throw.copies = 13
+	# Update 11: max level is 10 (Prestige ★5); one copy short of the last level-up.
+	Profile.data.cards.power_throw.level = DB.card_max_level - 1
+	Profile.data.cards.power_throw.copies = DB.upgrade_copies("common", DB.card_max_level - 1) - 1
 	ok(Shop.deal_copies("power_throw") == 1 and Shop.copies_to_max("power_throw") == 1, "a deal never exceeds the copies still needed for max level")
 	Profile.data.cards.power_throw.level = DB.card_max_level
 	ok(Shop.copies_to_max("power_throw") == 0, "a max-level card needs no copies")
@@ -3823,3 +3826,182 @@ func test_routes() -> void:
 			ok(wall_ok, "%s/%s stays clear of the outfield wall" % [lid, r.id])
 			ok(gate_ok, "%s/%s never passes another gate" % [lid, r.id])
 	ok(Battle.GATE_LEAD >= 0.5, "runners wait for the gate doors to open before stepping through")
+
+
+# ---------------------------------------------------------------- Update 11: card levels 1-10 and Prestige (stream A)
+
+func test_update11_cards() -> void:
+	section("Update 11: card levels 1-10 and Prestige")
+	Profile.reset_profile()
+	# Data: max level 10, Prestige at 5, a cost for every step.
+	ok(DB.card_max_level == 10 and DB.PRESTIGE_LEVEL == 5, "cards go to level 10, Prestige at level 5 (%d / %d)" % [DB.card_max_level, DB.PRESTIGE_LEVEL])
+	ok(absf(DB.card_growth_rate - 0.12) < 0.0001 and absf(DB.card_prestige_growth - 0.05) < 0.0001, "growth +12 % to level 5, +5 % per Prestige level")
+	var old_copies := {"common": [0, 2, 4, 8, 14], "uncommon": [0, 2, 3, 6, 10], "rare": [0, 1, 3, 5, 8], "epic": [0, 1, 2, 4, 6], "legendary": [0, 1, 2, 3, 4]}
+	var old_coins := [0, 100, 250, 600, 1200]
+	for r in DB.RARITY_ORDER:
+		var t: Array = DB.COPIES_TO_UPGRADE[r]
+		ok(t.size() == DB.card_max_level, "%s copy table covers levels 1-10" % r)
+		var same := true
+		for l in range(1, DB.PRESTIGE_LEVEL):
+			same = same and DB.upgrade_copies(r, l) == int(old_copies[r][l]) and DB.upgrade_coins(r, l) == int(old_coins[l])
+		ok(same, "%s: levels 1-5 cost what they always did" % r)
+		ok(DB.upgrade_copies(r, 5) >= DB.upgrade_copies(r, 4) and DB.upgrade_coins(r, 5) >= 3 * DB.upgrade_coins(r, 4),
+			"%s: the Prestige step is the steepest step (%d copies, %d coins)" % [r, DB.upgrade_copies(r, 5), DB.upgrade_coins(r, 5)])
+		var rising := true
+		for l in range(6, DB.card_max_level - 1):
+			rising = rising and DB.upgrade_copies(r, l + 1) >= DB.upgrade_copies(r, l) and DB.upgrade_coins(r, l + 1) > DB.upgrade_coins(r, l)
+		ok(rising, "%s: Prestige levels 7-10 cost more each step" % r)
+		ok(DB.upgrade_copies(r, 10) == 0 and DB.upgrade_coins(r, 10) == 0, "%s: nothing past level 10" % r)
+	for l in range(5, 10):
+		ok(DB.upgrade_coins("legendary", l) > DB.upgrade_coins("common", l), "Prestige coins rise with rarity (step %d)" % l)
+	ok(DB.copies_to_max("common", 1) == 2 + 4 + 8 + 14 + 18 + 14 + 16 + 20 + 24, "copies from level 1 to 10 add up (%d)" % DB.copies_to_max("common", 1))
+	# Level math: 1-5 unchanged, then +5 % of the base per level.
+	var math_ok := true
+	for l in range(1, 6):
+		math_ok = math_ok and absf(DB.card_level_mult(l) - (1.0 + 0.12 * (l - 1))) < 0.0001
+	ok(math_ok, "levels 1-5 keep their power (×1.00 ... ×1.48)")
+	ok(absf(DB.card_level_mult(6) - 1.53) < 0.0001 and absf(DB.card_level_mult(10) - 1.73) < 0.0001, "level 6 ×1.53, level 10 ×1.73")
+	ok(absf(DB.card_level_mult(12) - 1.83) < 0.0001, "in-game bonus levels past 10 keep the gentle growth (×%.2f at 12)" % DB.card_level_mult(12))
+	ok(absf(DB.card_param("power_throw", "damage", 10) - 260.0 * 1.73) < 0.01 and absf(DB.card_param("power_throw", "knockback", 10) - 3.0) < 0.001,
+		"level 10 scales growth params only (damage %.0f)" % DB.card_param("power_throw", "damage", 10))
+	ok(DB.prestige_stars(5) == 0 and DB.prestige_stars(6) == 1 and DB.prestige_stars(10) == 5, "Prestige stars: level 6 = ★1, level 10 = ★5")
+	ok(DB.is_prestige_step(5) and not DB.is_prestige_step(4) and not DB.is_prestige_step(6), "the step from 5 is the Prestige step")
+	ok(DB.level_label(4) == "LV 4" and DB.level_label(8) == "P★3" and DB.level_label(10, true) == "PRESTIGE ★5", "level labels")
+	# Card text placeholders scale to level 10.
+	var text_ok := true
+	for cid in DB.card_order:
+		for l in [1, 5, 6, 10]:
+			if "{" in DB.card_text(cid, l) or "{" in DB.card_details(cid, l):
+				text_ok = false
+				print("  unresolved text: %s at %d" % [cid, l])
+	ok(text_ok, "every card's text resolves at levels 1, 5, 6 and 10")
+	ok(DB.card_text("curveball", 1).contains("+25%") and DB.card_text("curveball", 10).contains("+43%"), "{vulnerability%%} grows with the level (%s)" % DB.card_text("curveball", 10))
+	ok(DB.card_text("diamond_aura", 10).contains("+69%"), "Diamond Aura's bonus shows its level-10 value (%s)" % DB.card_text("diamond_aura", 10))
+	ok(DB.card_text("power_throw", 10).contains("450"), "Power Throw at level 10 says 450 (%s)" % DB.card_text("power_throw", 10))
+
+	# The Prestige gate.
+	var cid := "heat_wave"   # rare, a starter card
+	Profile.data.cards[cid].level = 4
+	Profile.data.cards[cid].copies = 0
+	Profile.data.coins = 0
+	ok(not bool(Profile.upgrade_cost(cid).prestige) and not Profile.can_prestige_card(cid), "level 4: the next step is an ordinary level")
+	Profile.data.cards[cid].level = 5
+	var cost := Profile.upgrade_cost(cid)
+	ok(bool(cost.prestige) and int(cost.copies) == DB.upgrade_copies("rare", 5) and int(cost.coins) == DB.upgrade_coins("rare", 5), "level 5: the next step is PRESTIGE (%s)" % cost)
+	ok(not Profile.can_prestige_card(cid) and not Profile.upgrade_card(cid), "no Prestige without the copies and coins")
+	Profile.data.cards[cid].copies = int(cost.copies)
+	Profile.data.coins = int(cost.coins) - 1
+	ok(not Profile.upgrade_card(cid) and Profile.card_level(cid) == 5, "one coin short: still level 5")
+	Profile.data.coins = int(cost.coins) + 10
+	ok(Profile.can_prestige_card(cid) and Profile.upgrade_card(cid), "Prestige with enough copies and coins")
+	ok(Profile.card_level(cid) == 6 and Profile.card_prestige(cid) == 1 and Profile.is_card_prestiged(cid), "the card is now Prestige ★1 (level 6)")
+	ok(int(Profile.data.coins) == 10 and Profile.card_copies(cid) == 0, "Prestige spent the copies and coins")
+	ok(Profile.stat("cards_prestiged") == 1.0 and Profile.stat("max_card_prestige") == 1.0, "Prestige is counted in the stats")
+	ok(not bool(Profile.upgrade_cost(cid).prestige), "after Prestige, ★1 -> ★2 is an ordinary level-up")
+	Profile.data.cards[cid].level = 10
+	ok(Profile.upgrade_cost(cid).is_empty() and not Profile.upgrade_card(cid), "level 10 is the max")
+	ok(Profile.prestiged_count() == 1, "one Prestige card in the collection")
+
+	# Upgrade All: the Prestige step only with the opt-in.
+	Profile.reset_profile()
+	Profile.data.cards.power_throw.level = 5
+	Profile.data.cards.power_throw.copies = DB.upgrade_copies("common", 5)
+	Profile.data.cards.curveball.level = 7
+	Profile.data.cards.curveball.copies = DB.upgrade_copies("common", 7)
+	Profile.data.coins = 50000
+	var plan := Profile.upgrade_all_plan()
+	var ids: Array = plan.cards.map(func(e: Dictionary) -> String: return e.id)
+	ok(not "power_throw" in ids and "power_throw" in plan.prestige_ready and plan.prestige.is_empty(), "Upgrade All leaves the Prestige step out by default")
+	ok("curveball" in ids, "Prestige levels of a card already prestiged are ordinary Upgrade All steps")
+	var plan2 := Profile.upgrade_all_plan(false, true)
+	ok("power_throw" in plan2.prestige and plan2.cards.any(func(e: Dictionary) -> bool: return e.id == "power_throw" and bool(e.prestige) and int(e.to) == 6),
+		"with Include Prestige the plan prestiges it (LV 5 -> ★1)")
+	ok(int(plan2.coins) == int(plan.coins) + DB.upgrade_coins("common", 5), "the opt-in adds exactly the Prestige coins")
+	var done := Profile.upgrade_all(false)
+	ok(Profile.card_level("power_throw") == 5 and Profile.card_level("curveball") == 8 and done.size() == plan.cards.size(), "Upgrade All without opt-in applies the plan, no Prestige")
+	done = Profile.upgrade_all(true)
+	ok(Profile.card_level("power_throw") == 6 and done.any(func(e: Dictionary) -> bool: return bool(e.prestige)), "Upgrade All with opt-in prestiges")
+
+	# Extra copies: coins only for copies the card can't use any more.
+	Profile.reset_profile()
+	var rc := "heat_wave"
+	var rar := "rare"
+	Profile.data.cards[rc].level = 5
+	Profile.data.cards[rc].copies = 0
+	var coins0 := int(Profile.data.coins)
+	Profile.add_pack("signature", "test", rc)
+	var res := Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(res.overflow_coins) == 0 and Profile.card_copies(rc) == 1, "a level-5 card keeps its new copies for Prestige")
+	Profile.data.cards[rc].copies = DB.copies_to_max(rar, 5)
+	Profile.add_pack("signature", "test", rc)
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(res.overflow_coins) == Profile.overflow_rate(rar) and Profile.card_copies(rc) == DB.copies_to_max(rar, 5),
+		"copies beyond what the card can still use (%d) become coins" % DB.copies_to_max(rar, 5))
+	ok(int(Profile.data.coins) == coins0 + Profile.overflow_rate(rar), "the extra copy's coins reach the wallet")
+	Profile.data.cards[rc].level = 10
+	Profile.data.cards[rc].copies = 0
+	Profile.add_pack("signature", "test", rc)
+	res = Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(int(res.overflow_coins) == Profile.overflow_rate(rar) and Profile.card_copies(rc) == 0, "at level 10 every copy becomes coins")
+	# A common pull (2 copies) with room for one: split into a copy and coins.
+	var cc := "power_throw"
+	Profile.data.cards[cc].level = 9
+	Profile.data.cards[cc].copies = DB.upgrade_copies("common", 9) - 1
+	ok(Profile.spare_copies(cc, 2) == 1 and Profile.spare_copies(cc, 1) == 0, "spare copies: room for one of two")
+	Profile.data.cards[cc].level = 3
+	Profile.data.cards[cc].copies = 40
+	ok(Profile.spare_copies(cc, 2) == 0, "a level-3 card with 40 copies can still use more (%d to max)" % DB.copies_to_max("common", 3))
+
+	# Old saves: levels 1-5 and copies load unchanged; out-of-range levels are repaired.
+	Profile.reset_profile()
+	var old := Profile.default_profile()
+	old.cards.power_throw = {"owned": true, "level": 5, "copies": 9, "plays": 12}
+	old.cards.curveball = {"owned": true, "level": 3, "copies": 4, "plays": 0}
+	old.cards.heat_wave = {"owned": true, "level": 14, "copies": 0, "plays": 0}
+	old.cards.lockdown = {"owned": true, "level": 0, "copies": 2}
+	old.stats = {"max_card_level": 5.0}
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Profile.load_status == "ok", "an Update 10 save loads (%s)" % Profile.load_status)
+	ok(Profile.card_level("power_throw") == 5 and Profile.card_copies("power_throw") == 9 and Profile.card_plays("power_throw") == 12,
+		"a level-5 card keeps its level, copies and plays")
+	ok(Profile.card_level("curveball") == 3 and Profile.card_copies("curveball") == 4, "a level-3 card is unchanged")
+	ok(Profile.card_level("heat_wave") == 10 and Profile.card_level("lockdown") == 1, "levels outside 1-10 are repaired")
+	ok(not Profile.is_card_prestiged("power_throw") and bool(Profile.upgrade_cost("power_throw").prestige), "an old level-5 card is ready for its Prestige step")
+	Profile.data.cards.power_throw.level = 8
+	Profile.save_now()
+	Profile.load_profile()
+	ok(Profile.card_level("power_throw") == 8 and Profile.card_prestige("power_throw") == 3, "Prestige levels round-trip through a save")
+
+	# Auto Build, mastery and sets know about levels 6-10.
+	var p5 := float(DeckAI.analyze("power_throw", 5).power)
+	var p10 := float(DeckAI.analyze("power_throw", 10).power)
+	ok(p10 > p5 and p10 < p5 * 1.25, "Auto Build power grows gently past level 5 (%.2f -> %.2f)" % [p5, p10])
+	ok(absf(DeckAI.level_tiebreak(5) - 1.0) < 0.001 and absf(DeckAI.level_tiebreak(10) - 1.5) < 0.001, "the level tie-breaker: +0.25 per level, +0.1 per Prestige level")
+	Profile.data.cards.power_throw.plays = CardMastery.THRESHOLDS[2]
+	Profile.data.cards.power_throw.level = 10
+	ok(CardMastery.is_hall_of_fame("power_throw") and CardMastery.hall_of_fame_count() == 1, "mastered + Prestige ★5 = Hall of Fame")
+	ok(CardMastery.status_with_prestige("power_throw").contains("HALL OF FAME"), "the mastery status names it")
+	Profile.data.cards.power_throw.level = 7
+	ok(CardMastery.status_with_prestige("power_throw").contains("Prestige ★2") and not CardMastery.is_hall_of_fame("power_throw"), "a ★2 card shows its Prestige in the mastery status")
+	Profile.data.cards.heat_wave.level = 1
+	var pp := CollectionSets.prestige_progress("offense")
+	ok(int(pp.prestiged) == 1 and int(pp.maxed) == 0 and int(pp.total) == CollectionSets.cards_in("offense").size(), "sets count their Prestige cards (%s)" % pp)
+
+	# CardView: the Prestige look follows the real Prestige, never more than the view's level.
+	var cv := CardView.new("power_throw", 7)
+	cv.set_card("power_throw", 7)
+	ok(cv.prestige_stars() == 2, "a ★2 card shows ★2")
+	cv.set_card("power_throw", 5)
+	ok(cv.prestige_stars() == 0, "shown at level 5 it has no crest")
+	Profile.data.cards.curveball.level = 5
+	cv.set_card("curveball", 7)
+	ok(cv.prestige_stars() == 0, "a level-5 card raised to 7 in a game is not a Prestige card")
+	cv.prestige = 4
+	ok(cv.prestige_stars() == 4, "the override shows any Prestige level")
+	cv.owned = false
+	ok(cv.prestige_stars() == 0, "unowned cards are never Prestige cards")
+	cv.free()
+	Profile.reset_profile()

@@ -3,11 +3,17 @@ extends Control
 ## Visual ability card: metallic rarity frame, category banner, energy gem, illustration,
 ## type line, description, level pips, cooldown sweep and playable/selected states.
 ## Rare and better cards get an animated foil finish; `face_down` draws the card back.
+## Update 11: Prestige cards (levels 6-10) get an iridescent holo frame (card_prestige.gdshader), a gold
+## Prestige crest with the star count over the rarity gem and gold stars instead of level pips. The crest
+## and stars are drawn by a child overlay so the frame shader doesn't tint them.
 
 signal clicked(card: CardView)
 signal hovered(card: CardView, on: bool)
 
 const FOIL_SHADER := preload("res://assets/shaders/card_foil.gdshader")
+const PRESTIGE_SHADER := preload("res://assets/shaders/card_prestige.gdshader")
+const PRESTIGE_GOLD := Color("#FFD66B")
+const PRESTIGE_GOLD_DARK := Color("#8A5A0E")
 const PANEL_TOP := Color("#1B2740")
 const PANEL_BOTTOM := Color("#0A0F1B")
 
@@ -36,6 +42,15 @@ var face_down := false:
 			_update_foil()
 		queue_redraw()
 var foil := true
+## Prestige stars to show (0-5). -1 (the default) = automatic: the owned card's real Prestige, but never
+## more than this view's level allows (so a level-5 card raised in a game by a boon doesn't look prestiged,
+## and a preview at a lower level shows no crest).
+var prestige := -1:
+	set(v):
+		prestige = v
+		if is_inside_tree():
+			_update_foil()
+		queue_redraw()
 ## Combo hint in the battle hand (set by the HUD; drawing only): 1 = this card combos with another
 ## card in hand (a soft green halo and a link badge); `combo_partner` = it combos with the
 ## selected card (a brighter, pulsing halo).
@@ -49,7 +64,15 @@ var _lift := 0.0             # eased hover amount 0..1
 var _sel := 0.0              # eased selection amount 0..1
 var _shake := 0.0            # refusal shake 0..1
 var _t := 0.0
+## Prestige ceremony: keep the crest off while it drops in from above.
+var hide_crest := false:
+	set(v):
+		hide_crest = v
+		if _overlay:
+			_overlay.queue_redraw()
 var _foil_mat: ShaderMaterial
+var _prestige_mat: ShaderMaterial
+var _overlay: Control         # crest and stars of a Prestige card (drawn without the frame shader)
 
 
 func _init(id: String = "", lvl: int = 1) -> void:
@@ -66,6 +89,9 @@ func _init(id: String = "", lvl: int = 1) -> void:
 		hovered.emit(self, false)
 		queue_redraw())
 	resized.connect(_update_foil)
+	draw.connect(func() -> void:
+		if _overlay:
+			_overlay.queue_redraw())
 
 
 func set_card(id: String, lvl: int = 1) -> void:
@@ -83,9 +109,35 @@ func _ready() -> void:
 	_update_foil()
 
 
+## Prestige stars this view shows (0 = not a Prestige card).
+func prestige_stars() -> int:
+	if card_id == "" or face_down or not owned:
+		return 0
+	if prestige >= 0:
+		return clampi(prestige, 0, DB.card_max_level - DB.PRESTIGE_LEVEL)
+	if not Profile.is_card_owned(card_id):
+		return 0
+	return mini(Profile.card_prestige(card_id), DB.prestige_stars(level))
+
+
 ## Foil only on owned, face-up Rare+ cards; one material per card so each sweeps on its own phase.
+## Prestige cards (any rarity) get the Prestige holo instead.
 func _update_foil() -> void:
 	var r := 0 if card_id == "" else DB.rarity_index(str(DB.card(card_id).get("rarity", "common")))
+	var p := prestige_stars()
+	_set_overlay(p > 0)
+	if p > 0:
+		if _prestige_mat == null:
+			_prestige_mat = ShaderMaterial.new()
+			_prestige_mat.shader = PRESTIGE_SHADER
+		var szp := size if size.x > 1.0 else custom_minimum_size
+		_prestige_mat.set_shader_parameter("card_size", szp)
+		_prestige_mat.set_shader_parameter("rect_origin", Vector2(-szp.x * 0.5, -szp.y))
+		_prestige_mat.set_shader_parameter("phase", float(absi(hash(card_id)) % 97) / 23.0)
+		_prestige_mat.set_shader_parameter("stars", float(p))
+		_prestige_mat.set_shader_parameter("calm", 1.0 if bool(Settings.get_value("accessibility", "reduce_flashes", false)) else 0.0)
+		material = _prestige_mat if foil else null
+		return
 	if not foil or face_down or not owned or r < 2:
 		material = null
 		return
@@ -151,7 +203,11 @@ func _process(delta: float) -> void:
 		_shake = maxf(0.0, _shake - delta * 2.6)
 		if _foil_mat:
 			_foil_mat.set_shader_parameter("hover", maxf(_lift, _sel))
+		if _prestige_mat:
+			_prestige_mat.set_shader_parameter("hover", maxf(_lift, _sel))
 		queue_redraw()
+		if _overlay:
+			_overlay.queue_redraw()
 
 
 # ---------------------------------------------------------------- drawing
@@ -178,10 +234,16 @@ func _draw() -> void:
 	var cat_col := DB.category_color(c.category)
 	var dim := 1.0 if (playable and owned) else 0.45
 	var dc := Color(dim, dim, dim, 1)
+	var pres := prestige_stars()
 
 	# Shadow, rarity glow and selection glow
 	_rr_fill(Rect2(rect.position + Vector2(3, 6 + 10 * (_lift + _sel)) * s, rect.size), 12 * s, Color(0, 0, 0, 0.45 - 0.15 * (_lift + _sel) * 0.5))
-	if r_idx >= 1 and owned:
+	if pres > 0:
+		# Prestige: a warm gold halo that grows a little with each star.
+		var pg := (0.34 + 0.05 * pres) * dim
+		_rr_fill(rect.grow(6.5 * s), 17 * s, Color(PRESTIGE_GOLD, pg * 0.35))
+		_rr_fill(rect.grow(3.2 * s), 14 * s, Color(PRESTIGE_GOLD.lightened(0.2), pg))
+	elif r_idx >= 1 and owned:
 		var ga: float = [0.0, 0.22, 0.3, 0.38, 0.5][r_idx] * dim
 		_rr_fill(rect.grow(4.5 * s), 15 * s, Color(rar_col, ga * 0.5))
 		_rr_fill(rect.grow(2.2 * s), 13 * s, Color(rar_col, ga))
@@ -194,13 +256,18 @@ func _draw() -> void:
 	if combo_glow > 0.01:
 		_draw_combo_halo(rect, s, dim)
 
-	# Metallic rarity frame
+	# Metallic rarity frame (Prestige: a pearl frame the holo shader turns iridescent, with a gold inner line)
 	var hi := 0.55 if r_idx >= 4 else 0.42
-	_rr_gradient(rect, 12 * s, rar_col.lightened(hi) * dc, rar_col.darkened(0.55) * dc)
+	if pres > 0:
+		_rr_gradient(rect, 12 * s, Color(0.97, 0.95, 1.0) * dc, Color(0.5, 0.46, 0.62) * dc)
+	else:
+		_rr_gradient(rect, 12 * s, rar_col.lightened(hi) * dc, rar_col.darkened(0.55) * dc)
 	_rr_outline(rect.grow(-1.4 * s), 11 * s, Color(1, 1, 1, 0.35 * dim), 1.2 * s)
 	var inner := rect.grow(-5 * s)
 	_rr_gradient(inner, 8 * s, PANEL_TOP * dc, PANEL_BOTTOM * dc)
-	if r_idx >= 3:
+	if pres > 0:
+		_rr_outline(inner.grow(-0.6 * s), 8 * s, Color(PRESTIGE_GOLD, 0.85 * dim), 1.3 * s)
+	if r_idx >= 3 and pres == 0:
 		_draw_corner_ornaments(rect, s, rar_col.lightened(0.5), dim, r_idx >= 4)
 
 	# Category banner with the card name
@@ -266,20 +333,31 @@ func _draw() -> void:
 	draw_string_outline(df, cpos, cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(23 * s), int(4 * s), Color(0.02, 0.05, 0.12, 0.9))
 	draw_string(df, cpos, cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(23 * s), Color(1, 1, 1, dim))
 
-	# Rarity gem, set into the bottom of the frame
+	# Rarity gem, set into the bottom of the frame (a Prestige card's overlay draws its crest there instead)
 	var gem := Vector2(rect.get_center().x, rect.end.y - 2.5 * s)
+	if pres == 0:
+		_draw_rarity_gem(gem, s, r_idx, rar_col, dc, rect, dim)
+	if mastery >= 1 and pres == 0:
+		_draw_mastery(rect, s, dim)
+	_draw_card_badges(c, rect, art_rect, s, dim, dc, df, small, gem_c, w)
+
+
+## Rarity gem and the level pips along the bottom frame edge.
+func _draw_rarity_gem(gem: Vector2, s: float, r_idx: int, rar_col: Color, dc: Color, rect: Rect2, dim: float) -> void:
 	var gr := (6.5 + 1.2 * r_idx) * s
 	var diamond := PackedVector2Array([gem + Vector2(0, -gr), gem + Vector2(gr, 0), gem + Vector2(0, gr), gem + Vector2(-gr, 0)])
 	draw_colored_polygon(PackedVector2Array([gem + Vector2(0, -gr - 2 * s), gem + Vector2(gr + 2 * s, 0), gem + Vector2(0, gr + 2 * s), gem + Vector2(-gr - 2 * s, 0)]), Color(0, 0, 0, 0.6))
 	draw_polygon(diamond, PackedColorArray([rar_col.lightened(0.6) * dc, rar_col * dc, rar_col.darkened(0.4) * dc, rar_col * dc]))
-	# Level pips on the bottom frame edge
+	# Level pips on the bottom frame edge (five: levels 6-10 are the Prestige stars)
 	if show_level and owned:
-		for i in DB.card_max_level:
+		for i in DB.PRESTIGE_LEVEL:
 			var pc := Vector2(rect.position.x + (14 + i * 9) * s, rect.end.y - 2.5 * s)
 			draw_circle(pc, 3.6 * s, Color(0.02, 0.03, 0.06, 0.85))
 			draw_circle(pc, 2.6 * s, Color(UITheme.GOLD, dim) if i < level else Color(1, 1, 1, 0.18))
-	if mastery >= 1:
-		_draw_mastery(rect, s, dim)
+
+
+## Linked defender badge, cooldown sweep, lock, hotkey, count and combo badges and the refusal flash.
+func _draw_card_badges(c: Dictionary, rect: Rect2, art_rect: Rect2, s: float, dim: float, dc: Color, df: Font, small: Font, gem_c: Vector2, w: float) -> void:
 	# Linked defender badge
 	var linked: String = c.get("linked", "")
 	if linked != "":
@@ -330,6 +408,121 @@ func _draw() -> void:
 		_rr_fill(rect, 12 * s, Color(1.0, 0.15, 0.1, 0.4 * _shake))
 		_rr_outline(rect.grow(1.5 * s), 13 * s, Color(1.0, 0.3, 0.22, 0.95 * _shake), 3.0 * s)
 		draw_arc(gem_c, 16.5 * s, 0, TAU, 28, Color(1.0, 0.35, 0.25, _shake), 2.6 * s, true)
+
+
+# ---------------------------------------------------------------- Prestige (Update 11)
+
+## Adds or removes the overlay that draws a Prestige card's crest and stars.
+func _set_overlay(on: bool) -> void:
+	if on and _overlay == null:
+		_overlay = Control.new()
+		_overlay.name = "PrestigeOverlay"
+		_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_overlay.draw.connect(_draw_overlay)
+		add_child(_overlay, false, Node.INTERNAL_MODE_FRONT)
+	elif not on and _overlay != null:
+		_overlay.queue_free()
+		_overlay = null
+	if _overlay:
+		_overlay.queue_redraw()
+
+
+## The overlay follows the card's hover rise, growth and refusal shake exactly like _draw().
+func _draw_overlay() -> void:
+	var p := prestige_stars()
+	if p <= 0 or _overlay == null:
+		return
+	var o := _overlay
+	var w := size.x
+	var h := size.y
+	var s := w / 150.0
+	var rise := -s * (lift_px * _lift + lift_px * 1.2 * _sel)
+	var grow := 1.0 + 0.035 * _lift + 0.06 * _sel
+	var sx := sin(_t * 70.0) * 7.0 * s * _shake * _shake
+	o.draw_set_transform(Vector2(w * 0.5 + sx, h + rise), 0.0, Vector2(grow, grow))
+	var rect := Rect2(-w * 0.5, -h, w, h)
+	var dim := 1.0 if (playable and owned) else 0.45
+	# Gold trim around the holo frame, with a four-point glint in each corner.
+	_rr_outline(rect.grow(-0.6 * s), 11.5 * s, Color(PRESTIGE_GOLD.lightened(0.15), 0.95 * dim), 1.6 * s, o)
+	for k: Vector2 in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
+		var corner := Vector2(rect.position.x if k.x > 0 else rect.end.x, rect.position.y if k.y > 0 else rect.end.y)
+		var g := corner + k * 4.6 * s
+		var r := 4.2 * s
+		o.draw_colored_polygon(PackedVector2Array([g + Vector2(0, -r), g + Vector2(r * 0.28, -r * 0.28), g + Vector2(r, 0), g + Vector2(r * 0.28, r * 0.28),
+			g + Vector2(0, r), g + Vector2(-r * 0.28, r * 0.28), g + Vector2(-r, 0), g + Vector2(-r * 0.28, -r * 0.28)]), Color(1, 0.97, 0.85, 0.95 * dim))
+	# Prestige stars where the level pips go (a Prestige card has all five pips by definition).
+	if show_level:
+		for i in DB.card_max_level - DB.PRESTIGE_LEVEL:
+			var pc := Vector2(rect.position.x + (15 + i * 10.5) * s, rect.end.y - 2.6 * s)
+			_star(pc, 5.6 * s, Color(0.05, 0.03, 0.0, 0.9), o)
+			_star(pc, 4.3 * s, Color(PRESTIGE_GOLD.lightened(0.25), dim) if i < p else Color(1, 1, 1, 0.22 * dim), o)
+	if mastery >= 1:
+		_draw_mastery(rect, s, dim, o)
+	if not hide_crest:
+		draw_prestige_crest(o, Vector2(rect.get_center().x, rect.end.y - 1.0 * s), s * 1.3, p,
+			DB.rarity_color(str(DB.card(card_id).get("rarity", "common"))), dim)
+
+
+## The gold Prestige crest: a crowned shield between two laurel sprigs, the rarity colour as its inner rim,
+## and a star with the Prestige level (1-5). Centred on `c` (its widest point); `s` = scale (1 at 150 px).
+## Static so the Prestige ceremony can draw the same crest on its own canvas.
+static func draw_prestige_crest(ci: CanvasItem, c: Vector2, s: float, stars: int, rarity_col: Color, dim := 1.0) -> void:
+	var gold := Color(PRESTIGE_GOLD, dim)
+	var gold_dark := Color(PRESTIGE_GOLD_DARK, dim)
+	# Laurel sprigs: leaves fanning up and out from under the shield.
+	for side: float in [-1.0, 1.0]:
+		for k in 4:
+			var t := float(k) / 3.0
+			var base := c + Vector2(side * (9.0 + 6.0 * t), 6.0 - 9.0 * t) * s
+			var ang := side * (0.35 + 0.42 * t) - PI * 0.5 * (1.0 - t) * 0.4
+			var dir := Vector2(side * cos(ang), -absf(sin(ang)) - 0.35).normalized()
+			var nrm := Vector2(-dir.y, dir.x)
+			var ln := (6.2 - 0.9 * t) * s
+			var wd := 2.0 * s
+			var leaf := PackedVector2Array([base, base + dir * ln * 0.5 + nrm * wd, base + dir * ln, base + dir * ln * 0.5 - nrm * wd])
+			var outline := PackedVector2Array()
+			for v in leaf:
+				outline.append(base + (v - base) * 1.25 + dir * -0.6 * s)
+			ci.draw_colored_polygon(outline, Color(0.06, 0.03, 0.0, 0.85 * dim))
+			ci.draw_polygon(leaf, PackedColorArray([gold_dark, gold.lightened(0.15), gold.lightened(0.35), gold]))
+	# Shield with a three-point crown on top.
+	var shape := [Vector2(-11, -11), Vector2(-7.5, -11), Vector2(-5.5, -15.5), Vector2(-3, -11.5), Vector2(0, -17.5),
+		Vector2(3, -11.5), Vector2(5.5, -15.5), Vector2(7.5, -11), Vector2(11, -11), Vector2(11, 0), Vector2(7.5, 6.5),
+		Vector2(0, 11.5), Vector2(-7.5, 6.5), Vector2(-11, 0)]
+	var back := PackedVector2Array()
+	var face := PackedVector2Array()
+	var cols := PackedColorArray()
+	var inset := PackedVector2Array()
+	for v: Vector2 in shape:
+		back.append(c + v * 1.18 * s + Vector2(0, 0.6) * s)
+		face.append(c + v * s)
+		cols.append(gold.lightened(0.45).lerp(gold_dark, clampf((v.y + 17.5) / 29.0, 0.0, 1.0)))
+	for i: int in [0, 8, 9, 10, 11, 12, 13]:
+		inset.append(c + (shape[i] as Vector2) * 0.72 * s + Vector2(0, 0.8) * s)
+	ci.draw_colored_polygon(back, Color(0.05, 0.03, 0.0, 0.92 * dim))
+	ci.draw_polygon(face, cols)
+	ci.draw_colored_polygon(inset, Color(0.08, 0.06, 0.16, dim))
+	var rim := inset.duplicate()
+	rim.append(inset[0])
+	ci.draw_polyline(rim, Color(rarity_col.lightened(0.25), dim), maxf(1.0, 1.3 * s), true)
+	# Crown jewels.
+	for j: Vector2 in [Vector2(-5.5, -15.5), Vector2(0, -17.5), Vector2(5.5, -15.5)]:
+		ci.draw_circle(c + j * s, 1.3 * s, Color(1, 1, 0.92, dim))
+	# Star with the Prestige level.
+	var sc := c + Vector2(0, -1.2) * s
+	var star := PackedVector2Array()
+	for k in 10:
+		var a := -PI / 2 + PI * k / 5.0
+		star.append(sc + Vector2(cos(a), sin(a)) * (8.3 if k % 2 == 0 else 4.1) * s)
+	ci.draw_colored_polygon(star, Color(1.0, 0.9, 0.5, dim))
+	var df := UITheme.font_display()
+	var fs := maxi(9, int(10.5 * s))
+	var txt := str(clampi(stars, 1, 5))
+	var ts := df.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+	var tp := sc + Vector2(-ts.x * 0.5 - 0.3 * s, fs * 0.38)
+	ci.draw_string_outline(df, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(2, int(2.2 * s)), Color(1.0, 0.97, 0.85, dim))
+	ci.draw_string(df, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.32, 0.12, 0.0, dim))
 
 
 ## Combo hint: a soft halo around the card, brighter and pulsing on the selected card's partner.
@@ -391,28 +584,28 @@ func _draw_back() -> void:
 
 ## Mastery: up to three stars on the bottom-right frame edge. A mastered card (three stars) gets
 ## a gold outer rim, a fine inner gold line and its stars set on a gold plate.
-func _draw_mastery(rect: Rect2, s: float, dim: float) -> void:
+func _draw_mastery(rect: Rect2, s: float, dim: float, ci: CanvasItem = null) -> void:
 	var gold := Color(UITheme.GOLD, dim)
 	var mastered := mastery >= CardMastery.MAX_STARS
 	if mastered:
-		_rr_outline(rect.grow(2.2 * s), 14 * s, Color(1.0, 0.86, 0.4, 0.95 * dim), 2.4 * s)
-		_rr_outline(rect.grow(-3.4 * s), 9.5 * s, Color(1.0, 0.85, 0.35, 0.75 * dim), 1.1 * s)
+		_rr_outline(rect.grow(2.2 * s), 14 * s, Color(1.0, 0.86, 0.4, 0.95 * dim), 2.4 * s, ci)
+		_rr_outline(rect.grow(-3.4 * s), 9.5 * s, Color(1.0, 0.85, 0.35, 0.75 * dim), 1.1 * s, ci)
 		var plate := Rect2(Vector2(rect.end.x - 44 * s, rect.end.y - 9 * s), Vector2(38, 13) * s)
-		_rr_fill(plate, 6 * s, Color(0.35, 0.22, 0.02, 0.95 * dim))
-		_rr_outline(plate, 6 * s, Color(1.0, 0.86, 0.4, dim), 1.2 * s)
+		_rr_fill(plate, 6 * s, Color(0.35, 0.22, 0.02, 0.95 * dim), ci)
+		_rr_outline(plate, 6 * s, Color(1.0, 0.86, 0.4, dim), 1.2 * s, ci)
 	for i in CardMastery.MAX_STARS:
 		var cpos := Vector2(rect.end.x - (13 + i * 11) * s, rect.end.y - 2.5 * s)
 		var on := i < mastery
-		_star(cpos, 5.6 * s, Color(0.02, 0.03, 0.06, 0.9))
-		_star(cpos, 4.3 * s, (Color(1.0, 0.95, 0.7, dim) if mastered else gold) if on else Color(1, 1, 1, 0.2 * dim))
+		_star(cpos, 5.6 * s, Color(0.02, 0.03, 0.06, 0.9), ci)
+		_star(cpos, 4.3 * s, (Color(1.0, 0.95, 0.7, dim) if mastered else gold) if on else Color(1, 1, 1, 0.2 * dim), ci)
 
 
-func _star(c: Vector2, r: float, col: Color) -> void:
+func _star(c: Vector2, r: float, col: Color, ci: CanvasItem = null) -> void:
 	var pts := PackedVector2Array()
 	for k in 10:
 		var a := -PI / 2 + PI * k / 5.0
 		pts.append(c + Vector2(cos(a), sin(a)) * (r if k % 2 == 0 else r * 0.45))
-	draw_colored_polygon(pts, col)
+	(ci if ci else self).draw_colored_polygon(pts, col)
 
 
 func _draw_corner_ornaments(rect: Rect2, s: float, col: Color, dim: float, legendary: bool) -> void:
@@ -456,8 +649,8 @@ func _rr_points(r: Rect2, rad: float, seg := 5) -> PackedVector2Array:
 	return pts
 
 
-func _rr_fill(r: Rect2, rad: float, col: Color) -> void:
-	draw_colored_polygon(_rr_points(r, rad), col)
+func _rr_fill(r: Rect2, rad: float, col: Color, ci: CanvasItem = null) -> void:
+	(ci if ci else self).draw_colored_polygon(_rr_points(r, rad), col)
 
 
 func _rr_gradient(r: Rect2, rad: float, top: Color, bottom: Color) -> void:
@@ -468,10 +661,10 @@ func _rr_gradient(r: Rect2, rad: float, top: Color, bottom: Color) -> void:
 	draw_polygon(pts, cols)
 
 
-func _rr_outline(r: Rect2, rad: float, col: Color, width: float) -> void:
+func _rr_outline(r: Rect2, rad: float, col: Color, width: float, ci: CanvasItem = null) -> void:
 	var pts := _rr_points(r, rad)
 	pts.append(pts[0])
-	draw_polyline(pts, col, width, true)
+	(ci if ci else self).draw_polyline(pts, col, width, true)
 
 
 func _draw_v_gradient(r: Rect2, top: Color, bottom: Color) -> void:

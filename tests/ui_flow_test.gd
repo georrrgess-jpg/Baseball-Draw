@@ -153,6 +153,10 @@ func _run() -> void:
 		await _test_u10_team()
 		_finish()
 		return
+	if "--ui-test-section=u11cards" in OS.get_cmdline_user_args():
+		await _test_u11_prestige()
+		_finish()
+		return
 	if "--ui-test-section=u9screens" in OS.get_cmdline_user_args():
 		await _test_u9_hub_play_results()
 		_finish()
@@ -391,6 +395,7 @@ func _run() -> void:
 	await _test_u10_hub()
 	await _test_tutorial()
 	await _test_draft()
+	await _test_u11_prestige()
 	_finish()
 
 
@@ -2510,3 +2515,168 @@ func _test_u10_team() -> void:
 	Profile.set_team(Profile.STARTER_TEAM.duplicate(), "ace")
 	Router.goto("main_menu")
 	await _wait_scene("main_menu")
+
+
+# ---------------------------------------------------------------- Update 11: Prestige (stream A)
+
+func _find_ceremony() -> PrestigeCeremony:
+	var scr := get_tree().current_scene
+	return scr.find_child("PrestigeCeremony", true, false) as PrestigeCeremony if scr else null
+
+
+func _cardviews(n: Node, out: Array) -> Array:
+	if n is CardView:
+		out.append(n)
+	for c in n.get_children():
+		_cardviews(c, out)
+	return out
+
+
+## Run alone: godot --path . -- --ui-test --profile=uitest_u11 --fresh-profile --ui-test-section=u11cards
+## Prestige a card through the ceremony and skip it with a click, skip one with Esc, Upgrade All's
+## Include Prestige opt-in, reduce_flashes, the Prestige frame in Cards & Deck, and the battle hand
+## with Prestige cards (hit map: no dead points).
+func _test_u11_prestige() -> void:
+	var saved_deck: Array = Profile.data.deck.duplicate()
+	for cid in ["lockdown", "wall_of_dirt", "power_throw", "curveball", "heat_wave"]:
+		Profile.data.cards[cid].owned = true
+	Profile.data.cards.lockdown.level = 5
+	Profile.data.cards.lockdown.copies = DB.upgrade_copies("rare", 5)
+	Profile.data.cards.wall_of_dirt.level = 5
+	Profile.data.cards.wall_of_dirt.copies = DB.upgrade_copies("common", 5)
+	Profile.data.cards.power_throw.level = 8
+	Profile.data.cards.heat_wave.level = 4
+	Profile.data.cards.heat_wave.copies = DB.upgrade_copies("rare", 4)
+	Profile.data.coins = 60000
+	Settings.set_value("accessibility", "reduce_flashes", false)
+	Router.goto("card_upgrades")
+	_check(await _wait_scene("card_upgrades"), "u11: Upgrade Cards opens")
+	await _wait(0.6)
+	var scr: Node = get_tree().current_scene
+	scr.set("selected", "lockdown")
+	scr.call("_rebuild")
+	await _wait(0.4)
+	var pb := _find_button(scr, "PRESTIGE")
+	_check(pb != null and not pb.disabled, "u11: a level-5 card with its copies shows PRESTIGE")
+	_check(_find_label(scr, "LEVEL 5  ▶  PRESTIGE ★1"), "u11: the detail says LEVEL 5 ▶ PRESTIGE ★1")
+	if pb == null:
+		return
+	await _click(_button_center(pb))
+	var cer: PrestigeCeremony = null
+	for i in 30:
+		await _wait(0.1)
+		cer = _find_ceremony()
+		if cer:
+			break
+	_check(cer != null, "u11: PRESTIGE starts the ceremony")
+	_check(Profile.card_level("lockdown") == 6, "u11: the card is Prestige ★1 as soon as it is paid (level %d)" % Profile.card_level("lockdown"))
+	if cer == null:
+		return
+	_check(not cer.calm, "u11: full ceremony with reduce_flashes off")
+	await _wait(1.0)
+	_check(not _closed(cer), "u11: the ceremony is still playing after a second")
+	var pre: bool = cer.get("_card").face_down == false
+	_check(pre, "u11: the card has finished its spin and faces the player")
+	var t_before: float = cer.get("_t")
+	await _click(get_viewport().get_final_transform() * get_viewport().get_visible_rect().get_center())
+	var skipped: bool = cer.skipped
+	await _wait(0.6)
+	_check(_closed(cer) and skipped and t_before < PrestigeCeremony.T_END, "u11: a click skips the ceremony (at %.1f s of %.1f)" % [t_before, PrestigeCeremony.T_END])
+	await _wait(0.4)
+	_check(Router.current == "card_upgrades", "u11: skipping stays on Upgrade Cards")
+	var dcard: CardView = scr.get("_d_card")
+	_check(dcard != null and is_instance_valid(dcard) and dcard.card_id == "lockdown" and dcard.prestige_stars() == 1 and dcard.modulate.a > 0.9,
+		"u11: the detail card shows the Prestige ★1 frame")
+	_check(dcard != null and dcard.material != null and (dcard.material as ShaderMaterial).shader == CardView.PRESTIGE_SHADER,
+		"u11: the Prestige holo shader is on the card")
+	_check(_find_label(scr, "PRESTIGE ★1  ▶  ★2"), "u11: the next step is ★1 ▶ ★2")
+	# Esc skips too, without leaving the screen.
+	scr.set("selected", "wall_of_dirt")
+	scr.call("_rebuild")
+	await _wait(0.4)
+	pb = _find_button(scr, "PRESTIGE")
+	if pb:
+		await _click(_button_center(pb))
+	cer = null
+	for i in 30:
+		await _wait(0.1)
+		cer = _find_ceremony()
+		if cer:
+			break
+	_check(cer != null, "u11: a second ceremony starts")
+	await _wait(0.5)
+	await _key("pause")
+	await _wait(0.6)
+	_check(_closed(cer) and Router.current == "card_upgrades", "u11: Esc skips the ceremony and stays on the screen")
+	_check(Profile.card_level("wall_of_dirt") == 6, "u11: the skipped card is still prestiged")
+	await _wait(0.3)
+	# Upgrade All: Prestige only with the opt-in.
+	Profile.data.cards.curveball.level = 5
+	Profile.data.cards.curveball.copies = DB.upgrade_copies("common", 5)
+	Settings.set_value("accessibility", "reduce_flashes", true)
+	scr.call("_rebuild")
+	await _wait(0.3)
+	scr.call("_confirm_upgrade_all")
+	await _wait(0.4)
+	var check := scr.find_child("IncludePrestige", true, false) as CheckBox
+	var summary := scr.find_child("UpgradeAllSummary", true, false) as Label
+	_check(check != null and check.is_visible_in_tree() and not check.button_pressed, "u11: Upgrade All offers Include Prestige, unticked")
+	_check(summary != null and not summary.text.contains("PRESTIGE"), "u11: without the opt-in the summary has no Prestige (%s)" % (summary.text if summary else "?"))
+	var rows := scr.find_child("UpgradeAllRows", true, false)
+	var n_before := rows.get_child_count() if rows else 0
+	if check:
+		await _click(get_viewport().get_final_transform() * check.get_global_rect().get_center())
+		await _wait(0.3)
+	_check(check != null and check.button_pressed and summary.text.contains("1 PRESTIGE"), "u11: ticking it adds the Prestige to the summary (%s)" % (summary.text if summary else "?"))
+	_check(rows != null and rows.get_child_count() > n_before - 0 and _find_label(rows, "LV 5  ▶  PRESTIGE ★1"), "u11: the list shows LV 5 ▶ PRESTIGE ★1")
+	var go := scr.find_child("UpgradeAllGo", true, false) as Button
+	_check(go != null and not go.disabled, "u11: UPGRADE ALL is enabled")
+	if go:
+		await _click(_button_center(go))
+	cer = null
+	for i in 30:
+		await _wait(0.1)
+		cer = _find_ceremony()
+		if cer:
+			break
+	_check(cer != null and cer.calm, "u11: Upgrade All plays the ceremony, calm with reduce_flashes")
+	_check(Profile.card_level("curveball") == 6 and Profile.card_level("heat_wave") == 5, "u11: Upgrade All prestiged the opted-in card and levelled the other")
+	if cer:
+		await _wait(0.4)
+		await _click(get_viewport().get_final_transform() * get_viewport().get_visible_rect().get_center())
+		await _wait(0.6)
+		_check(_closed(cer), "u11: the Upgrade All ceremony can be skipped")
+	await _wait(1.4)
+	Settings.set_value("accessibility", "reduce_flashes", false)
+	# Cards & Deck: the Prestige frame on collection cards.
+	Profile.data.deck = ["lockdown", "wall_of_dirt", "power_throw", "curveball", "heat_wave", "frost_field", "twin_play", "rally_cry"]
+	Router.goto("deck_builder")
+	_check(await _wait_scene("deck_builder"), "u11: Cards & Deck opens")
+	await _wait(0.8)
+	var views := _cardviews(get_tree().current_scene, [])
+	var pres_views := views.filter(func(v: CardView) -> bool: return v.prestige_stars() > 0 and v.is_visible_in_tree())
+	var ids := {}
+	for v: CardView in pres_views:
+		ids[v.card_id] = true
+	_check(ids.has("lockdown") and ids.has("power_throw") and ids.has("wall_of_dirt"), "u11: Prestige cards show the Prestige frame in Cards & Deck (%s)" % [ids.keys()])
+	var plain := views.filter(func(v: CardView) -> bool: return v.card_id == "heat_wave" and v.is_visible_in_tree())
+	_check(not plain.is_empty() and plain.all(func(v: CardView) -> bool: return v.prestige_stars() == 0), "u11: a level-5 card has no Prestige frame")
+	var pt: CardView = null
+	for v: CardView in pres_views:
+		if v.card_id == "power_throw":
+			pt = v
+	_check(pt != null and pt.prestige_stars() == 3 and pt.get("_overlay") != null and pt.get_child_count() == 0,
+		"u11: Power Throw shows ★3 with its crest overlay")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(0.5)
+	# The battle hand with Prestige cards: every point clickable.
+	battle = null
+	await _test_card_clicks()
+	if battle:
+		var hand_pres := 0
+		for v in battle.hud.get("_card_views"):
+			if is_instance_valid(v) and (v as CardView).prestige_stars() > 0:
+				hand_pres += 1
+		_check(hand_pres >= 1 or battle.state != "wave", "u11: the battle hand shows Prestige cards (%d)" % hand_pres)
+	Profile.data.deck = saved_deck
