@@ -391,13 +391,7 @@ func defender_level_reward(level: int) -> Dictionary:
 
 
 func level_reward_text(r: Dictionary) -> String:
-	if r.has("coins"):
-		return "%d coins" % int(r.coins)
-	if r.has("pack"):
-		return DB.pack(str(r.pack)).name
-	if r.has("trait"):
-		return "Choose a trait"
-	return ""
+	return DefenderLevels.reward_text(r)   # also names the All-Star / Hall of Famer badges (Update 11)
 
 
 func _grant_level_reward(id: String, level: int) -> void:
@@ -480,8 +474,9 @@ func defender_mods(id: String) -> Dictionary:
 	var mods := {"damage": 0.0, "range": 0.0, "attack_speed": 0.0, "throw_speed": 0.0, "accuracy": 0.0,
 		"crit": 0.0, "special_power": 0.0, "special_cooldown": 0.0, "boss_damage": 0.0, "stun_guard": 0}
 	var lvl := defender_level(id)
-	mods.damage += DB.defender_level_growth * (lvl - 1)
-	mods.special_power += DB.defender_level_growth * (lvl - 1)
+	var growth := DefenderLevels.growth(lvl)   # +6 % per level to 10, then +3 % (Update 11)
+	mods.damage += growth
+	mods.special_power += growth
 	var g := equipped_gear(id)
 	if g != "" and DB.gear.has(g):
 		for k in DB.gear[g].effect.keys():

@@ -48,6 +48,7 @@ func _run() -> void:
 	test_upgrade_all()
 	test_deck_ai()
 	test_team_ai()
+	test_u11_defender_levels()
 	await test_menus()
 	await test_u9_screens()
 	test_update5_content()
@@ -299,7 +300,7 @@ func test_economy() -> void:
 		ok(float(w.legendary) / total < 0.015, "%s packs: Legendary is the long tail (%.2f %% per slot)" % [t, 100.0 * float(w.legendary) / total])
 	ok(DB.pack("champion").slots[-1].get("min", "") == "epic", "Champion Packs still guarantee an Epic")
 	# Defender level road: slower curve, same rewards.
-	ok(int(DB.defender_xp_curve[DB.defender_xp_curve.size() - 1]) == 10200, "defender level 10 needs 10,200 XP")
+	ok(int(DB.defender_xp_curve[9]) == 10200, "defender level 10 needs 10,200 XP")
 	ok(str(DB.defender_level_rewards["10"].get("pack", "")) == "champion", "defender level 10 still gives a Champion Pack")
 	# Rewards for a won Quick Defense game (Standard, Steel Yard): coins, defender XP and one pack.
 	var level0 := int(Profile.data.level)
@@ -1211,6 +1212,8 @@ func test_battle_systems() -> void:
 	_clear()
 	await _test_update9_cards_battle()
 	_clear()
+	await _test_u11_traits_battle()
+	_clear()
 	# Balance statistics: damage and outs are credited to the card that caused them.
 	var imp: Dictionary = battle.run.card_impact
 	for cid in ["power_throw", "thunderbolt", "sky_hook"]:
@@ -1218,6 +1221,62 @@ func test_battle_systems() -> void:
 	ok(not imp.has("field_vision"), "buff cards are not credited with damage")
 	battle.queue_free()
 	await _wait(0.2)
+
+
+## Update 11: trait tiers 4 and 5 in a live battle: Iron Man's stun guard and damage, Armor Breaker's
+## pierce (stacking with Cannon Arm), Big Game's critical multiplier and Quick Release's speed.
+func _test_u11_traits_battle() -> void:
+	section("update 11: trait tiers 4 and 5 (battle)")
+	var ace := _defender("ace")
+	var jax := _defender("jax")
+	if ace == null or jax == null:
+		ok(false, "ace and jax are on the field")
+		return
+	var saved := {}
+	for id in ["ace", "jax"]:
+		saved[id] = Profile.data.defenders[id].duplicate(true)
+	Profile.data.defenders.ace.level = 16
+	Profile.data.defenders.jax.level = 16
+	Profile.data.defenders.ace.traits = {}
+	Profile.data.defenders.jax.traits = {}
+	ace.recompute()
+	jax.recompute()
+	ace.reset_wave_state()
+	var ace_dmg := ace.s_damage
+	var ace_guard := ace.stun_guard
+	var jax_int := jax.s_interval
+	Profile.data.defenders.ace.traits = {"12": "iron_man", "16": "armor_breaker"}
+	Profile.data.defenders.jax.traits = {"12": "quick_release", "16": "big_game"}
+	ace.recompute()
+	jax.recompute()
+	ace.reset_wave_state()
+	ok(ace.s_damage > ace_dmg * 1.02, "Iron Man raises damage in battle (%.1f -> %.1f)" % [ace_dmg, ace.s_damage])
+	ok(ace.stun_guard == ace_guard + 1, "Iron Man adds a stun guard (%d)" % ace.stun_guard)
+	ace.stun(1.0)
+	ok(not ace.is_stunned() and ace.stun_guard == ace_guard, "the first stun is resisted")
+	ok(jax.s_interval < jax_int / 1.07, "Quick Release throws faster (%.2fs -> %.2fs)" % [jax_int, jax.s_interval])
+	var route := battle.routes[0]
+	var armored := battle.spawn_enemy("armored", route, route.length * 0.5, {"lateral": 0.0, "hp_mult": 40.0})
+	var pa: Dictionary = ace._build_payload(armored, false)
+	ok(absf(float(pa.get("pierce", 0.0)) - 0.3) < 0.001, "Armor Breaker throws ignore 30 %% of armor (%.2f)" % float(pa.get("pierce", 0.0)))
+	jax.dyn_crit = 5.0
+	var pj: Dictionary = jax._build_payload(armored, false)
+	jax.dyn_crit = 0.0
+	var mult := float(pj.damage) / jax.effective_damage()
+	ok(bool(pj.crit) and absf(mult - 2.25) < 0.01, "Big Game crits deal 2.25x instead of 1.75x (%.2fx)" % mult)
+	ok(absf(float(pj.get("pierce", 0.0)) - 0.6) < 0.001, "Cannon Arm keeps its own 60 % pierce")
+	Profile.data.defenders.jax.traits = {"12": "quick_release", "16": "armor_breaker"}
+	jax.recompute()
+	ok(absf(float(jax._build_payload(armored, false).get("pierce", 0.0)) - 0.72) < 0.001, "Armor Breaker stacks with Cannon Arm (72 % pierce)")
+	var hp0 := armored.hp
+	battle.projectiles.hit(armored, pa, armored.center())
+	ok(hp0 - armored.hp > 0.0, "an Armor Breaker throw lands on an armored runner (%.0f of %.0f)" % [hp0 - armored.hp, float(pa.damage)])
+	for id in saved.keys():
+		Profile.data.defenders[id] = saved[id]
+	ace.recompute()
+	jax.recompute()
+	ace.reset_wave_state()
+	ok(is_zero_approx(ace.s_pierce) and is_zero_approx(jax.s_crit_damage), "back to the profile's own traits")
 
 
 # ---------------------------------------------------------------- tools (Update 5)
@@ -3788,6 +3847,143 @@ func test_team_ai() -> void:
 
 
 # ---------------------------------------------------------------- runner routes
+
+# ---------------------------------------------------------------- Update 11: defender levels to 20
+
+## XP a team regular earns per hour (not the MVP), measured with tools/balance/economy.py (defaults,
+## standard difficulty, 65 % wins): about 1,580 XP/h; the game's MVP earns 1.5x.
+const U11_REGULAR_XP_PER_HOUR := 1580.0
+
+func test_u11_defender_levels() -> void:
+	section("update 11: defender levels to 20")
+	Profile.reset_profile()
+	# XP curve: 20 levels, smooth and rising, level 20 at about 40-60 h for a regular.
+	var curve: Array = DB.defender_xp_curve
+	ok(DB.defender_max_level == 20 and curve.size() == 20, "defenders level to 20 (%d levels in the curve)" % curve.size())
+	var smooth := true
+	for i in range(2, curve.size()):
+		var step := int(curve[i]) - int(curve[i - 1])
+		var prev := int(curve[i - 1]) - int(curve[i - 2])
+		smooth = smooth and step >= prev and (i < 10 or float(step) <= float(prev) * 1.35)
+	ok(smooth, "each level needs a little more XP than the one before, without jumps")
+	ok(int(curve[9]) == 10200, "levels 1-10 keep their XP (10,200 to level 10)")
+	var hours := float(curve[19]) / U11_REGULAR_XP_PER_HOUR
+	ok(hours >= 40.0 and hours <= 60.0, "a regular reaches level 20 in about %.0f h (an MVP every game: %.0f h)" % [hours, hours / 1.5])
+	ok(Profile.defender_xp_needed(10) == int(curve[10]) - int(curve[9]) and Profile.defender_xp_needed(19) > Profile.defender_xp_needed(18), "XP to the next level reads the extended curve")
+	ok(Profile.defender_xp_needed(20) == 0, "nothing more to earn at level 20")
+	# Rewards 11-20: every level pays; traits at 12 and 16, All-Star at 15, Hall of Famer at 20.
+	var missing: Array = []
+	for l in range(2, 21):
+		if Profile.defender_level_reward(l).is_empty():
+			missing.append(l)
+	ok(missing.is_empty(), "every level from 2 to 20 has a reward %s" % [missing])
+	ok(int(Profile.defender_level_reward(12).get("trait", 0)) == 4 and int(Profile.defender_level_reward(16).get("trait", 0)) == 5, "trait tiers 4 and 5 at levels 12 and 16")
+	ok(str(Profile.defender_level_reward(15).get("badge", "")) == "all_star" and str(Profile.defender_level_reward(20).get("badge", "")) == "hall_of_fame", "All-Star at 15, Hall of Famer at 20")
+	ok(str(Profile.defender_level_reward(20).get("pack", "")) == "champion", "level 20 also gives a Champion Pack")
+	ok(Profile.level_reward_text(Profile.defender_level_reward(15)) == "All-Star badge + 1,000 coins", "level 15 reward text (%s)" % Profile.level_reward_text(Profile.defender_level_reward(15)))
+	ok(Profile.level_reward_text(Profile.defender_level_reward(20)) == "Hall of Famer frame + Champion Pack", "level 20 reward text (%s)" % Profile.level_reward_text(Profile.defender_level_reward(20)))
+	ok(Profile.level_reward_text({"coins": 150}) == "150 coins" and Profile.level_reward_text({"trait": 1}) == "Choose a trait", "old reward texts unchanged")
+	ok(DefenderLevels.reward_icon(Profile.defender_level_reward(20)) == "trophy" and DefenderLevels.reward_icon(Profile.defender_level_reward(15)) == "crown", "milestone icons on the road")
+	var tiers: Array = DB.traits.map(func(t: Dictionary) -> int: return int(t.level))
+	ok(tiers == [3, 6, 9, 12, 16] and DB.traits.all(func(t: Dictionary) -> bool: return (t.options as Array).size() == 2), "five trait tiers of two choices %s" % [tiers])
+	# Growth: +6 % per level to 10, +3 % per level after.
+	ok(is_zero_approx(DefenderLevels.growth(1)) and absf(DefenderLevels.growth(10) - 0.54) < 0.0001, "growth +54 % at level 10 (unchanged)")
+	var steps_ok := true
+	for l in range(11, 21):
+		steps_ok = steps_ok and absf(DefenderLevels.growth_step(l) - 0.03) < 0.0001
+	ok(steps_ok and absf(DefenderLevels.growth(20) - 0.84) < 0.0001, "levels 11-20 add +3 %% each (+%.0f %% at 20)" % (DefenderLevels.growth(20) * 100.0))
+	ok(absf(DefenderLevels.growth(25) - 0.84) < 0.0001 and is_zero_approx(DefenderLevels.growth(0)), "growth is clamped to levels 1-20")
+	Profile.data.defenders.ace.level = 20
+	var pm := Profile.defender_mods("ace")
+	ok(absf(float(pm.damage) - 0.84) < 0.0001 and absf(float(pm.special_power) - 0.84) < 0.0001, "Profile.defender_mods uses the new growth (%.2f)" % float(pm.damage))
+	ok(absf(float(TeamAI.level_mods(20).damage) - 0.84) < 0.0001 and absf(float(TeamAI.level_mods(14).damage) - 0.66) < 0.0001, "TeamAI uses the same growth")
+	# XP flow from 10 to 20: rewards paid, two new trait tiers, XP stops at the top.
+	Profile.data.defenders.ace.level = 10
+	Profile.data.defenders.ace.xp = 0
+	Profile.data.defenders.ace.traits = {"3": "power", "6": "tempo", "9": "clutch"}
+	var coins0 := int(Profile.data.coins)
+	var packs0 := Profile.pack_count()
+	var gained := Profile.add_defender_xp("ace", int(curve[19]) - int(curve[9]) + 5000)
+	ok(gained == 10 and Profile.defender_level("ace") == 20 and Profile.defender_xp("ace") == 0, "XP raises a level-10 defender to 20 and stops there (%d levels)" % gained)
+	ok(int(Profile.data.coins) == coins0 + 750 + 900 + 1000 + 1200 + 1500, "levels 11-20 pay their coins (%d)" % (int(Profile.data.coins) - coins0))
+	ok(Profile.pack_count() == packs0 + 3, "levels 13, 17 and 20 give packs (%d)" % (Profile.pack_count() - packs0))
+	ok(Profile.pending_traits("ace") == 2, "trait tiers 4 and 5 wait to be chosen")
+	ok(Profile.stat("max_defender_level") == 20, "the max-defender-level stat follows")
+	# Trait tiers 4 and 5 apply.
+	var before := Profile.defender_mods("ace")
+	Profile.choose_trait("ace", 12, "iron_man")
+	Profile.choose_trait("ace", 16, "armor_breaker")
+	var after := Profile.defender_mods("ace")
+	ok(absf(float(after.damage) - float(before.damage) - 0.06) < 0.0001 and int(after.stun_guard) == int(before.stun_guard) + 1, "Iron Man: +6 % damage and a stun guard")
+	ok(absf(float(after.get("pierce", 0.0)) - 0.30) < 0.0001 and absf(float(after.boss_damage) - float(before.boss_damage) - 0.10) < 0.0001, "Armor Breaker: 30 % armor pierce and +10 % boss damage")
+	ok(Profile.pending_traits("ace") == 0, "choosing both clears the reminder")
+	Profile.data.defenders.jax.level = 13
+	Profile.choose_trait("jax", 16, "big_game")
+	ok(Profile.chosen_trait("jax", 16) == "", "a tier above the defender's level can't be chosen")
+	Profile.data.defenders.jax.level = 16
+	Profile.choose_trait("jax", 12, "quick_release")
+	Profile.choose_trait("jax", 16, "big_game")
+	var jm := Profile.defender_mods("jax")
+	ok(absf(float(jm.attack_speed) - 0.08) < 0.0001 and absf(float(jm.throw_speed) - 0.10) < 0.0001, "Quick Release: +8 % attack speed, +10 % throw speed")
+	ok(absf(float(jm.get("crit_damage", 0.0)) - 0.5) < 0.0001 and absf(float(jm.crit) - 0.04) < 0.0001, "Big Game: +0.5x critical damage, +4 % crit chance")
+	var all: Array = DB.defender_order.duplicate()
+	var r_plain := TeamAI.rate("jax", _team_ctx(all, {"jax": 16}), "boss")
+	var ctx := _team_ctx(all, {"jax": 16})
+	ctx["mods"] = {"jax": TeamAI.level_mods(16).merged({"pierce": 0.3, "boss_damage": 0.1}, true)}
+	ok(float(TeamAI.rate("jax", ctx, "boss").boss) > float(r_plain.boss) * 1.2, "TeamAI values Armor Breaker against bosses")
+	ctx["mods"] = {"jax": TeamAI.level_mods(16).merged({"crit_damage": 0.5, "crit": 0.04}, true)}
+	ok(float(TeamAI.rate("jax", ctx).dps) > float(r_plain.dps), "TeamAI values Big Game")
+	ok(float(TeamAI.rate("hana", _team_ctx(all, {"hana": 20})).eff) > float(TeamAI.rate("hana", _team_ctx(all, {"hana": 10})).eff) * 1.15, "level 20 rates higher than level 10")
+	var lv10 := {}
+	var lv20 := {}
+	var lvmix := {}
+	for id in all:
+		lv10[id] = 10
+		lv20[id] = 20
+		lvmix[id] = 20 if id == "nova" else 10
+	var b10 := TeamAI.best_team("balanced", _team_ctx(all, lv10))
+	var c20 := _team_ctx(all, lv20)
+	var b20 := TeamAI.best_team("balanced", c20)
+	ok(_valid_team(b20, c20) and float(b20.score) > float(b10.score) * 1.1, "Best Team handles a level-20 roster (score %.1f vs %.1f at level 10)" % [float(b20.score), float(b10.score)])
+	var cmix := _team_ctx(all, lvmix)
+	var bmix := TeamAI.best_team("balanced", cmix)
+	ok(_valid_team(bmix, cmix) and bmix.team.has("nova") and float(bmix.score) > float(b10.score), "a level-20 defender earns a place in the Best Team %s" % [bmix.team])
+	# Honours.
+	ok(DefenderLevels.honor(14) == "" and DefenderLevels.honor(15) == "all_star" and DefenderLevels.honor(19) == "all_star" and DefenderLevels.honor(20) == "hall_of_fame", "All-Star from 15, Hall of Famer at 20")
+	ok(DefenderLevels.is_hall_of_famer("ace") and DefenderLevels.is_all_star("jax") and not DefenderLevels.is_all_star("maya"), "honours follow the profile's levels")
+	ok(DefenderLevels.honor_of("nova") == "", "a locked defender has no honour")
+	var b1 := DefenderHonors.level_badge(9)
+	var b2 := DefenderHonors.level_badge(20)
+	ok(b2.custom_minimum_size.x > b1.custom_minimum_size.x and (b2.get_node("LevelText") as Label).text == "20", "two-digit level badges widen into a pill")
+	var fr := DefenderHonors.portrait("ace", 64)
+	var fr2 := DefenderHonors.portrait("maya", 64)
+	ok(fr.has_meta("hall_of_fame") and not fr2.has_meta("hall_of_fame"), "Hall of Famers get the gold frame")
+	var np := DefenderHonors.nameplate("ace")
+	var np2 := DefenderHonors.nameplate("jax")
+	ok(np != null and np.name == "HallOfFamePlate" and np2 != null and np2.name == "AllStarPlate" and DefenderHonors.nameplate("maya") == null, "nameplates: Hall of Famer, All-Star, none")
+	for n in [b1, b2, fr, fr2, np, np2]:
+		if n:
+			n.free()
+	# Old saves: a level-10 save keeps its level and traits and levels on; bad levels are clamped.
+	var old := Profile.default_profile()
+	old.defenders.ace.level = 10
+	old.defenders.ace.xp = 0
+	old.defenders.ace.traits = {"3": "power", "6": "tempo", "9": "clutch"}
+	old.defenders.rico.level = 31
+	old.defenders.maya.level = 7
+	old.defenders.maya.xp = 900
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	Profile.load_profile()
+	ok(Profile.load_status == "ok", "an Update 10 save loads (%s)" % Profile.load_status)
+	ok(Profile.defender_level("ace") == 10 and Profile.chosen_trait("ace", 9) == "clutch" and Profile.pending_traits("ace") == 0, "a level-10 defender keeps its level and traits")
+	ok(Profile.defender_level("maya") == 7 and Profile.defender_xp("maya") == 900, "lower levels and XP are untouched")
+	ok(Profile.defender_level("rico") == 20, "an impossible level is clamped to 20")
+	ok(absf(float(Profile.defender_mods("ace").damage) - (0.54 + 0.08)) < 0.0001, "an old level-10 defender has the same power as before (+54 % and Power Training)")
+	ok(Profile.add_defender_xp("ace", int(curve[10]) - int(curve[9])) == 1 and Profile.defender_level("ace") == 11, "an old max-level defender levels on to 11")
+	Profile.reset_profile()
+
 
 ## Every runner route leaves its gate straight through the doorway (gates face home plate), stays
 ## clear of the outfield wall away from its gate and never passes another gate. Iron Fortress's

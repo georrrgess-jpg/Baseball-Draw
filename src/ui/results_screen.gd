@@ -32,6 +32,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_demo_result()
+	_demo_levelup()
 	var dim := ColorRect.new()
 	dim.color = Color(0.01, 0.02, 0.05, 0.0)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -118,6 +119,37 @@ func _demo_result() -> void:
 			if k.ends_with("_coins"):
 				extra += int(demo[k])
 	result["coins_total"] = int(result.get("coins_total", result.get("coins", 0))) + extra
+
+
+## Screenshot helper (`--demo-levelup`, with `--show-results`): the team's XP crosses levels past 10:
+## one defender becomes a Hall of Famer (19 → 20), one an All-Star (14 → 15), one reaches 11 and 12.
+## Only the shown result and the in-memory levels change (nothing is granted or saved).
+func _demo_levelup() -> void:
+	if not "--demo-levelup" in OS.get_cmdline_user_args() or result.is_empty():
+		return
+	# [level before, level after, XP after]
+	var plan := [[19, 20, 0], [14, 15, 1800], [10, 12, 900], [17, 18, 4200], [12, 12, 2400], [9, 10, 300]]
+	var dxp: Dictionary = result.get("defender_xp", {})
+	var i := 0
+	for id in Profile.data.team:
+		if i >= plan.size():
+			break
+		var pl: Array = plan[i]
+		i += 1
+		var lb := int(pl[0])
+		var la := int(pl[1])
+		var rewards: Array = []
+		for l in range(lb + 1, la + 1):
+			rewards.append(Profile.level_reward_text(Profile.defender_level_reward(l)))
+		var before := int(Profile.defender_xp_needed(lb) * 0.6) if la > lb else 600
+		var gained := Profile.defender_xp_needed(lb) - before + int(pl[2]) if la > lb else int(pl[2]) - before
+		for l in range(lb + 1, la):
+			gained += Profile.defender_xp_needed(l)
+		dxp[id] = {"xp": gained, "levels": la - lb, "level": la, "level_before": lb, "xp_before": before,
+			"xp_after": int(pl[2]), "rewards": rewards, "outs": int(dxp.get(id, {}).get("outs", 3))}
+		Profile.data.defenders[id].level = la
+		Profile.data.defenders[id].xp = int(pl[2])
+	result["defender_xp"] = dxp
 
 
 # ---------------------------------------------------------------- line score
@@ -910,7 +942,8 @@ func _play_again() -> void:
 # ---------------------------------------------------------------- helpers
 
 ## One defender's XP gain: the bar fills from before to after; each level gained flashes
-## LEVEL UP! and shows the level road reward it unlocked.
+## LEVEL UP! and shows the level road reward it unlocked. Update 11: levels 11–20; reaching level 15
+## shows ALL-STAR! and the badge, level 20 HALL OF FAMER! with the gold frame and nameplate.
 func _progress_tile(id: String, d: Dictionary, delay: float) -> Control:
 	var accent := Color(DB.defender(id).get("accent", "#ffffff"))
 	var p := UITheme.tile_panel(Color(accent, 0.45), 6)
@@ -919,35 +952,60 @@ func _progress_tile(id: String, d: Dictionary, delay: float) -> Control:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
 	p.add_child(hb)
-	var pt := DB.portrait(id)
-	if pt:
-		var tr := TextureRect.new()
-		tr.texture = pt
-		tr.custom_minimum_size = Vector2(44, 44)
-		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		hb.add_child(tr)
+	var lb := int(d.get("level_before", d.get("level", 1)))
+	var honor0 := DefenderLevels.honor(lb)
+	var frame: PanelContainer = null
+	if DB.portrait(id):
+		frame = DefenderHonors.portrait(id, 40, Color(accent, 0.7), honor0)
+		frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hb.add_child(frame)
 	var vb := VBoxContainer.new()
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_theme_constant_override("separation", 1)
 	hb.add_child(vb)
 	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
 	vb.add_child(top)
-	var nm := UITheme.label(DB.defender(id).get("name", id), UITheme.FS_BODY, accent.lightened(0.35), UITheme.font_header())
-	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	nm.clip_text = true
-	top.add_child(nm)
-	var lvl_l := UITheme.label("LV %d" % int(d.get("level_before", d.get("level", 1))), UITheme.FS_BODY, UITheme.GOLD, UITheme.font_display())
+	# The name, on the honour's nameplate for an All-Star or a Hall of Famer (swapped in when the level
+	# is reached below).
+	var name_box := HBoxContainer.new()
+	name_box.name = "HonorBox"
+	name_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(name_box)
+	var dname := str(DB.defender(id).get("name", id))
+	var set_name := func(hon: String) -> void:
+		for c in name_box.get_children():
+			c.queue_free()
+		var plate := DefenderHonors.nameplate(id, 15, hon, dname.to_upper())
+		if plate:
+			plate.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			plate.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			name_box.add_child(plate)
+		else:
+			var nm := UITheme.label(dname, UITheme.FS_BODY, accent.lightened(0.35), UITheme.font_header())
+			nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			nm.clip_text = true
+			name_box.add_child(nm)
+	set_name.call(honor0)
+	var lvl_l := UITheme.label("LV %d" % lb, UITheme.FS_BODY, UITheme.GOLD, UITheme.font_display())
+	lvl_l.name = "LevelLabel"
 	top.add_child(lvl_l)
-	var bar := UITheme.bar(accent.lightened(0.15), 10, 1.0, 0.0)
-	var lb := int(d.get("level_before", d.get("level", 1)))
+	var bar := UITheme.bar(DefenderHonors.HOF_GOLD if honor0 == DefenderLevels.HALL_OF_FAME else accent.lightened(0.15), 10, 1.0, 0.0)
 	var need0 := maxi(1, Profile.defender_xp_needed(lb))
 	bar.value = clampf(float(d.get("xp_before", 0)) / need0, 0.0, 1.0)
 	vb.add_child(bar)
 	var info := UITheme.label("+%d XP" % int(d.get("xp", 0)) + ("  ·  %d outs" % int(d.outs) if int(d.get("outs", 0)) > 0 else ""), UITheme.FS_MIN, UITheme.MUTED, UITheme.font_body_bold())
 	info.clip_text = true
+	info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	vb.add_child(info)
 	var levels := int(d.get("levels", 0))
+	if levels > 0:
+		# The whole reward list, for when a long one does not fit the line.
+		var lines: Array = []
+		var rws: Array = d.get("rewards", [])
+		for k in mini(levels, rws.size()):
+			lines.append("Level %d: %s" % [lb + k + 1, rws[k]])
+		p.tooltip_text = "\n".join(lines)
 	var after := clampf(float(d.get("xp_after", 0)) / maxi(1, Profile.defender_xp_needed(int(d.get("level", 1)))), 0.0, 1.0)
 	if int(d.get("level", 1)) >= DB.defender_max_level:
 		after = 1.0
@@ -964,6 +1022,22 @@ func _progress_tile(id: String, d: Dictionary, delay: float) -> Control:
 			p.scale = Vector2(1.06, 1.06)
 			var rewards: Array = d.get("rewards", [])
 			info.text = "LEVEL UP!" + ("  +" + str(rewards[k]) if k < rewards.size() else "")
+			var r := Profile.defender_level_reward(lv)
+			if r.has("badge"):
+				# Milestone: ALL-STAR! / HALL OF FAMER!, the nameplate and (Hall of Famer) the gold frame;
+				# the rest of the reward is in the tile's tooltip.
+				var hon := str(r.badge)
+				info.text = "%s!" % str(DefenderLevels.BADGE_NAMES.get(hon, hon)).to_upper()
+				set_name.call(hon)
+				if hon == DefenderLevels.HALL_OF_FAME:
+					if frame:
+						DefenderHonors.gild(frame, 40)
+					var fs := bar.get_theme_stylebox("fill")
+					if fs is StyleBoxFlat:
+						var gold: StyleBoxFlat = fs.duplicate()
+						gold.bg_color = DefenderHonors.HOF_GOLD
+						bar.add_theme_stylebox_override("fill", gold)
+				Audio.play("level_up", -2.0)
 			info.add_theme_color_override("font_color", UITheme.GOLD)
 			bar.value = 0.0)
 		tw.tween_property(p, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
