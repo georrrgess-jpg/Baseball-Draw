@@ -133,6 +133,7 @@ static func apply_debug_args() -> void:
 		Profile.data.cards.wall_of_dirt.copies = DB.upgrade_copies("common", 5)
 		Profile.data.cards.rally_cry.copies = DB.upgrade_copies("uncommon", 6)
 		Profile.data.coins = maxi(int(Profile.data.coins), 24000)
+		Profile.save_now()   # so a later screenshot run (e.g. a battle) can reuse this profile
 	Profile.data.deck = Profile.STARTER_DECK.duplicate()
 	Profile.data.coins = maxi(int(Profile.data.coins), 2400)
 	Profile.changed.emit()
@@ -920,7 +921,11 @@ func _card_gallery() -> void:
 	shade.add_child(m)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 14)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
 	m.add_child(vb)
+	var title := UITheme.title("PRESTIGE CARDS: LEVEL 5 (UNCHANGED)  ▶  PRESTIGE ★1 / ★3 / ★5", 40, CardView.PRESTIGE_GOLD)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(title)
 	var ids := ["power_throw", "frost_field", "heat_wave", "grand_slam_barrage"]
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--gallery-cards="):

@@ -460,8 +460,15 @@ func _draw_overlay() -> void:
 	if mastery >= 1:
 		_draw_mastery(rect, s, dim, o)
 	if not hide_crest:
-		draw_prestige_crest(o, Vector2(rect.get_center().x, rect.end.y - 1.0 * s), s * 1.3, p,
-			DB.rarity_color(str(DB.card(card_id).get("rarity", "common"))), dim)
+		var rar := DB.rarity_color(str(DB.card(card_id).get("rarity", "common")))
+		if hotkey != "":
+			# Battle hand: the HUD's energy bar covers the bottom edge of the cards, so the crest sits as a
+			# seal on the art's bottom-right corner instead (always visible, clear of the text).
+			var inner := rect.grow(-5 * s)
+			var art_rect := Rect2(inner.position + Vector2(5, 31) * s, Vector2(inner.size.x - 10 * s, inner.size.y * 0.41))
+			draw_prestige_crest(o, art_rect.end - Vector2(16, 13) * s, s * 1.1, p, rar, dim)
+		else:
+			draw_prestige_crest(o, Vector2(rect.get_center().x, rect.end.y - 1.0 * s), s * 1.3, p, rar, dim)
 
 
 ## The gold Prestige crest: a crowned shield between two laurel sprigs, the rarity colour as its inner rim,

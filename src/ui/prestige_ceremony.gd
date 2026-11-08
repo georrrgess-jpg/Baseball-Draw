@@ -312,8 +312,8 @@ func _slam() -> void:
 		# Two confetti cannons in the bottom corners, aimed up across the card.
 		var left := i % 2 == 0
 		var origin := Vector2(-10.0 if left else vs.x + 10.0, vs.y * 0.92)
-		var ang := (-PI * 0.5 + (0.62 if left else -0.62)) + _rng.randf_range(-0.28, 0.28)
-		var sp := _rng.randf_range(900.0, 1700.0) * vs.y / 1080.0
+		var ang := (-PI * 0.5 + (0.42 if left else -0.42)) + _rng.randf_range(-0.3, 0.3)
+		var sp := _rng.randf_range(1300.0, 2200.0) * vs.y / 1080.0
 		var col: Color = PRISM[i % PRISM.size()] if i % 4 != 0 else Color("#FFF3C4")
 		_confetti.append({"pos": origin + Vector2(0, _rng.randf_range(-40, 40)),
 			"vel": Vector2(cos(ang), sin(ang)) * sp, "rot": _rng.randf() * TAU, "rv": _rng.randf_range(-10.0, 10.0),
@@ -329,9 +329,11 @@ func _update_particles(delta: float) -> void:
 		s.life -= delta
 	_shards = _shards.filter(func(s: Dictionary) -> bool: return s.life > 0.0)
 	for c in _confetti:
-		c.vel.y += 760.0 * delta
-		c.vel *= 1.0 - minf(1.0, 1.9 * delta)
-		c.vel.x += sin(_t * 3.0 + c.rot) * 30.0 * delta
+		c.vel.y += 900.0 * delta
+		c.vel *= 1.0 - minf(1.0, 0.75 * delta)
+		# Once falling, paper flutters: terminal speed and a sideways sway.
+		c.vel.y = minf(c.vel.y, 260.0)
+		c.vel.x += sin(_t * 3.0 + c.rot) * 120.0 * delta
 		c.pos += c.vel * delta
 		c.rot += c.rv * delta
 		c.flip += 7.0 * delta
