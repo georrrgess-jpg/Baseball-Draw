@@ -85,7 +85,7 @@ What changed: [Update 6](docs/screenshots/update6_before_after.jpg), [Update 5](
 - **Fair packs**: Pack Luck guarantees an Epic or better within 10 packs and a Legendary within 30 Pro or
   Champion Packs, and extra copies of max-level cards turn into coins.
 - **Long-term progression**: account level, defender XP/levels, card collection and upgrades, card packs,
-  gear shop, uniforms, 52 achievements, stadium unlocks, records and match history.
+  gear shop, uniforms, 54 achievements, stadium unlocks, records and match history.
 - **Four difficulties** (Rookie, Standard, Veteran, Legend) that change runner toughness, speed, wave size,
   enemy ability timing, elite affixes, starting shields and rewards.
 - **Settings**: resolution, window mode, V-Sync, FPS cap, UI scale, quality presets (shadows, AA, SSAO,

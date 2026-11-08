@@ -295,7 +295,7 @@ func _bonus_chips() -> Control:
 	if int(result.get("milestone_coins", 0)) > 0:
 		chips.append(["wave", "MILESTONES", int(result.milestone_coins), UITheme.PURPLE.lightened(0.3), "Endless milestones: every 5 innings cleared pays coins and a pack."])
 	if int(result.get("overflow_coins", 0)) > 0:
-		chips.append(["collection", "EXTRA COPIES", int(result.overflow_coins), UITheme.BLUE.lightened(0.3), "Copies of cards already at max level were turned into coins."])
+		chips.append(["collection", "EXTRA COPIES", int(result.overflow_coins), UITheme.BLUE.lightened(0.3), "Copies your cards can't use any more (level 10, or already holding every copy they need) became coins."])
 	if chips.is_empty():
 		return null
 	var row := HFlowContainer.new()
