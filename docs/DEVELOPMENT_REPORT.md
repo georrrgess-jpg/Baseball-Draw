@@ -1112,3 +1112,4 @@ Plan: `docs/plans/UPDATE_11_PLAN.md`. Three parallel streams; the lead merged an
 * Script check: 100 scripts, 0 failed.
 * System suite: 3,196 checks, 0 failed.
 * The hand hit map with Prestige cards: 0 of 175 points dead.
+* Full UI flow test on the merged update: 514 checks, 0 failed, including the Prestige, level-20 and boss-bar sections.
