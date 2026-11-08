@@ -29,10 +29,21 @@ jobs:
 
       - name: Install Godot ${{ env.GODOT_VERSION }}
         run: |
-          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          # Downloads fail loudly, retry, and fall back to Godot's official build mirror
+          # (a 504 from one release host once fed an HTML error page to unzip).
+          fetch() { # file name
+            for base in "https://github.com/godotengine/godot/releases/download" "https://github.com/godotengine/godot-builds/releases/download"; do
+              if curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$1" "$base/${GODOT_VERSION}-stable/$2" && unzip -tq "$1" >/dev/null; then
+                return 0
+              fi
+              echo "download of $2 from $base failed, trying the next host"
+            done
+            return 1
+          }
+          fetch godot.zip "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
           unzip -q godot.zip
           sudo mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
-          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          fetch templates.tpz "Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
           mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
           unzip -q -j templates.tpz "templates/windows_release_x86_64.exe" "templates/windows_release_x86_64_console.exe" \
             "templates/linux_release.x86_64" "templates/version.txt" \
