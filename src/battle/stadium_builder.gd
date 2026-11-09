@@ -535,13 +535,16 @@ func _build_tunnel(g: Dictionary, gate: Node3D, letter: String) -> void:
 	for s in [-1.0, 1.0]:
 		steel.box_mm(Vector3(minf(s * (ow - 0.1), s * (ow + 0.5)), 0.0, -1.15), Vector3(maxf(s * (ow - 0.1), s * (ow + 0.5)), 4.5, 1.1))
 	var mz := zf - 0.75
-	var my := TUNNEL_ROOF + 1.25      # the marquee stands on legs, clear of the gate's beacon and lamps
-	steel.color = Color(0.4, 0.42, 0.48)
-	steel.box_mm(Vector3(-3.9, my, mz - 0.35), Vector3(3.9, my + 2.3, mz))
-	steel.color = Color(1, 1, 1)
-	for s in [-1.0, 1.0]:
-		steel.box_mm(Vector3(s * 3.75 - 0.18, TUNNEL_ROOF, mz - 0.7), Vector3(s * 3.75 + 0.18, my + 2.4, mz + 0.05))
-		steel.box_mm(Vector3(s * 2.0 - 0.1, TUNNEL_ROOF, mz - 0.55), Vector3(s * 2.0 + 0.1, my, mz - 0.35))
+	var my := TUNNEL_ROOF + 0.7       # the marquee stands on short legs, clear of the gate's beacon
+	# No marquee on a centre-field gate: the scoreboard stands right behind it and must stay readable.
+	var marquee := absf(float(g.angle)) > 14.0
+	if marquee:
+		steel.color = Color(0.4, 0.42, 0.48)
+		steel.box_mm(Vector3(-3.9, my, mz - 0.35), Vector3(3.9, my + 1.8, mz))
+		steel.color = Color(1, 1, 1)
+		for s in [-1.0, 1.0]:
+			steel.box_mm(Vector3(s * 3.75 - 0.18, TUNNEL_ROOF, mz - 0.7), Vector3(s * 3.75 + 0.18, my + 1.9, mz + 0.05))
+			steel.box_mm(Vector3(s * 2.0 - 0.1, TUNNEL_ROOF, mz - 0.55), Vector3(s * 2.0 + 0.1, my, mz - 0.35))
 	_kit_mesh(t, steel, _tex_mat("steel_charcoal", 0.5, 0.65, 0.5), "Steel")
 
 	# Railings round both roofs (galvanised).
@@ -612,8 +615,9 @@ func _build_tunnel(g: Dictionary, gate: Node3D, letter: String) -> void:
 			lamps.box(Vector3(s * (iw - 0.14), 3.9, z), Vector3(0.1, 0.22, 0.42))
 	for s in [-1.0, 1.0]:
 		lamps.box(Vector3(s * (ow + 0.2), 4.95, 0.85), Vector3(0.4, 0.18, 0.3))
-	lamps.box(Vector3(0, my + 0.22, mz + 0.03), Vector3(7.0, 0.1, 0.08))
-	lamps.box(Vector3(0, my + 2.12, mz + 0.03), Vector3(7.0, 0.1, 0.08))
+	if marquee:
+		lamps.box(Vector3(0, my + 0.18, mz + 0.03), Vector3(7.0, 0.1, 0.08))
+		lamps.box(Vector3(0, my + 1.62, mz + 0.03), Vector3(7.0, 0.1, 0.08))
 	_kit_mesh(t, lamps, _mat(Color(1.0, 0.97, 0.9), 0.4, 0.0, Color(1.0, 0.93, 0.78), 4.0), "Lamps", false)
 	var glow := MeshKit.new()
 	glow.color = Color(1, 1, 1)
@@ -650,18 +654,19 @@ func _build_tunnel(g: Dictionary, gate: Node3D, letter: String) -> void:
 	inner.modulate = Color(0.08, 0.08, 0.1)
 	inner.position = Vector3(0, 4.05, zb + 0.16)
 	t.add_child(inner)
-	var sign := Label3D.new()
-	sign.text = "VISITORS · GATE " + letter
-	sign.font = font
-	sign.font_size = 96
-	sign.outline_size = 10
-	sign.outline_modulate = Color(0.05, 0.05, 0.07)
-	sign.modulate = Color(accent.r * 1.6, accent.g * 1.6, accent.b * 1.6)
-	sign.shaded = false
-	var text_w := font.get_string_size(sign.text, HORIZONTAL_ALIGNMENT_LEFT, -1, sign.font_size).x
-	sign.pixel_size = minf(0.012, 6.6 / maxf(text_w, 1.0))
-	sign.position = Vector3(0, my + 1.17, mz + 0.02)
-	t.add_child(sign)
+	if marquee:
+		var sign := Label3D.new()
+		sign.text = "VISITORS · GATE " + letter
+		sign.font = font
+		sign.font_size = 96
+		sign.outline_size = 10
+		sign.outline_modulate = Color(0.05, 0.05, 0.07)
+		sign.modulate = Color(accent.r * 1.6, accent.g * 1.6, accent.b * 1.6)
+		sign.shaded = false
+		var text_w := font.get_string_size(sign.text, HORIZONTAL_ALIGNMENT_LEFT, -1, sign.font_size).x
+		sign.pixel_size = minf(0.0105, 6.6 / maxf(text_w, 1.0))
+		sign.position = Vector3(0, my + 0.9, mz + 0.02)
+		t.add_child(sign)
 
 	# A warm work light inside (not on Low quality).
 	if int(Settings.get_value("graphics", "preset", 2)) > 0:

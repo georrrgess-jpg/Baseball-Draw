@@ -243,6 +243,8 @@ func set_toast_top(y: float) -> void:
 
 
 func toast(text: String, kind := "info", duration := 3.2) -> void:
+	if "--no-hud" in OS.get_cmdline_user_args():   # clean screenshots: no pop-ups either
+		return
 	var panel := PanelContainer.new()
 	var accent := {"info": UITheme.BLUE, "achievement": UITheme.GOLD, "level": UITheme.GREEN, "warn": UITheme.SCARLET}.get(kind, UITheme.BLUE)
 	panel.add_theme_stylebox_override("panel", UITheme.panel_style(Color(0.06, 0.09, 0.15, 0.95), accent, 2, 10))
