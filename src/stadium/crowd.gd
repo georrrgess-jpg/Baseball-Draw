@@ -172,14 +172,19 @@ func fill_stand(stand: Node3D, colors: Array, density: float, rng: RandomNumberG
 	var cols: Array[Color] = []
 	var customs: Array[Color] = []
 	var stand_xf := stand.transform
+	# A stand narrowed to fit between two gate tunnels (scale.x < 1) seats fewer fans, each at full width.
+	var sx := clampf(stand.scale.x, 0.3, 1.0)
+	var unsquash := Basis.from_scale(Vector3(1.0 / sx, 1.0, 1.0))
 	for r in ROWS:
 		# Front rows fill first; a few gaps near the top at lower densities.
 		var row_fill := fill * (1.0 - 0.25 * (1.0 - density) * float(r) / ROWS)
 		for s in SEATS:
+			if sx < 0.999 and floori((s + 1) * sx) == floori(s * sx):
+				continue
 			if rng.randf() > row_fill:
 				continue
 			var local := Vector3(-5.7 + s * 0.6 + rng.randf_range(-0.04, 0.04), 1.0 + r * 0.45, 3.86 - r * 0.9)
-			var basis := Basis(Vector3.UP, rng.randf_range(-0.18, 0.18)).scaled(Vector3.ONE * rng.randf_range(0.92, 1.08))
+			var basis := unsquash * Basis(Vector3.UP, rng.randf_range(-0.18, 0.18)).scaled(Vector3.ONE * rng.randf_range(0.92, 1.08))
 			xforms.append(Transform3D(basis, local))
 			var c: Color
 			if rng.randf() < 0.7:

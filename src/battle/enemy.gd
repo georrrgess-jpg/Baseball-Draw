@@ -23,6 +23,10 @@ var alive := true
 var model: CharacterModel
 var height := 1.8
 var spawn_order := 0
+## Metres left to walk inside the gate's tunnel before reaching the doorway (Update 12). While
+## in the tunnel a runner is out of play: it can't be aimed at or hit, and it walks at its base speed.
+var tunnel_left := 0.0
+var _bar_after_tunnel := false
 
 # Status
 var slows: Dictionary = {}          # source -> [amount, time]
@@ -151,6 +155,7 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 	data = DB.enemy(enemy_id)
 	route = p_route
 	d = start_d
+	tunnel_left = maxf(0.0, float(opts.get("tunnel", 0.0)))
 	lateral = float(opts.get("lateral", 0.0))
 	affix = str(opts.get("affix", ""))
 	is_boss = bool(data.get("boss", false))
@@ -234,7 +239,11 @@ func setup(p_battle: Battle, enemy_id: String, p_route: Route, start_d: float, o
 
 
 func _fallback_scale() -> float:
-	return {"swarmer": 0.65, "slugger": 1.35, "iron_slugger": 2.0, "phantom_captain": 1.8, "grand_slammer": 2.3, "captain": 1.1, "armored": 1.1}.get(id, 1.0)
+	return fallback_scale_for(id)
+
+
+static func fallback_scale_for(enemy_id: String) -> float:
+	return {"swarmer": 0.65, "slugger": 1.35, "iron_slugger": 2.0, "phantom_captain": 1.8, "grand_slammer": 2.3, "captain": 1.1, "armored": 1.1}.get(enemy_id, 1.0)
 
 
 static func _bar_mesh(style: String) -> QuadMesh:
@@ -302,14 +311,18 @@ static func _blob_texture() -> Texture2D:
 
 ## Can something new aim at this runner? (defender targeting, area sweeps, picking a card target)
 func targetable() -> bool:
-	return alive and untargetable_t <= 0.0 and phased_t <= 0.0
+	return alive and untargetable_t <= 0.0 and phased_t <= 0.0 and tunnel_left <= 0.0
 
 
 ## Does a hit that is already on its way still land? A phased Phantom Captain can't be aimed at, but
 ## throws in flight, damage over time and cards aimed at it still connect (Update 11). A blinking
 ## Trickster is truly out of reach.
 func hittable() -> bool:
-	return alive and untargetable_t <= 0.0
+	return alive and untargetable_t <= 0.0 and tunnel_left <= 0.0
+
+
+func in_tunnel() -> bool:
+	return alive and tunnel_left > 0.0
 
 
 func is_phased() -> bool:
@@ -702,6 +715,9 @@ func tick(delta: float) -> void:
 		if _death_t > 2.3:
 			queue_free()
 		return
+	if tunnel_left > 0.0:
+		_tick_tunnel(delta)
+		return
 	_tick_status(delta)
 	if is_boss:
 		_tick_boss_log(delta)
@@ -718,6 +734,21 @@ func tick(delta: float) -> void:
 		_hp_bar.set_instance_shader_parameter("stack", _bar_stack)
 	if _stop_t > 0.0:
 		_tick_stop(delta)
+
+
+## Walking out of the gate's tunnel to the doorway, then onto the route.
+func _tick_tunnel(delta: float) -> void:
+	tunnel_left = maxf(0.0, tunnel_left - base_speed * delta)
+	_update_transform(delta)
+	_update_visuals()
+	# Health bars draw on top of everything: keep them hidden until the runner is out of the roofed tunnel.
+	if _hp_bar.visible:
+		_hp_bar.visible = false
+		_bar_after_tunnel = true
+	if tunnel_left <= 0.0:
+		_hp_bar.visible = _bar_after_tunnel or _hp_bar.visible
+		if battle and battle.vfx:
+			battle.vfx.dust(route.points[0], 0.6)
 
 
 ## Out: the runner is knocked back with a hop, falls (defeat animation), then shrinks away.
@@ -875,6 +906,10 @@ func _update_transform(delta: float) -> void:
 	# Runners converge onto the base path as they approach home.
 	var lat := lateral * clampf(remaining() / 6.0, 0.0, 1.0)
 	pos += side * lat
+	if tunnel_left > 0.0:
+		# Straight down the tunnel, in the lane it will take on the route.
+		dir = route.entry_dir()
+		pos += -dir * tunnel_left
 	if airborne_t > 0.0:
 		var k := 1.0 - airborne_t / maxf(airborne_len, 0.01)
 		pos.y = sin(k * PI) * 2.0

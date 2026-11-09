@@ -58,6 +58,7 @@ func _run() -> void:
 	test_update9_models()
 	test_update9_cards_content()
 	test_routes()
+	test_stadium_clearance()
 	await test_scouting()
 	await test_battle_systems()
 	await test_u9_e2_screens()
@@ -1941,6 +1942,9 @@ func _test_update7_battle() -> void:
 	battle.spawn_hold = 0.0
 	battle._process_spawns(0.2)
 	ok(battle.spawn_queue.is_empty() and battle.enemies.size() == count0 + 1, "runners come out again after the delay")
+	_clear()
+	await _wait(0.2)
+	_test_tunnel_spawns()
 	_clear()
 	await _wait(0.2)
 
@@ -4025,6 +4029,93 @@ func test_routes() -> void:
 			ok(wall_ok, "%s/%s stays clear of the outfield wall" % [lid, r.id])
 			ok(gate_ok, "%s/%s never passes another gate" % [lid, r.id])
 	ok(Battle.GATE_LEAD >= 0.5, "runners wait for the gate doors to open before stepping through")
+
+
+# ---------------------------------------------------------------- Update 12: gate clearance and tunnels
+
+## Builds every arena and checks real stadium geometry against each gate: the doorway, the door
+## sweeps, the tunnel space where runners appear, the runner and boss corridors along the first
+## 8 m of every route, and the clean gap around each tunnel (StadiumClearance).
+func test_stadium_clearance() -> void:
+	section("update 12: stadium geometry vs gates, tunnels and runner paths")
+	var env := StadiumClearance.enemy_envelopes()
+	ok(env.runner.x >= 1.6 and env.runner.y >= 2.5, "runner corridor at least 1.6 x 2.5 m (%.2f x %.2f)" % [env.runner.x, env.runner.y])
+	ok(env.boss.y >= 6.5 and env.boss.x > env.runner.x, "boss corridor sized from the real boss models (%.2f x %.2f)" % [env.boss.x, env.boss.y])
+	ok(StadiumBuilder.GATE_OPEN_H >= env.boss.y and StadiumBuilder.GATE_OPEN_HALF * 2.0 >= env.boss.x, "the tallest boss fits through a doorway (%.2f m doorway)" % StadiumBuilder.GATE_OPEN_H)
+	ok(StadiumBuilder.TUNNEL_LEN >= Battle.TUNNEL_SPAWN + 4.0, "tunnels are deep enough to hide a spawning runner")
+	for aid in DB.arena_order:
+		var t0 := Time.get_ticks_msec()
+		var hits := StadiumClearance.check_arena(self, aid, env)
+		if not hits.is_empty():
+			print(StadiumClearance.format_report(aid, hits))
+		ok(hits.is_empty(), "%s: nothing intrudes into a doorway, door sweep, tunnel, spawn area, runner or boss corridor (%d found, %d ms)" % [aid, hits.size(), Time.get_ticks_msec() - t0])
+	# Every gate has its tunnel, and the checker really catches intrusions.
+	var holder := Node3D.new()
+	add_child(holder)
+	var sb := StadiumBuilder.new()
+	var layout := DB.layout_for_arena("champions_citadel")
+	sb.build(holder, DB.arena("champions_citadel"), layout, false)
+	var tunnels := 0
+	for gid in sb.gates.keys():
+		if sb.root.get_node_or_null("Tunnel_" + str(gid)) != null:
+			tunnels += 1
+	ok(tunnels == sb.gates.size() and tunnels == 4, "every gate has a runner tunnel (%d of %d)" % [tunnels, sb.gates.size()])
+	var gate: Node3D = sb.gates["L"]
+	var crate := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(1.0, 1.0, 1.0)
+	crate.mesh = bm
+	crate.set_meta("part", "test crate")
+	sb.root.add_child(crate)
+	crate.global_position = gate.global_transform * Vector3(0, 0, -3.5 / gate.scale.z) + Vector3(0, 0.6, 0)
+	var post := MeshInstance3D.new()
+	var pm := BoxMesh.new()
+	pm.size = Vector3(0.4, 3.0, 0.4)
+	post.mesh = pm
+	post.set_meta("part", "test post")
+	sb.root.add_child(post)
+	post.global_position = gate.global_transform.orthonormalized() * Vector3(StadiumBuilder.GATE_HALF_W + 0.6, 1.5, -5.0)
+	var hits2 := StadiumClearance.check(sb, layout, env)
+	var zones := {}
+	for h in hits2:
+		zones["%s:%s" % [h.part, StadiumClearance._zone_group(h.zone)]] = true
+	ok(zones.has("test crate:spawn area") and zones.has("test crate:left_line corridor (runner)"), "the check catches a crate in a tunnel (%s)" % str(zones.keys()))
+	ok(zones.has("test post:tunnel clearance"), "the check catches a post in the gap around a tunnel")
+	holder.free()
+
+
+## Runners appear inside their gate's tunnel and walk out through the doorway, reaching it exactly
+## at their slot time; while inside they are out of play.
+func _test_tunnel_spawns() -> void:
+	section("update 12: runners walk out of the gate tunnels")
+	battle.spawn_hold = 0.0
+	var route := battle.routes[0]
+	battle.spawn_queue.clear()
+	battle.spawn_queue.append({"time": battle.wave_time + 0.7, "route": 0, "enemy": "runner", "affix": "", "hp_mult": 1.0, "speed_mult": 1.0})
+	var n0 := battle.enemies.size()
+	battle._process_spawns(0.0)
+	ok(battle.enemies.size() == n0 + 1 and battle.spawn_queue.is_empty(), "a runner due in 0.7 s is already walking down its tunnel")
+	var e: Enemy = battle.enemies[battle.enemies.size() - 1]
+	var expect := minf(0.7 * e.base_speed, Battle.TUNNEL_SPAWN)
+	ok(absf(e.tunnel_left - expect) < 0.05, "it starts %.2f m back inside the tunnel (%.2f expected)" % [e.tunnel_left, expect])
+	var gate_p := route.points[0]
+	var behind := Field.v2(e.global_position).distance_to(Field.v2(Field.HOME)) - Field.v2(gate_p).distance_to(Field.v2(Field.HOME))
+	ok(behind > expect - 0.6, "it appears behind the doorway, not in it (%.2f m behind)" % behind)
+	ok(not e.targetable() and not e.hittable() and not battle.enemies_in_radius(e.global_position, 3.0).has(e), "a runner in the tunnel is out of play")
+	var t := 0.0
+	while e.tunnel_left > 0.0 and t < 3.0:
+		e.tick(0.02)
+		t += 0.02
+	ok(absf(t - 0.7) <= 0.03, "it reaches the doorway at its slot time (%.2f s)" % t)
+	ok(e.targetable() and is_equal_approx(e.d, 0.0) and is_equal_approx(e.remaining(), route.length), "then runs the whole, unchanged route (%.1f m)" % route.length)
+	# Slow runners start walking earlier, never more than TUNNEL_SPAWN back.
+	battle.spawn_queue.append({"time": battle.wave_time + 2.0, "route": 0, "enemy": "armored", "affix": "", "hp_mult": 1.0, "speed_mult": 1.0})
+	battle._process_spawns(0.0)
+	ok(battle.spawn_queue.size() == 1, "a runner is not spawned before it has to start walking")
+	battle._process_spawns(0.5)
+	var a: Enemy = battle.enemies[battle.enemies.size() - 1]
+	ok(battle.spawn_queue.is_empty() and a.id == "armored" and a.tunnel_left > 0.0 and a.tunnel_left <= Battle.TUNNEL_SPAWN + 0.001,
+		"a slow runner starts up to %.1f m back (%.2f m)" % [Battle.TUNNEL_SPAWN, a.tunnel_left])
 
 
 # ---------------------------------------------------------------- Update 11: boss fairness (stream C)

@@ -26,6 +26,11 @@ const MIN_DIST := 14.0
 const MAX_DIST := 62.0
 const BOUNDS := Rect2(-30, -32, 60, 50)
 
+## Screenshot helper: `--cam=x,y,z --cam-look=x,y,z [--cam-fov=deg]` pins the camera to a fixed
+## world position and target (close-ups of the stadium); everything else keeps running as usual.
+var debug_pos := Vector3.INF
+var debug_look := Vector3.ZERO
+
 
 func _ready() -> void:
 	camera = Camera3D.new()
@@ -33,6 +38,13 @@ func _ready() -> void:
 	camera.near = 0.3
 	camera.far = 600.0
 	add_child(camera)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--cam="):
+			debug_pos = _parse_v3(a.get_slice("=", 1))
+		elif a.begins_with("--cam-look="):
+			debug_look = _parse_v3(a.get_slice("=", 1))
+		elif a.begins_with("--cam-fov="):
+			camera.fov = float(a.get_slice("=", 1))
 	_apply(true)
 
 
@@ -158,8 +170,17 @@ func _process(delta: float) -> void:
 	_apply(false)
 
 
+static func _parse_v3(s: String) -> Vector3:
+	var p := s.split(",")
+	return Vector3(float(p[0]), float(p[1]), float(p[2])) if p.size() == 3 else Vector3.ZERO
+
+
 func _apply(_instant: bool) -> void:
 	if camera == null:
+		return
+	if debug_pos != Vector3.INF:
+		camera.global_position = debug_pos
+		camera.look_at(debug_look, Vector3.UP)
 		return
 	var r := deg_to_rad(yaw)
 	var p := deg_to_rad(pitch)

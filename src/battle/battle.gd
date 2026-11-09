@@ -35,6 +35,11 @@ const EARLY_CALL_ENERGY := 1.0
 ## Runners wait this long after a wave starts so the gate doors (0.8 s swing) are open before the
 ## first one steps through them.
 const GATE_LEAD := 0.7
+## Runners appear up to this far behind the doorway, inside the gate's tunnel, and walk out
+## (Update 12). They still reach the doorway GATE_LEAD after their slot, as before.
+const TUNNEL_SPAWN := 3.6
+## Widest sideways offset a runner takes from its route line.
+const MAX_LATERAL := 0.9
 ## Seconds between the boss wave clearing and the Dugout Draft cards appearing (the boss finale).
 const DRAFT_DELAY := 1.3
 const SPEEDS := [1.0, 2.0, 3.0]
@@ -815,7 +820,7 @@ func spawn_enemy(id: String, route: Route, start_d := 0.0, opts: Dictionary = {}
 	if not opts.has("speed_mult"):
 		opts.speed_mult = WaveGenerator.speed_multiplier(run)
 	if not opts.has("lateral"):
-		opts.lateral = randf_range(-0.9, 0.9)
+		opts.lateral = randf_range(-MAX_LATERAL, MAX_LATERAL)
 	opts.armor_add = run.modifier_total("enemy_armor")
 	e.setup(self, id, route, start_d, opts)
 	enemies.append(e)
@@ -858,12 +863,32 @@ func _process_spawns(delta: float) -> void:
 		spawn_hold -= delta
 		return
 	wave_time += delta
-	while not spawn_queue.is_empty() and spawn_queue[0].time <= wave_time:
-		var s: Dictionary = spawn_queue.pop_front()
+	# Each runner appears inside its gate's tunnel (up to TUNNEL_SPAWN back) early enough to reach
+	# the doorway exactly at its slot time, so wave timing and route lengths are unchanged.
+	var i := 0
+	while i < spawn_queue.size():
+		var s: Dictionary = spawn_queue[i]
+		if float(s.time) - wave_time > TUNNEL_SPAWN / _queued_speed(s):
+			i += 1
+			continue
+		spawn_queue.remove_at(i)
 		var route := routes[int(s.route)]
-		spawn_enemy(s.enemy, route, 0.0, {"affix": s.affix, "hp_mult": s.hp_mult, "speed_mult": s.speed_mult})
+		var e := spawn_enemy(s.enemy, route, 0.0, {"affix": s.affix, "hp_mult": s.hp_mult, "speed_mult": s.speed_mult})
+		e.tunnel_left = clampf((float(s.time) - wave_time) * e.base_speed, 0.0, TUNNEL_SPAWN)
 		wave_spawned += 1
-		vfx.dust(route.points[0] + Vector3(0, 0, 0), 0.6)
+		if e.tunnel_left > 0.0:
+			e._tick_tunnel(0.0)
+		else:
+			vfx.dust(route.points[0], 0.6)
+
+
+## Base speed a queued runner will have (Enemy.setup), used to time its walk through the tunnel.
+func _queued_speed(s: Dictionary) -> float:
+	var sp := float(DB.enemy(str(s.enemy)).get("speed", 3.0)) * float(s.get("speed_mult", 1.0))
+	for a in DB.elite_affixes:
+		if a.id == str(s.get("affix", "")):
+			sp *= 1.0 + float(a.get("speed", 0.0))
+	return maxf(sp, 0.3)
 
 
 # ---------------------------------------------------------------- outs & runs

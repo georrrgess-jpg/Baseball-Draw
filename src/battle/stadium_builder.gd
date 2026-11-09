@@ -227,6 +227,7 @@ func _build_ground() -> void:
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
+	mi.set_meta("part", "ground")
 
 
 # ---------------------------------------------------------------- walls & gates
@@ -240,66 +241,165 @@ func _gate_angles() -> Array:
 	return out
 
 
+## Gate geometry (Update 12). The gate props are scaled up so the tallest boss (the Grand Slammer,
+## 6.7 m) fits through the doorway: taller than wide, which keeps the doors swinging true (the
+## scale is the same along X and Z, the axes a door turns in). Every gate has a walled, roofed
+## runner tunnel behind it.
+const GATE_SCALE := Vector3(1.12, 1.42, 1.12)
+const GATE_HALF_W := 4.0 * 1.12                # outer half width of the gate frame
+const GATE_OPEN_HALF := 3.0 * 1.12             # half width of the doorway
+const GATE_OPEN_H := 4.9 * 1.42                # doorway height
+const GATE_HALF_D := 0.8 * 1.12                # half depth of the frame
+const GATE_OUT := 0.5                          # gate centre sits this far outside the wall line
+const TUNNEL_LEN := 9.0
+const TUNNEL_IN_HALF := GATE_OPEN_HALF + 0.14  # interior half width
+const TUNNEL_IN_H := 7.4                       # interior height (ceiling)
+const TUNNEL_ROOF := 8.05                      # top of the roof slab
+const TUNNEL_GAP := 1.5                        # clear space kept around every tunnel
+
+var _keepouts: Array = []   # [{xf: Transform3D (on the ground, +Z toward home), lo: Vector2, hi: Vector2}] in gate-local x/z
+
+
+func _gate_xform(gp: Vector3) -> Transform3D:
+	var n := Node3D.new()
+	_face(n, gp + (gp - Field.HOME).normalized() * GATE_OUT, Field.HOME)
+	var xf := n.transform
+	n.free()
+	return xf
+
+
+## The area every gate and its tunnel needs, plus TUNNEL_GAP all round (stands, crowd, towers,
+## banners and signage stay out of it).
+func _build_keepouts() -> void:
+	_keepouts.clear()
+	for g in _gate_angles():
+		var xf := _gate_xform(g.pos)
+		var back := -GATE_HALF_D - TUNNEL_LEN - 0.6
+		_keepouts.append({"xf": xf, "lo": Vector2(-GATE_HALF_W - TUNNEL_GAP, back - TUNNEL_GAP), "hi": Vector2(GATE_HALF_W + TUNNEL_GAP, GATE_HALF_D + 0.5), "id": g.id})
+
+
+## Is a ground footprint (a rectangle `half` around `center`, turned by `rot_y`) clear of every tunnel?
+func _clear_of_tunnels(center: Vector3, half: Vector2, rot_y: float) -> bool:
+	return _rects_clear(center, half, rot_y, _keepouts)
+
+
+## Is the rectangle clear of every rectangle in `rects` (keep-out format)?
+func _rects_clear(center: Vector3, half: Vector2, rot_y: float, rects: Array) -> bool:
+	var ax := Vector3(cos(rot_y), 0, -sin(rot_y))
+	var az := Vector3(sin(rot_y), 0, cos(rot_y))
+	var corners: Array[Vector3] = []
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			corners.append(center + ax * half.x * sx + az * half.y * sz)
+	for k in rects:
+		var xf: Transform3D = k.xf
+		var lo: Vector2 = k.lo
+		var hi: Vector2 = k.hi
+		var inv := xf.affine_inverse()
+		var kc: Array[Vector3] = [xf * Vector3(lo.x, 0, lo.y), xf * Vector3(hi.x, 0, lo.y), xf * Vector3(hi.x, 0, hi.y), xf * Vector3(lo.x, 0, hi.y)]
+		# Separating axis test on the XZ plane (two rectangles, four axes).
+		var separated := false
+		for axis in [xf.basis.x, xf.basis.z, ax, az]:
+			var a := Vector3(axis.x, 0, axis.z).normalized()
+			var amin := INF
+			var amax := -INF
+			for p in corners:
+				amin = minf(amin, a.dot(p))
+				amax = maxf(amax, a.dot(p))
+			var bmin := INF
+			var bmax := -INF
+			for p in kc:
+				bmin = minf(bmin, a.dot(p))
+				bmax = maxf(bmax, a.dot(p))
+			if amax < bmin or bmax < amin:
+				separated = true
+				break
+		if not separated:
+			return false
+	return true
+
+
+## Angular extent (degrees, seen from home) that a gate's frame takes out of the outfield wall.
+func _gate_half_angle() -> float:
+	return rad_to_deg(atan2(GATE_HALF_W + 0.05, Field.WALL_RADIUS))
+
+
 func _build_outfield_wall() -> void:
 	var gate_list := _gate_angles()
+	_build_keepouts()
 	var wall_col := _c("wall")
 	var r := Field.WALL_RADIUS
 	var span := 45.0
-	var seg_len := 6.0
-	var step_deg := rad_to_deg(seg_len / r)
+	# The wall runs between the gates: each free stretch is filled with whole segments (scaled
+	# slightly to fit) that butt into the gate pillars, so no segment ever reaches a doorway.
+	var cuts: Array = []
+	for g in gate_list:
+		cuts.append([float(g.angle) - _gate_half_angle(), float(g.angle) + _gate_half_angle()])
+	cuts.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+	var stretches: Array = []
 	var a := -span
+	for c in cuts:
+		if c[0] > a + 0.5:
+			stretches.append([a, minf(c[0], span), a <= -span + 0.01, false])
+		a = maxf(a, c[1])
+	if a < span - 0.5:
+		stretches.append([a, span, false, true])
 	var ads := SurfaceTool.new()
 	ads.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var ad_i := rng.randi() % 8
-	while a < span - 0.01:
-		var mid := a + step_deg * 0.5
-		var pos := Field.wall_point(mid, r)
-		var skip := false
-		for g in gate_list:
-			if Field.v2(g.pos).distance_to(Field.v2(pos)) < 5.2:
-				skip = true
-		if not skip:
+	var post_angles: Array = []
+	for s in stretches:
+		var a0: float = s[0]
+		var a1: float = s[1]
+		var arc := deg_to_rad(a1 - a0) * r
+		var n := maxi(1, int(round(arc / 6.0)))
+		var step := (a1 - a0) / n
+		for i in n:
+			var s0 := a0 + step * i
+			var s1 := s0 + step
+			var p0 := Field.wall_point(s0, r)
+			var p1 := Field.wall_point(s1, r)
 			var seg := prop("wall_segment")
 			if seg == null:
-				seg = _fallback_wall(seg_len, wall_col)
+				seg = _fallback_wall(6.0, wall_col)
 			root.add_child(seg)
-			_face(seg, pos, Field.HOME)
+			seg.set_meta("part", "outfield wall")
+			_face(seg, (p0 + p1) * 0.5, Field.HOME)
+			seg.scale.x = p0.distance_to(p1) / 6.0
 			_add_ad_board(ads, seg.transform, ad_i % 8)
 			ad_i += 1
-		a += step_deg
+			# Posts at the joins and at the open ends (the foul poles); a gate pillar covers its own joins.
+			if i > 0 or s[2]:
+				post_angles.append(s0)
+		if s[3]:
+			post_angles.append(a1)
 	_finish_ad_boards(ads)
 	_build_foul_poles(gate_list)
-	# Pillars at regular intervals hide the joins between straight segments.
-	var b := -span
-	while b <= span + 0.01:
-		var pp := Field.wall_point(b, r)
-		var near_gate := false
-		for g in gate_list:
-			if Field.v2(g.pos).distance_to(Field.v2(pp)) < 4.6:
-				near_gate = true
-		if not near_gate:
-			var post := prop("wall_post")
-			if post == null:
-				post = Node3D.new()
-				_box(Vector3(0.9, 4.8, 0.9), Vector3(0, 2.4, 0), _mat(_c("steel"), 0.5, 0.6), post)
-				_box(Vector3(1.1, 0.25, 1.1), Vector3(0, 4.9, 0), _mat(_c("trim"), 0.5, 0.2), post)
-			root.add_child(post)
-			_face(post, pp, Field.HOME)
-		b += step_deg
+	for pa in post_angles:
+		var post := prop("wall_post")
+		if post == null:
+			post = Node3D.new()
+			_box(Vector3(0.9, 4.8, 0.9), Vector3(0, 2.4, 0), _mat(_c("steel"), 0.5, 0.6), post)
+			_box(Vector3(1.1, 0.25, 1.1), Vector3(0, 4.9, 0), _mat(_c("trim"), 0.5, 0.2), post)
+		root.add_child(post)
+		post.set_meta("part", "wall post")
+		_face(post, Field.wall_point(pa, r), Field.HOME)
 	# Gates
 	var letters := ["a", "b", "c", "d"]
 	var li := 0
 	for g in gate_list:
-		var gate := prop("gate_" + letters[li % 4])
+		var letter: String = letters[li % 4]
+		var gate := prop("gate_" + letter)
 		li += 1
 		if gate == null:
 			gate = prop("gate")
 		if gate == null:
 			gate = _fallback_gate()
 		root.add_child(gate)
-		var gp: Vector3 = g.pos
-		# Push corner gates slightly outward so they sit in the wall line.
-		_face(gate, gp + (gp - Field.HOME).normalized() * 0.4, Field.HOME)
+		gate.name = "Gate_" + str(g.id)
+		gate.set_meta("part", "gate %s" % g.id)
+		gate.transform = _gate_xform(g.pos)
+		gate.scale = GATE_SCALE
 		gates[g.id] = gate
 		# Warning light for the gate.
 		var light := OmniLight3D.new()
@@ -310,6 +410,272 @@ func _build_outfield_wall() -> void:
 		light.shadow_enabled = false
 		gate.add_child(light)
 		gate.set_meta("light", light)
+		_build_tunnel(g, gate, letter.to_upper())
+
+
+## A textured, vertex-coloured material for procedural stadium pieces (triplanar, so pieces of any
+## size share one texel density with the generated props).
+func _tex_mat(tex: String, rough := 0.8, metal := 0.0, uv_scale := 0.35) -> StandardMaterial3D:
+	var key := "tex|%s|%.2f|%.2f|%.2f" % [tex, rough, metal, uv_scale]
+	if _mat_cache.has(key):
+		return _mat_cache[key]
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = true
+	m.roughness = rough
+	m.metallic = metal
+	var path := PROP_DIR + "textures/tex_" + tex + ".jpg"
+	if ResourceLoader.exists(path):
+		m.albedo_texture = load(path)
+		m.uv1_triplanar = true
+		m.uv1_world_triplanar = true
+		m.uv1_scale = Vector3.ONE * uv_scale
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	_mat_cache[key] = m
+	return m
+
+
+func _kit_mesh(parent: Node3D, k: MeshKit, mat: Material, mesh_name: String, shadows := true) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = mesh_name
+	mi.mesh = k.commit()
+	mi.material_override = mat
+	if not shadows:
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	return mi
+
+
+## The runner tunnel behind a gate (Update 12): a short walled, roofed tunnel that cuts through the
+## stands and concourse so the doors open from a clear runway. Runners appear inside it
+## (Battle.TUNNEL_SPAWN) and walk out through the doorway. Built in the gate's own frame (+Z toward
+## home plate): a full-height front section the doors open from, a lower rear section stepping down
+## toward the concourse, steel portal frames, lamps and floor markings inside, the steel collars
+## where the outfield wall meets the pillars, the lit VISITORS marquee and two entrance lamps.
+func _build_tunnel(g: Dictionary, gate: Node3D, letter: String) -> void:
+	var t := Node3D.new()
+	t.name = "Tunnel_" + str(g.id)
+	t.set_meta("part", "tunnel %s" % g.id)
+	t.set_meta("tunnel_of", gate)
+	root.add_child(t)
+	t.transform = _gate_xform(g.pos)
+	var iw := TUNNEL_IN_HALF
+	var ow := GATE_HALF_W
+	var zf := -GATE_HALF_D + 0.05
+	var zb := zf - TUNNEL_LEN
+	var split := zf - 5.6                     # front (full height) / rear (stepped down) sections
+	# [z0, z1, interior height, roof top] for each section, back to front.
+	var sections := [[zb - 0.6, split, TUNNEL_IN_H - 2.3, TUNNEL_ROOF - 2.3], [split, zf, TUNNEL_IN_H, TUNNEL_ROOF]]
+	var trim := _c("trim")
+	var accent := _c("accent", "#ff7a1a")
+	var wall_col := _c("wall")
+
+	# Shell: side walls, roofs, the step between the sections and the end wall, clad in the arena's
+	# wall colour over dark concrete; a light concrete plinth all round.
+	var shell := MeshKit.new()
+	shell.color = wall_col.lightened(0.6)
+	for sec in sections:
+		var z0: float = sec[0]
+		var z1: float = sec[1]
+		var rt: float = sec[3]
+		for s in [-1.0, 1.0]:
+			shell.box_mm(Vector3(minf(s * iw, s * ow), 0.55, z0), Vector3(maxf(s * iw, s * ow), rt, z1))
+	shell.box_mm(Vector3(-ow, 0.55, zb - 0.6), Vector3(ow, sections[0][2], zb), ["+y"])
+	shell.box_mm(Vector3(-ow, sections[0][2], split - 0.35), Vector3(ow, TUNNEL_ROOF, split), ["-y"])
+	_kit_mesh(t, shell, _tex_mat("concrete", 0.88, 0.0, 0.3), "Shell")
+	var roof := MeshKit.new()
+	roof.color = Color(0.7, 0.72, 0.76)
+	for sec in sections:
+		roof.box_mm(Vector3(-ow, sec[2], sec[0]), Vector3(ow, sec[3], sec[1]), ["-y"])
+	_kit_mesh(t, roof, _tex_mat("roof", 0.8, 0.3, 0.4), "Roof")
+	var plinth := MeshKit.new()
+	plinth.color = Color(0.82, 0.82, 0.8)
+	for s in [-1.0, 1.0]:
+		plinth.box_mm(Vector3(minf(s * iw, s * (ow + 0.18)), 0, zb - 0.78), Vector3(maxf(s * iw, s * (ow + 0.18)), 0.55, zf - 0.05))
+	plinth.box_mm(Vector3(-ow - 0.18, 0, zb - 0.78), Vector3(ow + 0.18, 0.55, zb))
+	_kit_mesh(t, plinth, _tex_mat("concrete", 0.92), "Plinth")
+
+	# Dark interior: lining, ceilings and the rubber floor.
+	var dark := MeshKit.new()
+	dark.color = Color(0.72, 0.74, 0.8)
+	for sec in sections:
+		var z0: float = maxf(sec[0], zb)
+		var ih: float = sec[2]
+		for s in [-1.0, 1.0]:
+			dark.box_mm(Vector3(minf(s * (iw - 0.05), s * iw), 0.9, z0), Vector3(maxf(s * (iw - 0.05), s * iw), ih, sec[1]))
+		dark.box_mm(Vector3(-iw, ih - 0.05, z0), Vector3(iw, ih, sec[1]), ["+y"])
+	dark.box_mm(Vector3(-iw, sections[0][2], split - 0.4), Vector3(iw, TUNNEL_IN_H, split - 0.35), ["-z"])
+	dark.color = Color(0.5, 0.52, 0.56)
+	dark.box_mm(Vector3(-iw, 0, zb), Vector3(iw, 0.03, zf), ["-y"])
+	_kit_mesh(t, dark, _tex_mat("concrete_dark", 0.92), "Lining")
+
+	# Steel: portal frames down the tunnel, the end wall and its doors, pilasters outside, the
+	# collars where the outfield wall meets the gate pillars, and the marquee frame.
+	var steel := MeshKit.new()
+	steel.color = Color(1, 1, 1)
+	var frame_z: Array = []
+	var fz := zf - 0.4
+	while fz > zb + 0.3:
+		frame_z.append(fz)
+		fz -= 2.2
+	for z in frame_z:
+		var ih: float = TUNNEL_IN_H if z > split else sections[0][2]
+		var rt: float = TUNNEL_ROOF if z > split else sections[0][3]
+		for s in [-1.0, 1.0]:
+			steel.box_mm(Vector3(minf(s * (iw - 0.32), s * (iw - 0.05)), 0.0, z - 0.18), Vector3(maxf(s * (iw - 0.32), s * (iw - 0.05)), ih, z + 0.18))
+			steel.box_mm(Vector3(minf(s * ow, s * (ow + 0.26)), 0.55, z - 0.22), Vector3(maxf(s * ow, s * (ow + 0.26)), rt - 0.1, z + 0.22))
+		steel.box_mm(Vector3(-iw + 0.05, ih - 0.38, z - 0.18), Vector3(iw - 0.05, ih - 0.05, z + 0.18))
+	steel.color = Color(0.55, 0.58, 0.66)
+	steel.box_mm(Vector3(-iw, 0.03, zb), Vector3(iw, sections[0][2] - 0.05, zb + 0.08), ["-z"])
+	steel.color = Color(0.32, 0.34, 0.4)
+	steel.box_mm(Vector3(-1.7, 0.03, zb + 0.08), Vector3(-0.03, 3.3, zb + 0.16), ["-z"])
+	steel.box_mm(Vector3(0.03, 0.03, zb + 0.08), Vector3(1.7, 3.3, zb + 0.16), ["-z"])
+	steel.color = Color(1, 1, 1)
+	steel.box_mm(Vector3(-1.9, 3.3, zb + 0.08), Vector3(1.9, 3.48, zb + 0.2), ["-z"])
+	for s in [-1.0, 1.0]:
+		steel.box_mm(Vector3(minf(s * (ow - 0.1), s * (ow + 0.5)), 0.0, -1.15), Vector3(maxf(s * (ow - 0.1), s * (ow + 0.5)), 4.5, 1.1))
+	var mz := zf - 0.75
+	var my := TUNNEL_ROOF + 1.25      # the marquee stands on legs, clear of the gate's beacon and lamps
+	steel.color = Color(0.4, 0.42, 0.48)
+	steel.box_mm(Vector3(-3.9, my, mz - 0.35), Vector3(3.9, my + 2.3, mz))
+	steel.color = Color(1, 1, 1)
+	for s in [-1.0, 1.0]:
+		steel.box_mm(Vector3(s * 3.75 - 0.18, TUNNEL_ROOF, mz - 0.7), Vector3(s * 3.75 + 0.18, my + 2.4, mz + 0.05))
+		steel.box_mm(Vector3(s * 2.0 - 0.1, TUNNEL_ROOF, mz - 0.55), Vector3(s * 2.0 + 0.1, my, mz - 0.35))
+	_kit_mesh(t, steel, _tex_mat("steel_charcoal", 0.5, 0.65, 0.5), "Steel")
+
+	# Railings round both roofs (galvanised).
+	var rail := MeshKit.new()
+	rail.color = Color(0.85, 0.86, 0.88)
+	for sec in sections:
+		var z0: float = sec[0]
+		var z1: float = sec[1]
+		var rt: float = sec[3] + 0.24
+		for s in [-1.0, 1.0]:
+			var x: float = s * (ow - 0.15)
+			rail.box_mm(Vector3(x - 0.03, rt + 1.0, z0 + 0.1), Vector3(x + 0.03, rt + 1.06, z1 - 0.1))
+			rail.box_mm(Vector3(x - 0.02, rt + 0.5, z0 + 0.1), Vector3(x + 0.02, rt + 0.54, z1 - 0.1))
+			var pz := z0 + 0.1
+			while pz <= z1 - 0.05:
+				rail.box_mm(Vector3(x - 0.035, rt, pz - 0.035), Vector3(x + 0.035, rt + 1.06, pz + 0.035))
+				pz += 1.4
+	rail.box_mm(Vector3(-ow + 0.15, sections[0][3] + 1.24, zb - 0.53), Vector3(ow - 0.15, sections[0][3] + 1.3, zb - 0.47))
+	_kit_mesh(t, rail, _tex_mat("galv", 0.4, 0.8, 0.6), "Railings")
+
+	# Painted parts in the arena's colours: wall band, roof copings, collar caps, floor markings.
+	var paint := MeshKit.new()
+	paint.color = trim
+	for sec in sections:
+		var z0: float = sec[0]
+		var z1: float = sec[1]
+		var rt: float = sec[3]
+		for s in [-1.0, 1.0]:
+			paint.box_mm(Vector3(minf(s * (ow - 0.3), s * (ow + 0.12)), rt, z0 - 0.12), Vector3(maxf(s * (ow - 0.3), s * (ow + 0.12)), rt + 0.24, z1))
+		paint.box_mm(Vector3(-ow - 0.12, rt, z0 - 0.12), Vector3(ow + 0.12, rt + 0.24, z0 + 0.2))
+	for s in [-1.0, 1.0]:
+		paint.box_mm(Vector3(minf(s * ow, s * (ow + 0.09)), 4.0, zb - 0.6), Vector3(maxf(s * ow, s * (ow + 0.09)), 4.45, zf - 0.05))
+		paint.box_mm(Vector3(minf(s * (ow - 0.16), s * (ow + 0.58)), 4.5, -1.22), Vector3(maxf(s * (ow - 0.16), s * (ow + 0.58)), 4.72, 1.17))
+	paint.box_mm(Vector3(-ow - 0.09, 4.0, zb - 0.69), Vector3(ow + 0.09, 4.45, zb - 0.6))
+	paint.color = wall_col.lightened(0.15)
+	for s in [-1.0, 1.0]:
+		paint.box_mm(Vector3(minf(s * (iw - 0.05), s * (iw - 0.07)), 2.6, zb), Vector3(maxf(s * (iw - 0.05), s * (iw - 0.07)), 3.0, zf))
+	paint.color = Color(0.92, 0.92, 0.9)
+	for s in [-1.0, 1.0]:
+		paint.box_mm(Vector3(s * (iw - 0.6) - 0.07, 0.03, zb + 0.3), Vector3(s * (iw - 0.6) + 0.07, 0.042, zf - 1.0))
+	paint.color = Color(1.0, 0.78, 0.1)
+	var cz := zf - 2.0
+	while cz > zb + 1.0:
+		for s in [-1.0, 1.0]:
+			paint.xform = Transform3D(Basis(Vector3.UP, -s * 0.85), Vector3(s * 0.62, 0.0, cz))
+			paint.box(Vector3(0, 0.036, 0), Vector3(0.3, 0.012, 1.55))
+		cz -= 2.1
+	paint.xform = Transform3D.IDENTITY
+	_kit_mesh(t, paint, _tex_mat("white_paint", 0.6, 0.1, 0.5), "Paint", false)
+
+	# Hazard stripes: the threshold and a dado band down both walls.
+	var haz := MeshKit.new()
+	haz.box_mm(Vector3(-iw, 0.03, zf - 0.9), Vector3(iw, 0.045, zf))
+	for s in [-1.0, 1.0]:
+		haz.box_mm(Vector3(minf(s * (iw - 0.1), s * iw), 0.0, zb), Vector3(maxf(s * (iw - 0.1), s * iw), 0.9, zf))
+	_kit_mesh(t, haz, _tex_mat("hazard", 0.7, 0.0, 0.6), "Hazard", false)
+
+	# Lights: ceiling strips between the frames, bulkhead lamps on the walls, the marquee lamp bars
+	# and two entrance lamps on the collars.
+	var lamps := MeshKit.new()
+	lamps.color = Color(1, 1, 1)
+	for i in frame_z.size() - 1:
+		var z: float = (float(frame_z[i]) + float(frame_z[i + 1])) * 0.5
+		var ih: float = TUNNEL_IN_H if z > split else sections[0][2]
+		for x in [-1.6, 1.6]:
+			lamps.box(Vector3(x, ih - 0.1, z), Vector3(0.3, 0.08, 1.3))
+		for s in [-1.0, 1.0]:
+			lamps.box(Vector3(s * (iw - 0.14), 3.9, z), Vector3(0.1, 0.22, 0.42))
+	for s in [-1.0, 1.0]:
+		lamps.box(Vector3(s * (ow + 0.2), 4.95, 0.85), Vector3(0.4, 0.18, 0.3))
+	lamps.box(Vector3(0, my + 0.22, mz + 0.03), Vector3(7.0, 0.1, 0.08))
+	lamps.box(Vector3(0, my + 2.12, mz + 0.03), Vector3(7.0, 0.1, 0.08))
+	_kit_mesh(t, lamps, _mat(Color(1.0, 0.97, 0.9), 0.4, 0.0, Color(1.0, 0.93, 0.78), 4.0), "Lamps", false)
+	var glow := MeshKit.new()
+	glow.color = Color(1, 1, 1)
+	glow.box_mm(Vector3(-2.4, 3.65, zb + 0.08), Vector3(2.4, 4.45, zb + 0.14))
+	_kit_mesh(t, glow, _mat(accent.darkened(0.35), 0.5, 0.0, accent, 1.6), "SignGlow", false)
+	# Light bars down the field face of both pillars, beside the doorway (set_gate_open turns them
+	# from red to green), in steel housings.
+	var housing := MeshKit.new()
+	housing.color = Color(0.25, 0.26, 0.3)
+	var jb := MeshKit.new()
+	jb.color = Color(1, 1, 1)
+	var jx := GATE_OPEN_HALF + 0.5
+	var jz := GATE_HALF_D + 0.04
+	for s in [-1.0, 1.0]:
+		housing.box_mm(Vector3(s * jx - 0.14, 0.7, jz - 0.04), Vector3(s * jx + 0.14, GATE_OPEN_H - 0.4, jz + 0.08))
+		jb.box_mm(Vector3(s * jx - 0.07, 0.8, jz + 0.08), Vector3(s * jx + 0.07, GATE_OPEN_H - 0.5, jz + 0.12), ["-z"])
+	_kit_mesh(t, housing, _tex_mat("steel_dark", 0.5, 0.6, 0.6), "JambHousing", false)
+	var jamb_mat := StandardMaterial3D.new()
+	jamb_mat.albedo_color = Color(0.2, 0.2, 0.2)
+	jamb_mat.emission_enabled = true
+	jamb_mat.emission = JAMB_SHUT
+	jamb_mat.emission_energy_multiplier = 1.2
+	_kit_mesh(t, jb, jamb_mat, "JambLights", false)
+	gate.set_meta("jamb_mat", jamb_mat)
+
+	# Signage: VISITORS over the end-wall doors and on the marquee above the gate.
+	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var inner := Label3D.new()
+	inner.text = "VISITORS"
+	inner.font = font
+	inner.font_size = 96
+	inner.pixel_size = 0.0068
+	inner.outline_size = 0
+	inner.modulate = Color(0.08, 0.08, 0.1)
+	inner.position = Vector3(0, 4.05, zb + 0.16)
+	t.add_child(inner)
+	var sign := Label3D.new()
+	sign.text = "VISITORS · GATE " + letter
+	sign.font = font
+	sign.font_size = 96
+	sign.outline_size = 10
+	sign.outline_modulate = Color(0.05, 0.05, 0.07)
+	sign.modulate = Color(accent.r * 1.6, accent.g * 1.6, accent.b * 1.6)
+	sign.shaded = false
+	var text_w := font.get_string_size(sign.text, HORIZONTAL_ALIGNMENT_LEFT, -1, sign.font_size).x
+	sign.pixel_size = minf(0.012, 6.6 / maxf(text_w, 1.0))
+	sign.position = Vector3(0, my + 1.17, mz + 0.02)
+	t.add_child(sign)
+
+	# A warm work light inside (not on Low quality).
+	if int(Settings.get_value("graphics", "preset", 2)) > 0:
+		var ol := OmniLight3D.new()
+		ol.name = "TunnelLight"
+		ol.light_color = Color(1.0, 0.88, 0.7)
+		ol.light_energy = 1.6
+		ol.omni_range = 10.0
+		ol.omni_attenuation = 1.4
+		ol.shadow_enabled = false
+		ol.position = Vector3(0, TUNNEL_IN_H - 1.4, zf - 3.6)
+		t.add_child(ol)
+
+
 
 
 ## An advertising board (fictional brands, tools/art/stadium_signs.py) on the field side of a wall segment.
@@ -348,6 +714,7 @@ func _finish_ad_boards(st: SurfaceTool) -> void:
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
+	mi.set_meta("part", "ad boards")
 
 
 ## Yellow foul poles where the foul lines meet the wall (skipped where a gate stands).
@@ -372,6 +739,7 @@ func _build_foul_poles(gate_list: Array) -> void:
 		mi.mesh = k.commit()
 		mi.material_override = StadiumDugout.vc_material()
 		root.add_child(mi)
+		mi.set_meta("part", "foul pole")
 		mi.position = p
 		# Fin points toward centre field.
 		var to := Field.wall_point(0.0) - p
@@ -423,13 +791,22 @@ func set_gate_open(gate_id: String, open: bool) -> void:
 	var light: OmniLight3D = g.get_meta("light", null)
 	if light:
 		tw.tween_property(light, "light_energy", 3.0 if open else 0.0, 0.4)
+	# Jamb light bars: dim red while shut, bright green while the gate is open.
+	var jamb: StandardMaterial3D = g.get_meta("jamb_mat", null)
+	if jamb:
+		tw.tween_property(jamb, "emission", JAMB_OPEN if open else JAMB_SHUT, 0.5)
+		tw.tween_property(jamb, "emission_energy_multiplier", 3.2 if open else 1.2, 0.5)
+
+
+const JAMB_SHUT := Color(1.0, 0.16, 0.08)
+const JAMB_OPEN := Color(0.3, 1.0, 0.45)
 
 
 func _build_side_walls() -> void:
 	# Walls running from the foul poles back past the dugouts, then a backstop behind home.
 	var wall_col := _c("wall")
 	for side in [-1.0, 1.0]:
-		var a := Field.wall_point(45.0 * side, Field.WALL_RADIUS) + Vector3(side * 1.0, 0, 0)
+		var a := _side_wall_start(side)
 		var b := Vector3(side * 16.5, 0, 12.0)
 		var dir := b - a
 		var length := dir.length()
@@ -440,6 +817,7 @@ func _build_side_walls() -> void:
 			if seg == null:
 				seg = _fallback_wall(length / n, wall_col)
 			root.add_child(seg)
+			seg.set_meta("part", "side wall")
 			seg.position = p
 			# Face the field (perpendicular to the wall line, toward the inside).
 			var normal := Vector3(-dir.z, 0, dir.x).normalized()
@@ -456,6 +834,7 @@ func _build_side_walls() -> void:
 		if seg == null:
 			seg = _fallback_wall(3.0, wall_col)
 		root.add_child(seg)
+		seg.set_meta("part", "backstop")
 		_face(seg, p, Field.HOME)
 		seg.scale.x = 0.6
 	var fence := prop("fence_chain")
@@ -465,6 +844,7 @@ func _build_side_walls() -> void:
 			var rr := deg_to_rad(ang)
 			var f2 := prop("fence_chain")
 			root.add_child(f2)
+			f2.set_meta("part", "backstop fence")
 			_face(f2, Field.HOME + Vector3(sin(rr) * 7.6, 3.8, cos(rr) * 7.6), Field.HOME + Vector3(0, 3.8, 0))
 		fence.free()
 
@@ -474,30 +854,31 @@ func _build_side_walls() -> void:
 func _build_stands() -> void:
 	# Each entry: [front-centre point, facing direction (toward the field), keep canopy].
 	# The grandstand's front edge is at local z = +4.5, so the origin sits 4.5 m behind it.
+	# Stands (and their crowds) keep TUNNEL_GAP clear of every gate tunnel: a stand that would
+	# touch one slides along its row of seats until it is clear, or is left out.
 	var placements: Array = []
+	var taken: Array = [_rect(_scoreboard_pos(), Vector2(10.6, 2.6), PI)]
 	for side in [-1.0, 1.0]:
-		var a := Field.wall_point(45.0 * side, Field.WALL_RADIUS) + Vector3(side * 1.0, 0, 0)
+		var a := _side_wall_start(side)
 		var b := Vector3(side * 16.5, 0, 12.0)
 		var dir := (b - a).normalized()
 		var outward := Vector3(-dir.z, 0, dir.x)
 		if outward.x * side < 0:
 			outward = -outward
 		for t in [0.22, 0.68]:
-			var p := a.lerp(b, t) + outward * 3.2
-			placements.append([p, -outward, true])
+			for dt in [0.0, 0.04, -0.04, 0.08, -0.08, 0.12, 0.16, 0.2, 0.24, 0.28, 0.32]:
+				if t + dt > 0.75:
+					continue
+				var p := a.lerp(b, t + dt) + outward * 3.2
+				if _stand_fits(p, -outward, taken):
+					placements.append([p, -outward, true])
+					taken.append(_stand_rect(p, -outward))
+					break
 	for ang in [-62.0, 0.0, 62.0]:
 		var rr := deg_to_rad(ang)
 		var dir := Vector3(sin(rr), 0, cos(rr))
 		placements.append([Field.HOME + dir * 11.5, -dir, false])
-	for ang in [-42.0, -15.0, 15.0, 42.0]:
-		var blocked := false
-		for g in _gate_angles():
-			if absf(g.angle - ang) < 11.0:
-				blocked = true
-		if blocked:
-			continue
-		var p := Field.wall_point(ang, Field.WALL_RADIUS + 3.4)
-		placements.append([p, (Field.HOME - p).normalized(), true])
+	placements.append_array(_outfield_stands(taken))
 	var crowd_cols: Array = theme.get("crowd", ["#1c2e4a", "#d7262e", "#f4f1ea"])
 	var density := float(Settings.get_value("graphics", "crowd", 1.0))
 	for pl in placements:
@@ -505,17 +886,97 @@ func _build_stands() -> void:
 		if stand == null:
 			stand = _fallback_stand()
 		root.add_child(stand)
+		stand.set_meta("part", "grandstand")
 		var front: Vector3 = pl[0]
 		var f: Vector3 = pl[1]
 		f.y = 0
 		f = f.normalized()
 		stand.position = front - f * 4.5
 		stand.rotation.y = atan2(f.x, f.z)
+		if pl.size() > 3:
+			stand.scale.x = float(pl[3]) / 12.0
 		if not pl[2]:
 			var canopy := stand.find_child("Canopy", true, false) as Node3D
 			if canopy:
 				canopy.visible = false
 		crowd.fill_stand(stand, crowd_cols, density, rng)
+
+
+## Grandstands behind the outfield wall, packed between the gate tunnels: full 12 m stands where
+## they fit, narrower ones (down to 7 m) in the tighter gaps, so every tunnel is flanked by seating
+## with a clean TUNNEL_GAP either side. Laid out for the right half and mirrored (the layouts are
+## symmetric); a mirrored stand that does not fit is left out.
+func _outfield_stands(taken: Array) -> Array:
+	var out: Array = []
+	var right: Array = []
+	var r := Field.WALL_RADIUS + 3.4
+	for width in [12.0, 10.0, 8.5, 7.0]:
+		var a := 0.0
+		while a <= 47.0:
+			var p := Field.wall_point(a, r)
+			var f := (Field.HOME - p).normalized()
+			var ok := _stand_fits(p, f, taken, width)
+			if ok and a > 0.01:
+				# Leave room for the mirror image on the left.
+				var pm := Field.wall_point(-a, r)
+				ok = _stand_fits(pm, (Field.HOME - pm).normalized(), taken + [_stand_rect(p, f, width)], width)
+			if ok:
+				right.append([a, width])
+				taken.append(_stand_rect(p, f, width))
+				if a > 0.01:
+					var pm := Field.wall_point(-a, r)
+					taken.append(_stand_rect(pm, (Field.HOME - pm).normalized(), width))
+				a += rad_to_deg(width / r)
+			else:
+				a += 0.5
+	for e in right:
+		for sgn in ([1.0] if e[0] < 0.01 else [1.0, -1.0]):
+			var p := Field.wall_point(e[0] * sgn, r)
+			out.append([p, (Field.HOME - p).normalized(), true, e[1]])
+	return out
+
+
+## A ground rectangle in the keep-out format (`half` around `center`, turned by `rot_y`).
+func _rect(center: Vector3, half: Vector2, rot_y: float) -> Dictionary:
+	return {"xf": Transform3D(Basis(Vector3.UP, rot_y), Vector3(center.x, 0, center.z)), "lo": -half, "hi": half}
+
+
+## A grandstand's footprint (seats, back wall and canopy) for a front-centre point and facing.
+func _stand_rect(front: Vector3, f: Vector3, width := 12.0) -> Dictionary:
+	f.y = 0
+	f = f.normalized()
+	var origin := front - f * 4.5
+	return _rect(origin - f * 0.12, Vector2(width * 0.5 + 0.15, 4.95), atan2(f.x, f.z))
+
+
+func _stand_fits(front: Vector3, f: Vector3, taken: Array, width := 12.0) -> bool:
+	var r := _stand_rect(front, f, width)
+	var xf: Transform3D = r.xf
+	var half: Vector2 = r.hi
+	var rot := atan2(xf.basis.z.x, xf.basis.z.z)
+	return _clear_of_tunnels(xf.origin, half, rot) and _rects_clear(xf.origin, half, rot, taken)
+
+
+## Where a side wall starts at a foul pole. When a corner gate stands there, the side wall starts
+## at that gate's outer collar instead, so it never crosses the doorway or the door swing.
+func _side_wall_start(side: float) -> Vector3:
+	var start := Field.wall_point(45.0 * side, Field.WALL_RADIUS) + Vector3(side * 1.0, 0, 0)
+	for g in _gate_angles():
+		if absf(float(g.angle) - 45.0 * side) < 12.0:
+			var xf := _gate_xform(g.pos)
+			var e0 := xf * Vector3(GATE_HALF_W + 0.3, 0, 0.5)
+			var e1 := xf * Vector3(-GATE_HALF_W - 0.3, 0, 0.5)
+			start = e0 if Field.angle_from_center(e0) * side > Field.angle_from_center(e1) * side else e1
+	return start
+
+
+func _scoreboard_pos() -> Vector3:
+	var r := Field.WALL_RADIUS + 9.0
+	var pos := Field.wall_point(0.0, r)
+	while r < Field.WALL_RADIUS + 30.0 and not _clear_of_tunnels(pos, Vector2(10.6, 2.6), PI):
+		r += 1.0
+		pos = Field.wall_point(0.0, r)
+	return pos
 
 
 func _fallback_stand() -> Node3D:
@@ -540,11 +1001,18 @@ func _build_light_towers() -> void:
 	var lamp_energy := float(theme.get("lamp_energy", 2.0))
 	var night: bool = theme.get("time", "") in ["night", "storm", "twilight", "dusk_snow"]
 	var spot_count := 0
-	for p in spots:
+	for p0 in spots:
+		# A tower base that would touch a gate tunnel steps further out.
+		var p: Vector3 = p0
+		var k := 0
+		while k < 12 and not _clear_of_tunnels(p, Vector2(3.0, 3.0), 0.0):
+			p += (p0 - Vector3(0, 0, -4)).normalized() * 1.5
+			k += 1
 		var tower := prop("light_tower")
 		if tower == null:
 			tower = _fallback_tower()
 		root.add_child(tower)
+		tower.set_meta("part", "light tower")
 		_face(tower, p, Vector3(0, 0, -4))
 		for mi in _all_meshes(tower):
 			for s in mi.mesh.get_surface_count():
@@ -662,6 +1130,7 @@ func _build_dugouts() -> void:
 		# Steps at the end nearest home plate.
 		var d := StadiumDugout.build(colors, "DEFENDERS" if is_home else "VISITORS", side > 0.0, rng, seated, standing)
 		root.add_child(d)
+		d.set_meta("part", "dugout")
 		var pos := Vector3(side * 13.6, 0, 4.6)
 		_face(d, pos, Vector3(0, 0, 1.5))
 		if is_home:
@@ -671,13 +1140,7 @@ func _build_dugouts() -> void:
 
 func _build_scoreboard() -> void:
 	var board := prop("scoreboard")
-	var pos := Field.wall_point(0.0, Field.WALL_RADIUS + 9.0)
-	var has_gate_center := false
-	for g in _gate_angles():
-		if absf(g.angle) < 8.0:
-			has_gate_center = true
-	if has_gate_center:
-		pos = Field.wall_point(0.0, Field.WALL_RADIUS + 13.0)
+	var pos := _scoreboard_pos()   # pushed back behind a centre-field gate's tunnel
 	var screen: MeshInstance3D = null
 	if board == null:
 		board = Node3D.new()
@@ -694,6 +1157,7 @@ func _build_scoreboard() -> void:
 		screen = board.find_child("Screen", true, false) as MeshInstance3D
 		_add_scoreboard_nameplate(board)
 	root.add_child(board)
+	board.set_meta("part", "scoreboard")
 	_face(board, pos, Field.HOME)
 	board.scale = Vector3.ONE * 1.15
 	scoreboard_viewport = SubViewport.new()
@@ -753,7 +1217,21 @@ func _build_banners() -> void:
 	var tex := _banner_texture()
 	var angles := [-40.0, -22.0, 22.0, 40.0]
 	for i in angles.size():
-		var p := Field.wall_point(angles[i], Field.WALL_RADIUS + 1.6)
+		# Banners stand behind the wall; one that would touch a gate tunnel moves along the wall.
+		var p := Vector3.INF
+		for da in [0.0, 3.0, -3.0, 6.0, -6.0, 9.0, -9.0]:
+			var a2: float = angles[i] + da
+			if absf(a2) > 44.0:
+				continue
+			var q := Field.wall_point(a2, Field.WALL_RADIUS + 1.6)
+			var to := Field.HOME - q
+			var rot := atan2(to.x, to.z)
+			var c := q + Vector3(cos(rot), 0, -sin(rot)) * 1.15
+			if _clear_of_tunnels(c, Vector2(1.6, 0.7), rot):
+				p = q
+				break
+		if p == Vector3.INF:
+			continue
 		var pole := prop("banner_pole")
 		if pole == null:
 			pole = Node3D.new()
@@ -769,6 +1247,7 @@ func _build_banners() -> void:
 			bm.position = Vector3(1.3, 6.4, 0)
 			pole.add_child(bm)
 		root.add_child(pole)
+		pole.set_meta("part", "banner pole")
 		_face(pole, p, Field.HOME)
 		var banner := pole.find_child("Banner", true, false) as MeshInstance3D
 		if banner:
@@ -839,6 +1318,7 @@ func _build_background() -> void:
 		if p == null:
 			p = _fallback_building(rng.randf_range(10, 28))
 		root.add_child(p)
+		p.set_meta("part", "skyline (mid ring)")
 		_face(p, pos, Vector3.ZERO)
 		p.rotation.y += rng.randf_range(-0.4, 0.4)
 		if name == "container":
@@ -859,6 +1339,7 @@ func _build_background() -> void:
 			if p == null:
 				p = _fallback_building(rng.randf_range(30, 80), night)
 			root.add_child(p)
+			p.set_meta("part", "skyline (far)")
 			_face(p, pos, Vector3.ZERO)
 			p.scale = Vector3.ONE * rng.randf_range(0.9, 1.5)
 			if night:
@@ -915,6 +1396,7 @@ func _build_mountains() -> void:
 		mi.material_override = m
 		mi.position = Vector3(sin(rr) * dist, cm.height * 0.5 - 4.0, -cos(rr) * dist)
 		root.add_child(mi)
+		mi.set_meta("part", "mountains")
 		var cap := MeshInstance3D.new()
 		var cc := CylinderMesh.new()
 		cc.top_radius = 0.0
@@ -925,6 +1407,7 @@ func _build_mountains() -> void:
 		cap.material_override = snow
 		cap.position = mi.position + Vector3(0, cm.height * 0.34 + 0.2, 0)
 		root.add_child(cap)
+		cap.set_meta("part", "mountains")
 	# A ring of pine trees.
 	var pine := _mat(Color(0.16, 0.3, 0.22), 0.9)
 	for i in 60:
@@ -940,6 +1423,7 @@ func _build_mountains() -> void:
 		t.material_override = pine
 		t.position = Vector3(cos(ang) * dist, cm2.height * 0.5, sin(ang) * dist)
 		root.add_child(t)
+		t.set_meta("part", "pine trees")
 
 
 func _build_ambient_particles() -> void:

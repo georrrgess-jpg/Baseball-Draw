@@ -66,6 +66,21 @@ func position_at(d: float) -> Vector3:
 	return points[i].lerp(points[i + 1], t)
 
 
+## The way into the stadium through this route's gate: from the gate toward home plate (the gate faces
+## home, and its tunnel runs straight back along this axis).
+func entry_dir() -> Vector3:
+	var to := Field.HOME - points[0]
+	to.y = 0.0
+	return to.normalized() if to.length_squared() > 0.0001 else Vector3.BACK
+
+
+## Like position_at, but a negative d is that far back inside the gate's tunnel.
+func entry_position(d: float) -> Vector3:
+	if d >= 0.0:
+		return position_at(d)
+	return points[0] + entry_dir() * d
+
+
 func direction_at(d: float) -> Vector3:
 	var i := _segment(d)
 	var dir := points[i + 1] - points[i]
