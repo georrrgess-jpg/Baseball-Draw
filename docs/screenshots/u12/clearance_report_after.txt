@@ -1,0 +1,8 @@
+corridors: runner 3.44 m wide x 3.79 m high, boss 4.66 m wide x 6.81 m high
+steel_yard: 0 intrusion(s)   (290 ms; { "meshes": 170, "lights": 6, "fans": 1730, "stands": 11 })
+sunset_grounds: 0 intrusion(s)   (235 ms; { "meshes": 170, "lights": 6, "fans": 1741, "stands": 11 })
+neon_diamond: 0 intrusion(s)   (282 ms; { "meshes": 172, "lights": 10, "fans": 1654, "stands": 9 })
+iron_fortress: 0 intrusion(s)   (193 ms; { "meshes": 158, "lights": 8, "fans": 1667, "stands": 9 })
+frostpark: 0 intrusion(s)   (221 ms; { "meshes": 238, "lights": 10, "fans": 1758, "stands": 11 })
+champions_citadel: 0 intrusion(s)   (358 ms; { "meshes": 190, "lights": 12, "fans": 1585, "stands": 10 })
+==== 0 intrusion(s) ====

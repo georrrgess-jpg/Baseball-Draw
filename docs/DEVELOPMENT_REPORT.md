@@ -1113,3 +1113,102 @@ Plan: `docs/plans/UPDATE_11_PLAN.md`. Three parallel streams; the lead merged an
 * System suite: 3,196 checks, 0 failed.
 * The hand hit map with Prestige cards: 0 of 175 points dead.
 * Full UI flow test on the merged update: 514 checks, 0 failed, including the Prestige, level-20 and boss-bar sections.
+
+## 21. Update 12: Gate tunnels and stadium clearance
+
+Player report: on some maps runners spawned in the wrong place, and gates opened into the rest of the stadium.
+
+### Geometry check
+The route check from Update 10 (`test_routes`) only compared 2D route lines with the wall arc. A new tool,
+`StadiumClearance` (`src/battle/stadium_clearance.gd`), checks the real stadium meshes instead:
+* It builds each arena headless and collects every visible stadium triangle in world space. Each crowd fan
+  counts as a box.
+* It tests them against oriented boxes for each gate:
+  * the doorway;
+  * the doors, sampled every 10° of their 100° swing;
+  * the spawn area behind the gate;
+  * runner and boss corridors along every route, from the back of the tunnel to 8 m out;
+  * a 1 m gap around each tunnel.
+* Corridor sizes come from the real enemy models at battle scale, plus the runners' ±0.9 m lateral offset:
+  * runners: 3.44 m wide × 3.79 m high;
+  * bosses: 4.66 m wide × 6.81 m high (the Grand Slammer is 6.7 m tall).
+* Anything below 10 cm is treated as floor: the ground, paint and the 8.5 cm door threshold.
+* Run the report with `godot --headless --path . res://tests/stadium_check.tscn [-- --arena=<id>]`.
+  `test_stadium_clearance` in the system suite runs it for all six arenas and fails on any intrusion. It
+  also checks that it catches a crate placed in a tunnel and a post placed in a tunnel's gap.
+
+**Before: 75 intrusions** (full list: `screenshots/u12/clearance_report_before.txt`):
+
+| Arena (layout) | Intrusions | What |
+|---|---|---|
+| Steel Yard, Sunset Grounds, Frostpark (classic) | 11 each | A wall segment ran 0.75 m into gate L's doorway and its right door's swing, ad board included. The grandstands at ±42° sat right behind gates L and R, in the spawn area and the boss corridor. Every gate header was too low for the bosses. |
+| Neon Diamond, Champions Citadel (corner gates) | 18 each | The side walls started inside the corner gates: they crossed the doorway, both door swings and the runner corridor. The outfield wall and its ad board ran into gate R's doorway and door swing. Banner poles stood in the doorways. Headers too low for bosses. |
+| Iron Fortress | 6 | A wall segment in gate R's doorway and door swing. A banner pole in the west boss corridor. Headers too low. |
+
+**After: 0 intrusions** in all six arenas.
+
+### Fixes
+* **Gates:** scaled ×1.12 wide and ×1.42 tall.
+  * The doorway is now 6.7 × 7.0 m, so the tallest boss fits.
+  * The scale is the same along X and Z, the axes the doors turn in, so the doors still swing true.
+* **Outfield wall:** it is laid out between the gates. Each free stretch is filled with whole segments,
+  scaled slightly to fit, that butt into steel collars on the gate pillars. No segment reaches a doorway or a
+  door swing any more.
+* **Side walls:** a side wall starts at the outer collar of a corner gate instead of inside it.
+* **Stands:** stands stay 1.5 m clear of every tunnel.
+  * Outfield stands are packed between the tunnels and mirrored. Full 12 m stands go where they fit; narrower
+    ones (down to 7 m) fill the tighter gaps.
+  * A narrowed stand seats fewer fans, each at full width.
+  * Side stands slide along their wall until they are clear.
+* **Banners, light towers and the scoreboard:** they move until they are clear of the tunnels. The scoreboard
+  steps back behind a centre-field tunnel.
+
+### Runner tunnels
+* **The tunnel:** every gate has a 9 m walled, roofed tunnel behind it.
+  * A full-height front section opens onto the doors; a lower rear section steps down to the concourse.
+  * Inside: steel portal frames, ceiling light strips, caged wall lamps, a hazard dado, white lane edges,
+    yellow chevrons pointing to the field, and a hazard threshold.
+  * The end wall has service doors and a lit VISITORS sign.
+  * A warm work light inside is skipped on Low quality.
+  * Outside: cladding in the arena's wall colour, pilasters, a trim band, copings and roof railings.
+* **Spawning:** runners now appear inside the tunnel (up to `Battle.TUNNEL_SPAWN` = 3.6 m behind the
+  doorway) and walk straight out through the doors.
+  * Each runner starts walking early enough to reach the doorway exactly at its old slot time
+    (`GATE_LEAD` + its start). Wave timing and route lengths are unchanged.
+  * The doorway-exit rule from `test_routes` still holds.
+  * In the tunnel a runner is out of play: it can't be aimed at or hit, and its health bar stays hidden.
+  * Routes now have `entry_dir()` / `entry_position(d)` for the tunnel stretch (negative d).
+
+### Look
+* **Gate surrounds:** steel collars with trim caps and entrance lamps where the wall meets each gate.
+* **Light bars:** bars on both pillars glow red while a gate is shut and green while it is open
+  (`set_gate_open`).
+* **Marquee:** a lit "VISITORS · GATE X" marquee stands on the tunnel roof. Centre-field gates don't get
+  one, so it never covers the scoreboard.
+* **Materials:** the new pieces use the generated prop textures (concrete, steel, roof sheet, hazard,
+  galvanised steel), mapped triplanar, so they match the Blender props.
+* **Budget, Steel Yard:** 136 → 170 mesh instances and 3 → 6 lights. Fans drop from 1,990 to 1,730 because
+  the gates now take more of the outfield.
+
+### Tools
+* `--cam=x,y,z --cam-look=x,y,z [--cam-fov=deg]` pins the battle camera for close-ups. The existing
+  `--cam-view` only orbits the field.
+* `--no-hud` now also hides pop-up toasts.
+
+Screenshots (`docs/screenshots/u12/`, before | after):
+![Steel Yard gates](screenshots/u12/steel_yard_gates_before_after.jpg)
+![Neon Diamond gates](screenshots/u12/neon_diamond_gates_before_after.jpg)
+![Behind a gate](screenshots/u12/steel_yard_behind_gate_before_after.jpg)
+![Tunnel](screenshots/u12/iron_fortress_tunnel.jpg)
+
+For all six arenas there are overview pairs (`<arena>_gates_before_after.jpg`), gate close-ups with runners
+(`<arena>_gate_closeup_before_after.jpg`) and tunnel views, inside and from behind (`<arena>_tunnel.jpg`).
+
+### Verification
+* Script check: 102 scripts, 0 failed.
+* System suite: 3,217 checks, 0 failed.
+  * 21 of them are new: the clearance check for all six arenas, the checker self-test, the envelope and doorway
+    sizes, and the tunnel spawns (timing, out of play, unchanged route).
+  * `test_routes` still passes.
+* Clearance report: 0 intrusions in all six arenas (`screenshots/u12/clearance_report_after.txt`).
+* Full UI flow test: 514 checks, 0 failed.
