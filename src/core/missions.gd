@@ -1,7 +1,9 @@
 class_name Missions
 extends RefCounted
 ## Missions (Update 6): three daily missions (one per tier), one weekly mission and the
-## "Learn the ropes" starter chain for new managers (data/missions.json).
+## starter chain for new managers (data/missions.json). Update 13: the starter chain is the ten-step
+## Rookie Path shown on the hub (Onboarding); its rewards take several packs ("packs") and its finale a
+## free agent of the player's choice ("choice", queued with Onboarding.queue_choice).
 ##
 ## * Generation is deterministic per (local day, profile): the same day always rolls the
 ##   same three missions; the weekly mission is fixed per week (weeks start on Monday).
@@ -34,7 +36,7 @@ static func data() -> Dictionary:
 
 static func default_state() -> Dictionary:
 	return {"day": "", "daily": [], "rerolls": 0, "week": "", "weekly": [], "starter_step": 0, "starter": {},
-		"completed": 0, "fresh": []}
+		"completed": 0, "fresh": [], "path_version": 13}
 
 
 static func state() -> Dictionary:
@@ -208,10 +210,19 @@ static func reward_text(r: Dictionary) -> String:
 	var parts: Array = []
 	if int(r.get("coins", 0)) > 0:
 		parts.append("%s coins" % UITheme.format_int(int(r.coins)))
-	if str(r.get("pack", "")) != "":
-		parts.append(str(DB.pack(str(r.pack)).get("name", r.pack)))
+	var counts := {}
+	var order: Array = []
+	for p in Rewards.bundle_packs(r):
+		if not counts.has(p):
+			order.append(p)
+		counts[p] = int(counts.get(p, 0)) + 1
+	for p in order:
+		var nm := str(DB.pack(str(p)).get("name", p))
+		parts.append(nm if int(counts[p]) == 1 else "%d %ss" % [int(counts[p]), nm])
 	if int(r.get("stars", 0)) > 0:
 		parts.append("%d stars" % int(r.stars))
+	if str(r.get("choice", "")) == "free_agent":
+		parts.append("a free agent of your choice")
 	if int(r.get("season_xp", 0)) > 0:
 		parts.append("%d Season XP" % int(r.season_xp))
 	return " + ".join(parts)
@@ -294,7 +305,10 @@ static func on_event(key: String, amount: float = 1.0) -> Array:
 				inst.progress = int(inst.goal)
 				done.append(inst)
 				(s.fresh as Array).append({"kind": inst.kind, "id": inst.id, "text": text(inst), "reward": reward(inst)})
-				Profile.notice.emit("Mission complete: %s! Claim it in Progression → Missions." % text(inst))
+				if inst.kind == "starter":
+					Profile.notice.emit("Rookie Path step done: %s! Claim the reward on the main menu." % text(inst))
+				else:
+					Profile.notice.emit("Mission complete: %s! Claim it in Progression → Missions." % text(inst))
 	return done
 
 
@@ -387,6 +401,10 @@ static func claim(kind: String, index := 0) -> Dictionary:
 	if kind == "starter":
 		s.starter_step = int(inst.get("step", 0)) + 1
 		s.starter = _starter_instance(int(s.starter_step)) if int(s.starter_step) < starter_steps().size() else {}
+		if str(r.get("choice", "")) != "":   # the Rookie Path finale: pick a free agent on the hub
+			Onboarding.queue_choice(str(r.choice), "Rookie Path finale")
+		if int(s.starter_step) >= starter_steps().size():
+			Profile.bump_stat("rookie_path_done")
 	Profile.bump_stat("missions_completed")
 	# Update 9: every claimed mission pays season XP.
 	r["season_xp"] = season_xp()
@@ -406,8 +424,8 @@ static func _grant(r: Dictionary, source: String) -> void:
 		Profile.add_coins(int(r.coins))
 	if int(r.get("stars", 0)) > 0:
 		Profile.add_stars(int(r.stars))
-	if str(r.get("pack", "")) != "":
-		Profile.add_pack(str(r.pack), source)
+	for p in Rewards.bundle_packs(r):   # "pack" and "packs"
+		Profile.add_pack(str(p), source)
 
 
 ## A day or week ended with finished but unclaimed missions: pay them out so nothing is lost.

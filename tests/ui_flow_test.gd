@@ -91,6 +91,13 @@ func _button_center(b: Button) -> Vector2:
 
 
 func _run() -> void:
+	# Update 13: these checks use every screen, so they run as an established manager (everything open,
+	# silently); the Rookie Camp section starts its own brand-new manager.
+	if "--ui-test-section=rookie" in OS.get_cmdline_user_args():
+		await _test_rookie()
+		_finish()
+		return
+	Onboarding.make_established()
 	if "--ui-test-section=hub" in OS.get_cmdline_user_args():
 		await _test_u9_hub_play_results()
 		await _test_u10_hub()
@@ -406,6 +413,7 @@ func _run() -> void:
 	await _test_draft()
 	await _test_u11_boss_bar()
 	await _test_u11_prestige()
+	await _test_rookie()
 	_finish()
 
 
@@ -2920,3 +2928,212 @@ func _test_u11_defenders() -> void:
 		Profile.data.defenders[id] = saved[id]
 	Profile.save_now()
 	await _wait(0.3)
+
+
+# ---------------------------------------------------------------- Update 13: Rookie Camp hub (stream B)
+
+## Opens the hub and waits for it to settle (its popups start 1.1 s in).
+func _rookie_hub(settle := 1.4) -> Node:
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+	await _wait(settle)
+	return get_tree().current_scene
+
+
+## Waits for a Rookie Camp popup (a spotlight layer named `popup_name`) on the hub.
+func _rookie_popup(hub: Node, popup_name: String, secs := 4.0) -> Node:
+	for i in int(secs * 10.0):
+		var p: Node = hub.find_child(popup_name, false, false)
+		if p and not p.is_queued_for_deletion():
+			await _wait(0.5)   # let the card settle
+			return p
+		await _wait(0.1)
+	return null
+
+
+func _visible_badges(hub: Node) -> Array:
+	var out: Array = []
+	for bd in hub.find_children("CornerBadge", "PanelContainer", true, false):
+		if (bd as Control).is_visible_in_tree():
+			out.append(bd)
+	return out
+
+
+## A brand-new manager's hub: locked teasers, the Rookie Path strip and its CLAIM, the badge budget,
+## NEW FEATURE UNLOCKED with spotlights, Rookie Week CLAIM, the Epic pick, Welcome back with an injected
+## date, the coach's tip, the ftue_return_hub PLAY spotlight, the Play screen's teasers, and an
+## established manager's hub without any of it.
+func _test_rookie() -> void:
+	Profile.reset_profile()
+	Profile.data.flags["tutorial_done"] = true
+	Onboarding.force_popups = true
+	Onboarding.state().last_seen = DailyChallenge.today()
+	# Lots waiting at once: a finished Rookie Path step, packs, Rookie Week and the login calendar.
+	Profile.bump_stat("runs_played")
+	Missions.on_event("win")
+	Profile.add_history({"won": true, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "inning": 3, "score": 900, "outs": 40, "runs": 0, "date": Time.get_datetime_string_from_system()})
+	Profile.add_pack("rookie", "test")
+	Profile.add_pack("rookie", "test")
+	var hub: Node = await _rookie_hub()
+	# 1. Locked teasers.
+	var up: Button = hub.find_child("Tile_upgrades", true, false)
+	_check(up != null and up.find_child("LockTag", true, false) != null and up.tooltip_text.contains("Unlocks at level 2"), "a locked tile is a teaser: lock tag and \"Unlocks at level 2\"")
+	var tag: PanelContainer = up.find_child("LockTag", true, false) if up else null
+	_check(tag != null and _find_label(tag, "LV 2"), "the teaser shows the level it opens at")
+	for n in ["Tile_team", "ShopTile", "ScoutingBookTile"]:
+		var t: Control = hub.find_child(n, true, false)
+		_check(t != null and t.is_visible_in_tree() and t.find_child("LockTag", true, false) != null, "%s is shown as a locked teaser, not hidden" % n)
+	_check(hub.find_child("Tile_deck", true, false).find_child("LockTag", true, false) == null and hub.find_child("Tile_packs", true, false).find_child("LockTag", true, false) == null,
+		"Cards & Deck and Card Packs are open")
+	if up:
+		await _click(_button_center(up))
+		await _wait(0.6)
+		_check(Router.current == "main_menu", "pressing a locked tile stays on the hub (it says when it opens)")
+	var siege: Button = hub.find_child("Mode_standard", true, false)
+	var quick: Button = hub.find_child("Mode_quick", true, false)
+	_check(siege != null and siege.disabled and siege.find_child("LockTag", true, false) != null and quick != null and not quick.disabled and quick.button_pressed,
+		"the mode chips: Quick open and picked, Siege a teaser")
+	var title: Label = hub.find_child("HeroTitleMain", true, false)
+	_check(title != null and title.text == "DEFENSE", "a new manager's PLAY starts Quick Defense (%s)" % (title.text if title else ""))
+	var season: Button = hub.find_child("SeasonBar", true, false)
+	_check(season != null and season.text == "SEASON PASS" and season.find_child("LockTag", true, false) != null, "the Season chip is a teaser until level 4")
+	_check(hub.find_child("DailyPanel", true, false) == null and hub.find_child("MissionsWidget", true, false) == null, "TODAY leaves out the locked Daily Challenge and Missions")
+	var cu: Control = hub.find_child("ComingUp", true, false)
+	_check(cu != null and cu.find_child("Locked_upgrades", true, false) != null and _find_label(cu, "Unlocks at level 2 or Rookie Path step 3"), "COMING UP lists what unlocks next")
+	_check(hub.find_child("RookieWeek", true, false) != null and hub.find_child("LoginPanel", true, false) != null and hub.find_child("LoginDays", true, false) == null,
+		"Rookie Week shows its days; the login calendar shrinks to one row")
+	# 2. Badge budget: at most two attention badges, by priority.
+	var shown: Array = hub.get("attention_shown")
+	_check(shown.size() == 2 and "path_claim" in shown and "packs" in shown, "a new manager sees two attention badges, the most important ones %s" % [shown])
+	_check(_visible_badges(hub).size() <= 2, "at most two badges on the hub (%d)" % _visible_badges(hub).size())
+	var today_r := (hub.find_child("TodayBackdrop", true, false) as Control).get_global_rect()
+	var right: Control = hub.find_child("HubRight", true, false)
+	_check(right != null and right.get_combined_minimum_size().y <= today_r.size.y - 10.0, "the new manager's TODAY cards fit (%d of %d)" % [right.get_combined_minimum_size().y if right else -1, today_r.size.y])
+	# 3. Rookie Path: the strip, CLAIM, the next step.
+	var path: Control = hub.find_child("RookiePath", true, false)
+	_check(path != null and path.is_visible_in_tree() and path.find_child("PathStep10", true, false) != null and _find_label(path, "STEP 1 / 10"), "the Rookie Path strip shows ten steps, on step 1")
+	var left_r := (hub.find_child("HubLeft", true, false) as Control).get_global_rect()
+	var bottom_r := (hub.find_child("BottomBar", true, false) as Control).get_global_rect()
+	if path:
+		var pr := path.get_global_rect()
+		_check(not pr.intersects(left_r) and not pr.intersects(today_r) and pr.end.y <= bottom_r.position.y, "the strip sits between the hero block, TODAY and the bottom bar")
+	var claim: Button = hub.find_child("PathClaim", true, false)
+	_check(claim != null, "a finished step offers CLAIM")
+	if claim:
+		var coins := int(Profile.data.coins)
+		await _click(_button_center(claim))
+		await _wait(0.8)
+		_check(Onboarding.path_claimed() == 1 and int(Profile.data.coins) == coins + 150, "CLAIM pays the step and moves on")
+		var p2: Control = hub.find_child("RookiePath", true, false)
+		_check(p2 != null and _find_label(p2, "STEP 2 / 10") and _find_label(p2, "OPEN A CARD PACK") and p2.find_child("PathClaim", true, false) == null, "the strip now shows step 2 with its progress")
+	# 4. Rookie Week CLAIM.
+	var wc: Button = hub.find_child("WeekClaim", true, false)
+	_check(wc != null, "Rookie Week offers CLAIM")
+	if wc:
+		var coins2 := int(Profile.data.coins)
+		await _click(_button_center(wc))
+		await _wait(0.8)
+		_check(Onboarding.week_claims() == 1 and int(Profile.data.coins) == coins2 + 300 and hub.find_child("WeekClaim", true, false) == null, "CLAIM takes Rookie Week day 1")
+		var st: Label = hub.find_child("WeekStatus", true, false)
+		_check(st != null and st.text.begins_with("Next reward in"), "Rookie Week counts down to the next day (%s)" % (st.text if st else ""))
+	# 5. NEW FEATURE UNLOCKED: level 2 opens Upgrade Cards and Team.
+	Profile.add_xp(Profile.xp_to_next(int(Profile.data.level)))
+	hub = await _rookie_hub(0.4)
+	var cel: Node = await _rookie_popup(hub, "UnlockCelebration")
+	_check(cel != null, "reaching level 2 shows NEW FEATURES UNLOCKED")
+	if cel:
+		_check(cel.find_child("Unlocked_upgrades", true, false) != null and cel.find_child("Unlocked_team", true, false) != null and _find_label(cel, "UPGRADE CARDS"),
+			"the card names both features")
+		var holes: Array = cel.call("hole_rects")
+		_check(holes.size() == 2, "spotlights on both tiles (%d)" % holes.size())
+		var t_up: Control = hub.find_child("Tile_upgrades", true, false)
+		_check(t_up != null and t_up.find_child("LockTag", true, false) == null, "the unlocked tile is open on the hub")
+		var okb: Button = cel.find_child("UnlockOk", true, false)
+		if okb:
+			await _click(_button_center(okb))
+			await _wait(0.8)
+		_check("upgrades" in Onboarding.state().announced and "team" in Onboarding.state().announced and Onboarding.pending_unlocks().is_empty(), "GOT IT: celebrated once")
+		for i in 40:   # a slow software renderer: the fade-out takes a few frames
+			if not is_instance_valid(cel) or cel.is_queued_for_deletion():
+				break
+			await _wait(0.1)
+		_check(not is_instance_valid(cel) or cel.is_queued_for_deletion(), "the card closes")
+	# 6. The Epic pick (after the third game).
+	Onboarding.queue_choice("epic", "Your third game")
+	hub = await _rookie_hub(0.4)
+	var ch: Node = await _rookie_popup(hub, "ChoicePopup")
+	_check(ch != null, "the Epic picker opens on the hub")
+	if ch:
+		var opts: Array = Onboarding.pending_choice().get("options", [])
+		var cards := ch.find_children("*", "CardView", true, false)
+		_check(opts.size() == 3 and cards.size() == 3, "three Epic cards to pick from")
+		_check(ch.find_children("Reason", "Label", true, false).size() == 3, "each says why it suits the deck")
+		var pick: Button = ch.find_child("Pick_" + str(opts[0]), true, false) if not opts.is_empty() else null
+		if pick:
+			await _click(_button_center(pick))
+			await _wait(1.4)
+			_check(Profile.is_card_owned(str(opts[0])) and Onboarding.pending_choice().is_empty(), "PICK adds the Epic to the collection")
+	# 7. Welcome back after 5 days away (injected date).
+	DailyChallenge.date_override = DailyChallenge.shift_date(Time.get_date_string_from_system(), 5)
+	var coins3 := int(Profile.data.coins)
+	hub = await _rookie_hub(0.4)
+	var wb: Node = await _rookie_popup(hub, "WelcomeBack")
+	_check(wb != null and int(Profile.data.coins) == coins3 + 500, "after 5 days away: WELCOME BACK and its bonus")
+	if wb:
+		var recap: Node = wb.find_child("WelcomeRecap", true, false)
+		_check(recap != null and recap.get_child_count() >= 3 and _find_label(wb, "You were away 5 days. The team kept your seat warm: here's a welcome-back bonus."), "the card says how long and recaps what's new")
+		var okw: Button = wb.find_child("WelcomeOk", true, false)
+		if okw:
+			await _click(_button_center(okw))
+			await _wait(0.8)
+		_check(Onboarding.pending_welcome().is_empty(), "LET'S PLAY closes it")
+	_check(Onboarding.week_can_claim() and hub.find_child("WeekClaim", true, false) != null, "Rookie Week waited: day 2 is ready")
+	# 8. The coach's tip after early losses.
+	Onboarding.state().coach = {"easier": "rookie", "difficulty": "standard", "mode": "quick", "auto_build": true, "losses": 2, "reward": {"coins": 150}}
+	Profile.data.difficulty = "standard"
+	hub = await _rookie_hub(0.4)
+	var co: Node = await _rookie_popup(hub, "CoachTip")
+	_check(co != null and co.find_child("CoachEasier", true, false) != null and co.find_child("CoachAutoBuild", true, false) != null, "two early losses: the coach offers Rookie and Auto Build")
+	var eb: Button = co.find_child("CoachEasier", true, false) if co else null
+	if eb:
+		await _click(_button_center(eb))
+		await _wait(0.8)
+		_check(str(Profile.data.difficulty) == "rookie" and Onboarding.coach_tip().is_empty(), "PLAY ON ROOKIE switches the difficulty")
+	await _wait(1.0)
+	# 9. Back from the first-session flow: PLAY spotlighted for game 2, never blocking.
+	Profile.data.flags["ftue_return_hub"] = true
+	hub = await _rookie_hub(0.4)
+	var sp: Node = null
+	for i in 40:
+		sp = hub.find_child("PlaySpotlight", false, false)
+		if sp:
+			break
+		await _wait(0.1)
+	_check(sp != null and sp.find_child("PlayCallout", true, false) != null and not bool(Profile.data.flags.get("ftue_return_hub", false)), "ftue_return_hub: PLAY is spotlighted and the flag is cleared")
+	await _wait(0.6)
+	var play: Button = hub.find_child("PlayButton", true, false)
+	if play:
+		await _click(_button_center(play))
+		_check(await _wait_scene("play_menu"), "the spotlight lets the PLAY click through")
+	# 10. The Play screen's teasers.
+	await _wait(0.8)
+	var pm: Node = get_tree().current_scene
+	var mb: Dictionary = pm.get("_mode_buttons") if pm else {}
+	var br: Button = mb.get("boss_rush")
+	_check(br != null and br.disabled and _find_label(br, "Unlocks at level 5 or Rookie Path step 9") and _find_label(br, "LEVEL 5"), "Play: Boss Rush is a teaser with its unlock")
+	_check(str(pm.get("mode_id")) == "quick" and mb.has("quick") and not (mb.quick as Button).disabled, "Play opens on Quick Defense")
+	# 11. A second visit: nothing pops up again; the hub stays usable.
+	hub = await _rookie_hub(1.6)
+	_check(hub.find_child("UnlockCelebration", false, false) == null and hub.find_child("ChoicePopup", false, false) == null and hub.find_child("WelcomeBack", false, false) == null,
+		"nothing pops up twice")
+	# 12. An established manager: the hub is unchanged.
+	Onboarding.make_established()
+	hub = await _rookie_hub(1.2)
+	_check(hub.find_child("RookiePath", true, false) == null and hub.find_child("RookieWeek", true, false) == null and hub.find_child("ComingUp", true, false) == null,
+		"an established manager has no Rookie Path, Rookie Week or COMING UP")
+	_check(hub.find_child("DailyPanel", true, false) != null and hub.find_child("MissionsWidget", true, false) != null and hub.find_child("LoginDays", true, false) != null,
+		"an established manager's TODAY: Daily, Missions, Login")
+	_check(hub.find_children("LockTag", "", true, false).is_empty(), "no locked teasers for an established manager")
+	DailyChallenge.date_override = ""
+	Onboarding.force_popups = false
+	Profile.data.flags.erase("ftue_return_hub")

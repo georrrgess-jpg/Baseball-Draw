@@ -85,6 +85,10 @@ func default_profile() -> Dictionary:
 		"streak": {"wins": 0, "best": 0},
 		"pity": {"epic": 0, "legendary": 0},
 		"first_win_day": "",
+		# Update 13 "Rookie Camp": feature unlocks, Rookie Week, picks, pacing, welcome back (src/core/onboarding.gd)
+		# and the first-session funnel timestamps (written by the first-session flow).
+		"onboarding": Onboarding.default_state(),
+		"onboarding_funnel": Onboarding.funnel_default(),
 	}
 	for id in DB.defender_order:
 		var unlocked: bool = DB.defender(id).get("unlock", {}).get("type", "") == "default"
@@ -139,7 +143,8 @@ func _merge(base: Dictionary, saved: Dictionary) -> void:
 
 
 ## Saves from before Update 6: managers who already know the game skip the starter mission chain;
-## saves from before Update 8 get their Scouting Book filled from their history.
+## saves from before Update 8 get their Scouting Book filled from their history; saves from before
+## Update 13 get the Rookie Camp state (Onboarding.migrate: established managers have everything open).
 func _migrate(loaded: Dictionary) -> void:
 	if not loaded.has("missions"):
 		var played := float(loaded.get("stats", {}).get("runs_played", 0)) if typeof(loaded.get("stats")) == TYPE_DICTIONARY else 0.0
@@ -149,6 +154,7 @@ func _migrate(loaded: Dictionary) -> void:
 	# Saves from before Update 8: what the manager has certainly met starts scouted.
 	if not loaded.has("scouting"):
 		data.scouting = Scouting.migrate(loaded)
+	Onboarding.migrate(loaded)
 
 
 ## Repairs anything that could break the game (unknown ids, bad sizes, float ints from JSON).
@@ -228,6 +234,7 @@ func _sanitize() -> void:
 	Missions.sanitize()
 	Scouting.sanitize()
 	_sanitize_update9()
+	Onboarding.sanitize()
 
 
 ## Update 9 economy state: older saves get every default through _merge; this repairs wrong types and
@@ -301,7 +308,12 @@ func reset_profile() -> void:
 
 # ------------------------------------------------------------------ account
 
+## Account XP from `level` to the next: 250 + 125 per level, except the early levels data/account_levels.json
+## lists in "xp_to_next" (Update 13: levels 1-5 come faster).
 func xp_to_next(level: int) -> int:
+	var early: Variant = LevelRoad.data().get("xp_to_next", {})
+	if typeof(early) == TYPE_DICTIONARY and (early as Dictionary).has(str(level)):
+		return int(early[str(level)])
 	return 250 + 125 * (level - 1)
 
 
@@ -887,15 +899,22 @@ func set_deck(deck: Array) -> bool:
 	for id in deck:
 		if not is_card_owned(id):
 			return false
+	var before: Array = data.deck.duplicate()
 	data.deck = deck.duplicate()
+	# Rookie Path (Update 13): a saved deck with a card from outside the starter deck.
+	if deck != before and deck.any(func(id: String) -> bool: return not id in STARTER_DECK):
+		bump_stat("decks_customised")
 	changed.emit()
 	save_soon()
 	return true
 
 
 func set_team(team: Array, captain: String) -> void:
+	var before := [data.team.duplicate(), str(data.captain)]
 	data.team = team.slice(0, TEAM_SIZE)
 	data.captain = captain if captain in data.team else data.team[0]
+	if before != [data.team, str(data.captain)]:
+		bump_stat("team_changes")   # Rookie Path (Update 13)
 	changed.emit()
 	save_soon()
 

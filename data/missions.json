@@ -45,11 +45,27 @@
   },
   "rerolls_per_day": 1,
   "difficulty_by_level": [[1, "rookie"], [4, "standard"], [15, "veteran"], [30, "legend"]],
+  "_starter_comment": "The Rookie Path (Update 13, replaces the 5-step 'Learn the ropes' chain): ten steps shown on the hub, each teaching one feature, with escalating rewards. Claiming steps 3, 5, 7 and 9 also opens the next group of features (data/onboarding.json 'path'). 'reward' takes coins, stars, pack/packs; 'choice': 'free_agent' lets the player sign a locked free agent of their choice.",
   "starter": [
-    {"id": "s_cards", "event": "cards_played", "goal": 3, "text": "Play 3 ability cards in a game", "hint": "Click a card in your hand, then click a target on the field.", "reward": {"coins": 225}},
-    {"id": "s_win", "event": "win", "goal": 1, "text": "Win a game", "hint": "Quick Defense on Rookie is the gentlest start.", "reward": {"pack": "rookie", "coins": 150}},
-    {"id": "s_pack", "event": "packs_opened", "goal": 1, "text": "Open a card pack", "hint": "Main menu → Card Packs.", "reward": {"pack": "rookie"}},
-    {"id": "s_upgrade", "event": "cards_upgraded", "goal": 1, "text": "Upgrade a card", "hint": "Cards & Deck → Upgrade Cards. Duplicates from packs pay for upgrades.", "reward": {"pack": "rookie", "coins": 225}},
-    {"id": "s_daily", "event": "daily_played", "goal": 1, "text": "Try the Daily Challenge", "hint": "Main menu → PLAY DAILY. A new challenge every day.", "reward": {"pack": "pro"}}
+    {"id": "rp_win", "event": "win", "goal": 1, "text": "Win your first game", "teach": "Quick Defense", "icon": "speed",
+     "hint": "PLAY a Quick Defense game: drag defenders into place, then play cards on the runners.", "reward": {"coins": 150, "packs": ["rookie"]}},
+    {"id": "rp_pack", "event": "packs_opened", "goal": 1, "text": "Open a card pack", "teach": "Card Packs", "icon": "gift",
+     "hint": "CARD PACKS at the bottom of the hub: pick a pack and open it.", "reward": {"coins": 200, "packs": ["rookie"]}},
+    {"id": "rp_deck", "event": "decks_customised", "goal": 1, "text": "Put a new card in your deck", "teach": "Cards & Deck", "icon": "deck",
+     "hint": "CARDS & DECK: click a card from your collection, then SAVE the deck.", "reward": {"coins": 250, "packs": ["rookie", "rookie"]}},
+    {"id": "rp_upgrade", "event": "cards_upgraded", "goal": 1, "text": "Upgrade a card", "teach": "Upgrade Cards", "icon": "upgrade",
+     "hint": "UPGRADE CARDS: copies from packs and coins level a card up.", "reward": {"coins": 300, "packs": ["pro"]}},
+    {"id": "rp_team", "event": "team_changes", "goal": 1, "text": "Pick a captain or change your team", "teach": "Team", "icon": "roster",
+     "hint": "TEAM: choose your starting six and a captain (BEST TEAM can pick for you).", "reward": {"coins": 200, "stars": 10, "packs": ["pro"]}},
+    {"id": "rp_siege", "event": "innings_standard", "goal": 3, "text": "Clear 3 innings of Standard Siege", "teach": "Standard Siege", "icon": "trophy",
+     "hint": "Pick SIEGE under PLAY: the full nine-inning game with three bosses.", "reward": {"coins": 400, "packs": ["pro", "rookie"]}},
+    {"id": "rp_daily", "event": "daily_played", "goal": 1, "text": "Finish the Daily Challenge", "teach": "Daily Challenge", "icon": "calendar",
+     "hint": "PLAY DAILY on the TODAY panel: one game a day, the same for every manager.", "reward": {"stars": 15, "packs": ["pro", "pro"]}},
+    {"id": "rp_gift", "event": "shop_gifts", "goal": 1, "text": "Take the free gift in the Shop", "teach": "Shop", "icon": "coin",
+     "hint": "SHOP: a free gift every day, plus deals on the cards you need.", "reward": {"coins": 500, "packs": ["pro", "pro"]}},
+    {"id": "rp_season", "event": "season_tiers_claimed", "goal": 1, "text": "Claim a Season Pass reward", "teach": "Season Pass", "icon": "progression",
+     "hint": "The SEASON chip under the title: every game earns season XP.", "reward": {"coins": 600, "stars": 25, "packs": ["pro", "pro"]}},
+    {"id": "rp_boss_rush", "event": "wins_boss_rush", "goal": 1, "text": "Win a Boss Rush", "teach": "Boss Rush", "icon": "boss", "finale": true,
+     "hint": "Pick BOSS RUSH under PLAY. Rookie difficulty is a fine start.", "reward": {"coins": 1000, "packs": ["champion"], "choice": "free_agent"}}
   ]
 }

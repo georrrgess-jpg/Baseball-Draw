@@ -779,3 +779,78 @@ static func vsep(height := 40.0, alpha := 0.16) -> ColorRect:
 	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return c
+
+
+# ---------------------------------------------------------------- celebration helpers (Update 13)
+
+## A burst of confetti from `origin` (in `parent`'s coordinates); frees itself after about 2.5 s.
+static func confetti_burst(parent: Control, origin: Vector2, n := 70) -> Control:
+	var c := Confetti.new()
+	c.origin = origin
+	c.count = n
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(c)
+	return c
+
+
+## Slowly turning light rays (behind a reward icon). `side` is the square's size.
+static func rays(side: float, color := Color(1.0, 0.82, 0.3, 0.22), count := 14) -> Control:
+	var r := Rays.new()
+	r.color = color
+	r.count = count
+	r.custom_minimum_size = Vector2(side, side)
+	r.size = Vector2(side, side)
+	r.pivot_offset = Vector2(side, side) * 0.5
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return r
+
+
+class Confetti extends Control:
+	var origin := Vector2.ZERO
+	var count := 70
+	var _p: Array = []
+	var _t := 0.0
+
+	func _ready() -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		var cols := [UITheme.GOLD, UITheme.SCARLET, UITheme.GREEN, UITheme.BLUE, UITheme.PURPLE, UITheme.OFFWHITE]
+		for i in count:
+			var ang := rng.randf_range(-PI * 0.92, -PI * 0.08)
+			var sp := rng.randf_range(420.0, 980.0)
+			_p.append({"pos": origin, "vel": Vector2(cos(ang), sin(ang)) * sp, "rot": rng.randf() * TAU,
+				"spin": rng.randf_range(-9.0, 9.0), "col": cols[i % cols.size()], "size": Vector2(rng.randf_range(9.0, 15.0), rng.randf_range(5.0, 8.0))})
+
+	func _process(delta: float) -> void:
+		_t += delta
+		for p in _p:
+			p.vel.y += 1500.0 * delta
+			p.vel *= 1.0 - 0.9 * delta
+			p.pos += p.vel * delta
+			p.rot += p.spin * delta
+		queue_redraw()
+		if _t > 2.6:
+			queue_free()
+
+	func _draw() -> void:
+		var a := clampf(2.6 - _t, 0.0, 1.0)
+		for p in _p:
+			draw_set_transform(p.pos, p.rot, Vector2.ONE)
+			draw_rect(Rect2(-p.size * 0.5, p.size), Color(p.col, a))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+class Rays extends Control:
+	var color := Color(1.0, 0.82, 0.3, 0.22)
+	var count := 14
+
+	func _process(delta: float) -> void:
+		rotation += delta * 0.35
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var r := size.x * 0.5
+		for i in count:
+			var a := TAU * float(i) / float(count)
+			draw_colored_polygon(PackedVector2Array([c, c + Vector2(cos(a - 0.1), sin(a - 0.1)) * r, c + Vector2(cos(a + 0.1), sin(a + 0.1)) * r]), color)

@@ -66,6 +66,9 @@ func _ready() -> void:
 
 	if "--skip-welcome" in OS.get_cmdline_user_args():   # screenshot helper: a returning player
 		Profile.data.flags.tutorial_done = true
+	_rookie_demo_setup()
+	# Rookie Camp (Update 13): welcome-back bonus after 3+ days away (paid before the top bar is built).
+	Onboarding.on_hub_open()
 	UITheme.apply_debug_ui_scale(self)
 	_build_ui()
 	Audio.play_music("menu_theme")
@@ -211,11 +214,13 @@ func _build_ui() -> void:
 	grad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(grad)
 
+	_compute_attention()
 	_build_top_bar()
 	_build_hero()
 	_build_today()
 	_build_bottom_bar()
 	_build_showcase_caption()
+	_build_rookie_path()
 	# Staggered entrance.
 	var i := 0
 	for b in _buttons:
@@ -224,6 +229,10 @@ func _build_ui() -> void:
 	if not bool(Profile.data.flags.get("tutorial_done", false)) and not "--no-help" in OS.get_cmdline_user_args():
 		_show_welcome()
 	_setup_help()
+	# Rookie Camp popups (welcome back, picks, NEW FEATURE UNLOCKED, coach tip), then the PLAY spotlight.
+	var pt := create_tween()
+	pt.tween_interval(1.1)
+	pt.tween_callback(_queue_popups)
 	if "--open-gear" in OS.get_cmdline_user_args():   # screenshot helper: the gear menu open
 		get_tree().create_timer(1.0).timeout.connect(_toggle_gear_menu)
 
@@ -507,7 +516,8 @@ func _build_hero() -> void:
 	vm.add_child(_venue)
 	hero_box.add_child(vm)
 
-	hero_box.add_child(_build_status_chips())
+	_status_row = _build_status_chips()
+	hero_box.add_child(_status_row)
 
 	# CONTINUE RUN (only when a run is saved).
 	if Profile.has_saved_run():
@@ -584,13 +594,22 @@ func _build_status_chips() -> Control:
 	row.name = "StatusChips"
 	row.add_theme_constant_override("h_separation", 10)
 	row.add_theme_constant_override("v_separation", 8)
+	_fill_status_chips(row)
+	return row
+
+
+## (Re)fills the chips row: after a claim on the hub the Season chip may unlock or change its badge.
+func _fill_status_chips(row: Control) -> void:
+	for c in row.get_children():
+		row.remove_child(c)
+		c.queue_free()
 	var flame := UITheme.flame_chip(Profile.win_streak(), Profile.streak_bonus(), UITheme.FS_MIN, false, true)
 	flame.custom_minimum_size = Vector2(0, 40)
 	row.add_child(flame)
-	_season_bar = _build_season_chip()
+	_season_bar = _build_season_chip() if Onboarding.is_unlocked("season") else _build_season_teaser()
 	row.add_child(_season_bar)
 	_buttons.append(_season_bar)
-	if Profile.promotion_available():
+	if Profile.promotion_available() and Onboarding.is_unlocked("ranked"):
 		var pb := UITheme.button("PROMOTION  ▶", "primary", UITheme.FS_SMALL, "crown", UITheme.GOLD.darkened(0.3))
 		pb.name = "PromotionButton"
 		pb.custom_minimum_size = Vector2(0, 40)
@@ -600,7 +619,6 @@ func _build_status_chips() -> Control:
 			Router.goto("play_menu"))
 		row.add_child(pb)
 		_buttons.append(pb)
-	return row
 
 
 ## Season Pass chip: season, tier, a mini XP bar and a claim badge. Opens the Season screen.
@@ -654,7 +672,7 @@ func _build_season_chip() -> Button:
 		sname, int(prog.get("xp_in", 0)), need, "the next bonus Pro Pack" if maxed else "tier %d" % (tier + 1),
 		("  ·  ends in %s" % Season.countdown_text(int(cur.seconds_left))) if int(cur.get("seconds_left", 0)) > 0 else ""]
 	var n := Season.claimable().size()
-	if n > 0:
+	if n > 0 and _attn("season_claim"):
 		UITheme.corner_badge(b, "%d TO CLAIM" % n, UITheme.GOLD.darkened(0.35))
 		var pulse := b.create_tween().set_loops()
 		pulse.tween_property(b, "self_modulate", Color(1.2, 1.12, 0.9), 0.8).set_trans(Tween.TRANS_SINE)
@@ -720,8 +738,8 @@ func _build_continue() -> Button:
 ## The mode PLAY opens with (the last one played, or the one picked on the quick switch).
 func _selected_mode() -> String:
 	var last := str(Profile.data.flags.get("last_mode", "standard"))
-	if not DB.mode(last).has("name") or last in ["practice", "daily", "daily_long"] or MenuScreen.mode_locked_reason(last) != "":
-		last = "standard"
+	if not DB.mode(last).has("name") or last in ["practice", "daily", "daily_long"] or Onboarding.mode_lock(last) != "":
+		last = "standard" if Onboarding.mode_lock("standard") == "" else "quick"   # a new manager starts on Quick Defense
 	return last
 
 
@@ -758,8 +776,9 @@ func _build_mode_switch() -> Control:
 		var id: String = qm[0]
 		if not DB.mode(id).has("name"):
 			continue
-		var lock := MenuScreen.mode_locked_reason(id)
-		var b := UITheme.button(qm[1], "secondary", 23, qm[2], UITheme.SCARLET)
+		var lock := Onboarding.mode_lock(id)
+		var teaser := not Onboarding.is_unlocked(id)   # Rookie Camp: shown with a lock and its level
+		var b := UITheme.button(qm[1], "secondary", 23, "lock" if teaser else qm[2], UITheme.SCARLET)
 		b.name = "Mode_" + id
 		b.toggle_mode = true
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -789,6 +808,11 @@ func _build_mode_switch() -> Control:
 		if lock != "":
 			b.disabled = true
 			b.tooltip_text = "%s is locked: %s" % [DB.mode(id).name, lock]
+		if teaser:
+			_lock_tag(b, id)
+			b.gui_input.connect(func(ev: InputEvent) -> void:
+				if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+					_locked_pressed(id, b))
 		b.pressed.connect(func() -> void:
 			Profile.data.flags["last_mode"] = id
 			Profile.save_soon()
@@ -851,15 +875,24 @@ func _setup_help() -> void:
 			t["menu_season"] = _season_bar
 		if _shop_tile and is_instance_valid(_shop_tile):
 			t["menu_shop"] = _shop_tile
+		if _path_panel and is_instance_valid(_path_panel):
+			t["menu_path"] = _path_panel
+		var wk: Node = ui.find_child("RookieWeek", true, false) if ui else null
+		if wk:
+			t["menu_week"] = wk
 		return t
 	var extra := func() -> Array:
 		var e: Array = []
-		if Profile.promotion_available():
+		if Profile.promotion_available() and Onboarding.is_unlocked("ranked"):
 			e.append("menu_promotion")
 		if Profile.win_streak() > 0:
 			e.append("menu_streak")
-		if not _free_gift().is_empty():
+		if not _free_gift().is_empty() and Onboarding.is_unlocked("shop"):
 			e.append("menu_shop")
+		if Onboarding.path_active():
+			e.append("menu_path")
+		if Onboarding.week_active():
+			e.append("menu_week")
 		return e
 	var help := Hints.help_button(self, "main_menu", targets, extra)
 	help.custom_minimum_size = Vector2(62, 62)
@@ -870,7 +903,8 @@ func _setup_help() -> void:
 		icons.move_child(help, 0)
 		ph.queue_free()
 	UITheme.animate_in(help, 0.5)
-	if bool(Profile.data.flags.get("tutorial_done", false)) and not _new_player():
+	# A Rookie Camp manager gets the unlock cards and the Rookie Path instead of the first-visit tips.
+	if bool(Profile.data.flags.get("tutorial_done", false)) and not _new_player() and not Onboarding.is_new_player():
 		Hints.first_visit(self, "main_menu", targets, extra.call(), 1.2)
 
 
@@ -914,13 +948,23 @@ func _build_right(animate := false) -> void:
 	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	(head.get_node("Ribbon") as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	blocks.append(head_row)
-	blocks.append(_build_daily_panel())
-	blocks.append(_build_missions_panel())
-	blocks.append(_build_login_panel())
+	# Rookie Camp: Rookie Week on top while it runs; the Daily Challenge and Missions only once they are
+	# open (until then a COMING UP card lists what unlocks next); the login calendar shrinks to one row
+	# while Rookie Week shows its own seven days. An established manager sees Daily, Missions and Login.
+	var week := Onboarding.week_active()
+	if week:
+		blocks.append(_build_week_panel())
+	if Onboarding.is_unlocked("daily"):
+		blocks.append(_build_daily_panel())
+	if Onboarding.is_unlocked("missions"):
+		blocks.append(_build_missions_panel(2 if week else 3))
+	blocks.append(_build_login_panel(week))
+	if not Onboarding.is_unlocked("daily") or not Onboarding.is_unlocked("missions"):
+		blocks.append(_build_coming_up())
 	var k := 0
 	for b in blocks:
 		_right.add_child(b)
-		if b != head_row:
+		if b != head_row and not b.has_meta("compact"):
 			b.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		if animate:
 			UITheme.animate_in(b, 0.25 + k * 0.08)
@@ -1020,12 +1064,13 @@ func _rewards_strip(strip_name: String, parts: Array, tip: String) -> Control:
 func _build_daily_panel() -> Control:
 	var rules := DailyChallenge.today_rules()
 	var played := DailyChallenge.played()
-	var parts := _today_card("DailyPanel", "calendar", "DAILY CHALLENGE", not played)
+	var hot := not played and _attn("daily_new")   # the badge budget may keep it quiet for a new manager
+	var parts := _today_card("DailyPanel", "calendar", "DAILY CHALLENGE", hot)
 	var p: PanelContainer = parts[0]
 	var vb: VBoxContainer = parts[1]
 	var head: HBoxContainer = parts[2]
 	var bd := UITheme.badge("NEW TODAY" if not played else "BEST %s" % UITheme.format_int(DailyChallenge.best_score()),
-		TODAY_ACCENT.darkened(0.15) if not played else Color(0.13, 0.4, 0.25), UITheme.FS_SMALL)
+		(TODAY_ACCENT.darkened(0.15) if hot else Color(0.2, 0.24, 0.32)) if not played else Color(0.13, 0.4, 0.25), UITheme.FS_SMALL)
 	bd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(bd)
 	var row := HBoxContainer.new()
@@ -1073,7 +1118,7 @@ func _build_daily_panel() -> Control:
 		strip.append(["gift", str(pd.get("name", pk[0])).replace(" Pack", "").to_upper() + pk[2], Color(str(pd.get("color", "#2F7BE0"))).lightened(0.35), pk[1]])
 	vb.add_child(_rewards_strip("DailyRewards", strip, "First game today: %s coins and a %s. First win today: a %s." % [
 		UITheme.format_int(int(rw.get("first_coins", 0))), DB.pack(str(rw.get("first_pack", "rookie"))).get("name", "pack"), DB.pack(str(rw.get("win_pack", "pro"))).get("name", "pack")]))
-	if not played:
+	if hot:
 		var pulse := p.create_tween().set_loops()
 		pulse.tween_property(p, "self_modulate", Color(1.12, 1.06, 0.95), 0.9).set_trans(Tween.TRANS_SINE)
 		pulse.tween_property(p, "self_modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
@@ -1089,19 +1134,24 @@ func _update_countdowns(delta: float) -> void:
 		_daily_countdown.text = "New challenge in %s" % DailyChallenge.countdown_text()
 	if _login_countdown and is_instance_valid(_login_countdown):
 		_login_countdown.text = _login_sub_text()
+	if _week_status and is_instance_valid(_week_status):
+		_week_status.text = Onboarding.week_status_text()
 
 
 # ---------------------------------------------------------------- missions
 
 ## Missions card: the starter step (while it runs) and today's missions, three rows with progress,
 ## OPEN (Progression → Missions) and a REWARDS strip with what finishing them pays.
-func _build_missions_panel() -> Control:
+func _build_missions_panel(max_rows := 3) -> Control:
 	Missions.refresh()
-	var claimable := Missions.claimable_count()
-	var parts := _today_card("MissionsWidget", "target", "MISSIONS", claimable > 0)
+	# The Rookie Path has its own strip on the hub: this card lists the daily missions only.
+	var path_strip := Onboarding.path_active()
+	var claimable := Missions.claimable_count() - (1 if path_strip and Onboarding.path_can_claim() else 0)
+	var hot := claimable > 0 and _attn("missions_claim")
+	var parts := _today_card("MissionsWidget", "target", "MISSIONS", hot)
 	var vb: VBoxContainer = parts[1]
 	var head: HBoxContainer = parts[2]
-	if claimable > 0:
+	if hot:
 		var cb := UITheme.badge("%d TO CLAIM" % claimable, UITheme.GOLD.darkened(0.35), UITheme.FS_SMALL)
 		cb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		head.add_child(cb)
@@ -1116,10 +1166,10 @@ func _build_missions_panel() -> Control:
 	head.add_child(b)
 	_buttons.append(b)
 	var list: Array = []
-	if Missions.starter_active():
+	if Missions.starter_active() and not path_strip:
 		list.append(Missions.state().starter)
 	list.append_array(Missions.state().daily)
-	list = list.slice(0, 3)
+	list = list.slice(0, max_rows)
 	var coins := 0
 	var stars := 0
 	var packs: Array = []
@@ -1176,10 +1226,11 @@ func _build_missions_panel() -> Control:
 
 ## Seven-day login calendar: CLAIM (or CLAIMED), when the next reward comes, the login streak and
 ## each day's reward, with the days already claimed and today's cell.
-func _build_login_panel() -> Control:
+func _build_login_panel(compact := false) -> Control:
 	var cal: Array = DailyRewards.calendar()
 	var can := DailyRewards.can_claim()
-	var parts := _today_card("LoginPanel", "calendar", "DAILY LOGIN", can)
+	var hot := can and _attn("login_claim")
+	var parts := _today_card("LoginPanel", "calendar", "DAILY LOGIN", hot)
 	var p: PanelContainer = parts[0]
 	var vb: VBoxContainer = parts[1]
 	var head: HBoxContainer = parts[2]
@@ -1201,6 +1252,26 @@ func _build_login_panel() -> Control:
 	_login_countdown = UITheme.label(_login_sub_text(), UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
 	_login_countdown.name = "LoginNext"
 	vb.add_child(_login_countdown)
+	if compact:   # Rookie Week shows its own calendar above: one row here (today's reward on the right)
+		p.set_meta("compact", true)
+		if not cal.is_empty():
+			var e: Dictionary = cal[DailyRewards.day() - 1] if DailyRewards.day() - 1 < cal.size() else cal[0]
+			var rr := UITheme.reward_row(e.get("reward", {}), UITheme.FS_SMALL)
+			rr.name = "LoginToday"
+			_login_countdown.text = _login_sub_text()
+			var row0 := HBoxContainer.new()
+			row0.add_theme_constant_override("separation", 10)
+			vb.remove_child(_login_countdown)
+			_login_countdown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_login_countdown.clip_text = true
+			row0.add_child(_login_countdown)
+			row0.add_child(rr)
+			vb.add_child(row0)
+		if hot:
+			var pulse0 := p.create_tween().set_loops()
+			pulse0.tween_property(p, "self_modulate", Color(1.14, 1.1, 0.94), 0.9).set_trans(Tween.TRANS_SINE)
+			pulse0.tween_property(p, "self_modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
+		return p
 	if cal.is_empty():
 		var none := UITheme.label("Log in every day for coins, packs and stars.", UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
 		vb.add_child(none)
@@ -1210,8 +1281,8 @@ func _build_login_panel() -> Control:
 	row.add_theme_constant_override("separation", 7)
 	vb.add_child(row)
 	for e in cal:
-		row.add_child(_login_cell(e, can))
-	if can:
+		row.add_child(_login_cell(e, can, hot))
+	if hot:
 		var pulse := p.create_tween().set_loops()
 		pulse.tween_property(p, "self_modulate", Color(1.14, 1.1, 0.94), 0.9).set_trans(Tween.TRANS_SINE)
 		pulse.tween_property(p, "self_modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
@@ -1228,7 +1299,7 @@ func _login_sub_text() -> String:
 	return sub
 
 
-func _login_cell(e: Dictionary, can: bool) -> Control:
+func _login_cell(e: Dictionary, can: bool, hot := true) -> Control:
 	var day := int(e.get("day", 0))
 	var claimed := bool(e.get("claimed", false))
 	# The cell to claim now, or (once today's is claimed) the one tomorrow pays.
@@ -1272,7 +1343,7 @@ func _login_cell(e: Dictionary, can: bool) -> Control:
 	var al := UITheme.label(amount, UITheme.FS_SMALL, Color(0.75, 0.95, 0.82) if claimed else part[2], UITheme.font_header())
 	al.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(al)
-	if today and can:
+	if today and can and hot:
 		p.resized.connect(func() -> void: p.pivot_offset = p.size * 0.5)
 		var tw := p.create_tween().set_loops()
 		tw.tween_property(p, "scale", Vector2(1.06, 1.06), 0.6).set_trans(Tween.TRANS_SINE)
@@ -1294,9 +1365,7 @@ func _claim_login() -> void:
 	var txt := str(r.get("text", ""))
 	Router.toast("Day %d login reward%s" % [int(r.get("day", day)), (": " + txt) if txt != "" else "!"], "achievement")
 	Profile.save_soon()
-	_buttons = _buttons.filter(func(b: Button) -> bool: return is_instance_valid(b) and not _right.is_ancestor_of(b))
-	_build_right(false)
-	_refresh_top_values()
+	_refresh_hub()
 
 
 ## Coins and stars in the top bar after a claim.
@@ -1307,6 +1376,13 @@ func _refresh_top_values() -> void:
 	var sl: Label = ui.find_child("StarsValue", true, false)
 	if sl:
 		sl.text = UITheme.format_int(int(Profile.data.stars))
+	var cv: Label = ui.find_child("CardsValue", true, false)
+	if cv:
+		var owned := 0
+		for cid in DB.card_order:
+			if Profile.is_card_owned(cid):
+				owned += 1
+		cv.text = "%d/%d" % [owned, DB.card_order.size()]
 
 
 ## Reward icons float up from `origin` (screen position) and fade.
@@ -1339,10 +1415,16 @@ func _float_reward(origin: Vector2, r: Dictionary) -> void:
 
 # ---------------------------------------------------------------- bottom bar
 
-## The destinations across the bottom: [text, icon, colour, action, badge, badge colour, tooltip].
+## The destinations across the bottom: [text, icon, colour, action, badge, badge colour, tooltip, feature,
+## attention key]. Rookie Camp: a locked feature is a teaser (lock icon, "LV n" tag, says when it opens);
+## badges and pulses follow the badge budget (a new manager sees at most two attention badges at once).
 func _build_bottom_bar() -> void:
+	if _bottom_bar and is_instance_valid(_bottom_bar):   # rebuilt after a claim on the hub
+		_bottom_bar.get_parent().remove_child(_bottom_bar)
+		_bottom_bar.queue_free()
 	var bar := Panel.new()
 	bar.name = "BottomBar"
+	_bottom_bar = bar
 	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	bar.offset_top = -BOTTOM_H
 	var s := UITheme.panel_style(UITheme.BAR_BG, Color(CARD_GOLD, 0.75), 0, 0, 0)
@@ -1371,32 +1453,35 @@ func _build_bottom_bar() -> void:
 			Session.menu_tab = "deck"
 			Router.goto("deck_builder"),
 			"REWARD!" if CollectionSets.claimable_count() > 0 else ("%d NEW" % Profile.fresh_card_count() if Profile.fresh_card_count() > 0 else ""),
-			UITheme.GOLD.darkened(0.3) if CollectionSets.claimable_count() > 0 else UITheme.SCARLET, "Your collection and your 8-card deck"],
+			UITheme.GOLD.darkened(0.3) if CollectionSets.claimable_count() > 0 else UITheme.SCARLET, "Your collection and your 8-card deck", "deck", "deck_new"],
 		["CARD PACKS", "gift", UITheme.GOLD, func() -> void: Router.goto("packs"),
-			"%d" % Profile.pack_count() if Profile.pack_count() > 0 else "", UITheme.SCARLET, "Open your packs, or buy more"],
+			"%d" % Profile.pack_count() if Profile.pack_count() > 0 else "", UITheme.SCARLET, "Open your packs, or buy more", "packs", "packs"],
 		["UPGRADE CARDS", "upgrade", UITheme.GREEN, func() -> void: Router.goto("card_upgrades"),
-			"%d READY" % ready if ready > 0 else "", Color(0.16, 0.6, 0.35), "Level up cards with copies and coins"],
+			"%d READY" % ready if ready > 0 else "", Color(0.16, 0.6, 0.35), "Level up cards with copies and coins", "upgrades", "upgrade_ready"],
 		["TEAM", "roster", Color("#4FA3FF"), func() -> void: Router.goto("roster"), "NEW TRAIT" if _trait_ready() else "",
-			Color(0.16, 0.45, 0.75), "Defenders, captain, traits, gear and free agents"],
+			Color(0.16, 0.45, 0.75), "Defenders, captain, traits, gear and free agents", "team", "trait"],
 		["SHOP", "coin", UITheme.GOLD, func() -> void: Router.open("shop"), "FREE GIFT" if not gift.is_empty() else "",
-			UITheme.GOLD, "Daily deals, the free gift and free agents. New deals in %s" % UITheme.format_duration(Shop.seconds_to_refresh())],
+			UITheme.GOLD, "Daily deals, the free gift and free agents. New deals in %s" % UITheme.format_duration(Shop.seconds_to_refresh()), "shop", "shop_gift"],
 		["SCOUTING BOOK", "search", Color("#FF6B3D"), func() -> void: Router.goto("scouting_book"),
 			"%d NEW" % Scouting.new_count() if Scouting.new_count() > 0 else "", UITheme.SCARLET,
-			"Every runner, boss and elite: what it does and which cards stop it (%d / %d scouted)" % [Scouting.met_count(), Scouting.all_keys().size()]],
+			"Every runner, boss and elite: what it does and which cards stop it (%d / %d scouted)" % [Scouting.met_count(), Scouting.all_keys().size()], "scouting", "scouting_new"],
 		["PROGRESSION", "progression", UITheme.GOLD, func() -> void: Router.goto("progression"), "",
-			UITheme.SCARLET, "Rank, missions, achievements, stadiums, gear and history"],
+			UITheme.SCARLET, "Rank, missions, achievements, stadiums, gear and history", "", ""],
 	]
 	var i := 0
 	for t in tiles:
 		if i > 0:
 			hb.add_child(UITheme.vsep(44, 0.14))
 		i += 1
-		var b := UITheme.button(t[0], "secondary", 30, t[1], t[2])
+		var fid: String = t[7]
+		var locked := fid != "" and not Onboarding.is_unlocked(fid)
+		var accent: Color = UITheme.MUTED if locked else t[2]
+		var b := UITheme.button(t[0], "secondary", 30, "lock" if locked else t[1], accent)
 		b.add_theme_font_override("font", UITheme.font_display())
 		b.add_theme_constant_override("icon_max_width", 38)
 		b.add_theme_constant_override("h_separation", 12)
-		b.add_theme_color_override("icon_normal_color", t[2])
-		b.add_theme_color_override("icon_focus_color", t[2])
+		b.add_theme_color_override("icon_normal_color", accent)
+		b.add_theme_color_override("icon_focus_color", accent)
 		b.add_theme_color_override("icon_hover_color", Color.WHITE)
 		b.custom_minimum_size = Vector2(0, 80)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1409,34 +1494,42 @@ func _build_bottom_bar() -> void:
 			bs.content_margin_left = 14
 			bs.content_margin_right = 14
 			if st == "normal":
-				bs.bg_color = Color(0.07, 0.12, 0.21, 0.96)
-				bs.border_color = Color(1, 1, 1, 0.18)
+				bs.bg_color = Color(0.07, 0.12, 0.21, 0.96) if not locked else Color(0.05, 0.07, 0.11, 0.96)
+				bs.border_color = Color(1, 1, 1, 0.18) if not locked else Color(1, 1, 1, 0.08)
 				bs.border_width_bottom = 4
 				bs.shadow_color = Color(0, 0, 0, 0.35)
 				bs.shadow_size = 6
 				bs.shadow_offset = Vector2(0, 3)
 			b.add_theme_stylebox_override(st, bs)
-		b.tooltip_text = t[6]
-		b.pressed.connect(t[3])
-		var tag: String = t[4]
-		if tag != "":
-			if t[0] == "SHOP":
-				UITheme.top_tag(b, tag, t[5])
-			else:
-				UITheme.corner_badge(b, tag, t[5])
-		if (t[0] == "CARD PACKS" and Profile.pack_count() > 0) or (t[0] == "SHOP" and not gift.is_empty()):
-			var pulse := b.create_tween().set_loops()
-			pulse.tween_property(b, "self_modulate", Color(1.22, 1.12, 0.8), 0.8).set_trans(Tween.TRANS_SINE)
-			pulse.tween_property(b, "self_modulate", Color.WHITE, 0.8).set_trans(Tween.TRANS_SINE)
+		if locked:
+			b.add_theme_color_override("font_color", Color(0.62, 0.67, 0.76))
+			b.tooltip_text = "%s: %s.\n%s" % [Onboarding.feature(fid).get("name", t[0]), Onboarding.lock_text(fid), Onboarding.feature(fid).get("text", "")]
+			b.pressed.connect(_locked_pressed.bind(fid, b))
+			_lock_tag(b, fid)
+		else:
+			b.tooltip_text = t[6]
+			b.pressed.connect(t[3])
+			var tag: String = t[4]
+			if tag != "" and (str(t[8]) == "" or _attn(str(t[8]))):
+				if t[0] == "SHOP":
+					UITheme.top_tag(b, tag, t[5])
+				else:
+					UITheme.corner_badge(b, tag, t[5])
+				if t[0] in ["CARD PACKS", "SHOP"]:
+					var pulse := b.create_tween().set_loops()
+					pulse.tween_property(b, "self_modulate", Color(1.22, 1.12, 0.8), 0.8).set_trans(Tween.TRANS_SINE)
+					pulse.tween_property(b, "self_modulate", Color.WHITE, 0.8).set_trans(Tween.TRANS_SINE)
 		hb.add_child(b)
 		_buttons.append(b)
+		if fid in ["deck", "packs", "upgrades", "team"]:
+			b.name = "Tile_" + fid
 		match t[0]:
 			"UPGRADE CARDS":
-				if ready == 0 and _new_player():
+				if ready == 0 and _new_player() and not locked:
 					_deemphasise(b, "Upgrade cards with copies from packs. Open some packs first.")
 			"SCOUTING BOOK":
 				b.name = "ScoutingBookTile"
-				if _new_player() and Scouting.met_count() == 0:
+				if _new_player() and Scouting.met_count() == 0 and not locked:
 					_deemphasise(b, "Runners you meet in games are added here, with tips on how to stop them.")
 			"SHOP":
 				b.name = "ShopTile"
@@ -1516,6 +1609,10 @@ func _showcase() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
+		if _popup and is_instance_valid(_popup) and _popup_close.is_valid():   # a Rookie Camp popup: its "later" action
+			Audio.ui("ui_back")
+			_popup_close.call()
+			return
 		if _welcome_later and is_instance_valid(_welcome_later):
 			Audio.ui("ui_back")
 			_welcome_later.pressed.emit()
@@ -1574,3 +1671,1014 @@ func _show_welcome() -> void:
 	hb.add_child(later)
 	vb.add_child(hb)
 	UITheme.animate_in(p, 0.6)
+
+
+# ---------------------------------------------------------------- Rookie Camp (Update 13)
+#
+# A new manager's hub: locked features as teasers, the Rookie Path strip in the open middle, Rookie Week
+# on TODAY, the badge budget, and the popups (welcome back, picks, NEW FEATURE UNLOCKED, coach tips, the
+# PLAY spotlight). An established manager's hub is unchanged (everything open, no budget, no strip).
+
+const PATH_GREEN := Color("#3DDC84")
+const WEEK_ACCENT := Color("#5FD4FF")
+
+var _status_row: Control
+var _bottom_bar: Control
+var _allowed := {}
+## Attention keys whose badge or pulse is on screen (tests check the badge budget with it).
+var attention_shown: Array[String] = []
+var _path_panel: Control
+var _week_status: Label
+var _popup: Node
+var _popup_close := Callable()
+var _choice_later := false
+
+
+## Which attention badges may show: every candidate, sorted by priority, cut to the badge budget.
+func _compute_attention() -> void:
+	var c: Array = []
+	var ready := false
+	for cid in DB.card_order:
+		if Profile.can_upgrade_card(cid):
+			ready = true
+			break
+	var cands := {
+		"path_claim": Onboarding.path_can_claim(),
+		"packs": Profile.pack_count() > 0 and Onboarding.is_unlocked("packs"),
+		"week_claim": Onboarding.week_can_claim(),
+		"login_claim": DailyRewards.can_claim(),
+		"deck_new": (CollectionSets.claimable_count() > 0 or Profile.fresh_card_count() > 0) and Onboarding.is_unlocked("deck"),
+		"upgrade_ready": ready and Onboarding.is_unlocked("upgrades"),
+		"missions_claim": Missions.claimable_count() - (1 if Onboarding.path_can_claim() else 0) > 0 and Onboarding.is_unlocked("missions"),
+		"season_claim": Season.claimable().size() > 0 and Onboarding.is_unlocked("season"),
+		"daily_new": not DailyChallenge.played() and Onboarding.is_unlocked("daily"),
+		"shop_gift": not _free_gift().is_empty() and Onboarding.is_unlocked("shop"),
+		"trait": _trait_ready() and Onboarding.is_unlocked("team"),
+		"scouting_new": Scouting.new_count() > 0 and Onboarding.is_unlocked("scouting"),
+	}
+	for k in cands.keys():
+		if bool(cands[k]):
+			c.append(k)
+	c.sort_custom(func(a: String, b: String) -> bool: return Onboarding.badge_rank(a) < Onboarding.badge_rank(b))
+	_allowed = {}
+	attention_shown.clear()
+	for k in c.slice(0, Onboarding.badge_budget()):
+		_allowed[k] = true
+
+
+## True when `key` may draw attention (and records that it does).
+func _attn(key: String) -> bool:
+	if not _allowed.has(key):
+		return false
+	if not key in attention_shown:
+		attention_shown.append(key)
+	return true
+
+
+## The muted "LV 3" tag on a locked teaser (not an attention badge).
+func _lock_tag(b: Control, fid: String) -> void:
+	var t := UITheme.top_tag(b, Onboarding.lock_short(fid), Color(0.2, 0.23, 0.3, 0.97))
+	t.name = "LockTag"
+	(t.get_child(0) as Label).add_theme_color_override("font_color", Color(0.78, 0.83, 0.92))
+	t.tooltip_text = Onboarding.lock_text(fid)
+
+
+## A locked teaser was pressed: say when it opens, with a little shake.
+func _locked_pressed(fid: String, b: Control) -> void:
+	var f := Onboarding.feature(fid)
+	Audio.ui("ui_error", -6.0)
+	Router.toast("%s: %s. %s" % [str(f.get("name", fid)), Onboarding.lock_text(fid), str(f.get("text", ""))], "info", 3.6)
+	if b and is_instance_valid(b) and not b.has_meta("shaking"):
+		b.set_meta("shaking", true)
+		var x := b.position.x
+		var tw := b.create_tween()
+		for k in 3:
+			tw.tween_property(b, "position:x", x + 6.0, 0.04)
+			tw.tween_property(b, "position:x", x - 6.0, 0.04)
+		tw.tween_property(b, "position:x", x, 0.04)
+		tw.tween_callback(func() -> void: b.remove_meta("shaking"))
+
+
+## The Season chip while the Season Pass is still locked: a muted teaser.
+func _build_season_teaser() -> Button:
+	var b := UITheme.button("SEASON PASS", "secondary", UITheme.FS_SMALL, "lock", UITheme.MUTED)
+	b.name = "SeasonBar"
+	b.custom_minimum_size = Vector2(210, 40)
+	b.add_theme_color_override("font_color", Color(0.65, 0.7, 0.8))
+	b.tooltip_text = "Season Pass: %s.\n%s" % [Onboarding.lock_text("season"), Onboarding.feature("season").get("text", "")]
+	b.pressed.connect(_locked_pressed.bind("season", b))
+	_lock_tag(b, "season")
+	return b
+
+
+## Drops buttons that were freed by a rebuild.
+func _prune_buttons() -> void:
+	var keep: Array[Button] = []
+	for b in _buttons:
+		if is_instance_valid(b) and not (b as Node).is_queued_for_deletion():
+			keep.append(b)
+	_buttons = keep
+
+
+## Rebuilds everything a claim can change (TODAY, the bottom bar, the chips, the Rookie Path strip) with
+## the badge budget worked out again.
+func _refresh_hub() -> void:
+	_prune_buttons()
+	_compute_attention()
+	_build_right(false)
+	_build_bottom_bar()
+	if _status_row and is_instance_valid(_status_row):
+		_fill_status_chips(_status_row)
+	_build_rookie_path()
+	_refresh_top_values()
+	_prune_buttons()
+
+
+# ---------------------------------------------------------------- Rookie Week (TODAY)
+
+func _build_week_panel() -> Control:
+	var can := Onboarding.week_can_claim()
+	var hot := can and _attn("week_claim")
+	var parts := _today_card("RookieWeek", "gift", "ROOKIE WEEK", hot)
+	var p: PanelContainer = parts[0]
+	var vb: VBoxContainer = parts[1]
+	var head: HBoxContainer = parts[2]
+	p.set_meta("compact", true)
+	var day_b := UITheme.badge("DAY %d / %d" % [Onboarding.week_day() if can else Onboarding.week_claims(), Onboarding.week_days().size()],
+		Color(0.1, 0.36, 0.5, 0.95), UITheme.FS_SMALL)
+	day_b.name = "WeekDayBadge"
+	day_b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(day_b)
+	if can:
+		var cb := UITheme.button("CLAIM", "primary", UITheme.FS_LEAD, "gift", UITheme.GREEN.darkened(0.35))
+		cb.name = "WeekClaim"
+		cb.custom_minimum_size = Vector2(140, 42)
+		cb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		cb.tooltip_text = "Claim today's Rookie Week reward"
+		cb.pressed.connect(_claim_week)
+		head.add_child(cb)
+		_buttons.append(cb)
+	_week_status = UITheme.label(Onboarding.week_status_text(), UITheme.FS_SMALL, Color(0.7, 0.9, 1.0), UITheme.font_body_bold())
+	_week_status.name = "WeekStatus"
+	_week_status.tooltip_text = "A bonus calendar for new managers: one reward a day for seven days. Miss a day and it waits for you: it never resets."
+	_week_status.mouse_filter = Control.MOUSE_FILTER_PASS
+	vb.add_child(_week_status)
+	var row := HBoxContainer.new()
+	row.name = "WeekDays"
+	row.add_theme_constant_override("separation", 6)
+	vb.add_child(row)
+	for e in Onboarding.week_calendar():
+		row.add_child(_week_cell(e, can, hot))
+	if hot:
+		var pulse := p.create_tween().set_loops()
+		pulse.tween_property(p, "self_modulate", Color(1.1, 1.14, 1.2), 0.9).set_trans(Tween.TRANS_SINE)
+		pulse.tween_property(p, "self_modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
+	return p
+
+
+func _week_cell(e: Dictionary, can: bool, hot: bool) -> Control:
+	var day := int(e.get("day", 0))
+	var claimed := bool(e.get("claimed", false))
+	var today := bool(e.get("today", false)) and not claimed
+	var big := day == Onboarding.week_days().size()
+	var bg := Color(0.05, 0.08, 0.14, 0.95)
+	var border := Color(1, 1, 1, 0.14)
+	if claimed:
+		bg = Color(0.05, 0.2, 0.12, 0.92)
+		border = Color(UITheme.GREEN, 0.6)
+	elif today:
+		bg = Color(WEEK_ACCENT.darkened(0.72), 0.95)
+		border = WEEK_ACCENT
+	elif big:
+		bg = Color(0.16, 0.11, 0.02, 0.95)
+		border = Color(UITheme.GOLD, 0.75)
+	var p := PanelContainer.new()
+	p.name = "WeekDay%d" % day
+	p.add_theme_stylebox_override("panel", UITheme.panel_style(bg, border, 3 if (today or big) and not claimed else 2, 8, 3))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.size_flags_stretch_ratio = 1.35 if big else 1.0
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.tooltip_text = "Day %d: %s%s" % [day, str(e.get("text", "")), "  (claimed)" if claimed else ("  (today)" if today and can else "")]
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 0)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(vb)
+	var dl := UITheme.label("DAY %d" % day, UITheme.FS_MIN, UITheme.GOLD if big and not claimed else (WEEK_ACCENT if today else Color(0.8, 0.86, 0.95)), UITheme.font_header())
+	dl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(dl)
+	var r: Dictionary = e.get("reward", {})
+	var parts := UITheme.reward_parts(r)
+	var part: Array = parts[0] if not parts.is_empty() else ["gift", "?", UITheme.MUTED]
+	if big and str(r.get("choice", "")) != "":
+		part = ["crown", "LEGEND", UITheme.GOLD]
+	var icon := UITheme.icon_rect("check" if claimed else str(part[0]), 26, UITheme.GREEN if claimed else part[2])
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vb.add_child(icon)
+	var amount := str(part[1])
+	if amount.length() > 7:
+		amount = amount.substr(0, 6)
+	var al := UITheme.label(amount, UITheme.FS_MIN, Color(0.75, 0.95, 0.82) if claimed else part[2], UITheme.font_header())
+	al.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(al)
+	if today and can and hot:
+		p.resized.connect(func() -> void: p.pivot_offset = p.size * 0.5)
+		var tw := p.create_tween().set_loops()
+		tw.tween_property(p, "scale", Vector2(1.07, 1.07), 0.6).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(p, "scale", Vector2.ONE, 0.6).set_trans(Tween.TRANS_SINE)
+	return p
+
+
+## CLAIM on Rookie Week: pays today's day, floats it up, and day 7 opens the Legendary pick.
+func _claim_week() -> void:
+	var day := Onboarding.week_day()
+	var panel: Node = ui.find_child("RookieWeek", true, false)
+	var cell: Control = panel.find_child("WeekDay%d" % day, true, false) if panel else null
+	var origin := cell.get_global_rect().get_center() if cell else Vector2(1600, 300)
+	var r := Onboarding.week_claim()
+	if r.is_empty():
+		return
+	Audio.play("achievement", -3.0)
+	Audio.play("coin", -6.0)
+	_float_reward(origin, r.get("reward", {}))
+	Router.toast("Rookie Week day %d: %s" % [int(r.day), str(r.text)], "achievement")
+	_refresh_hub()
+	_queue_popups()
+
+
+# ---------------------------------------------------------------- COMING UP (TODAY)
+
+## What unlocks next, while the Daily Challenge or Missions are still locked.
+func _build_coming_up() -> Control:
+	var parts := _today_card("ComingUp", "lock", "COMING UP", false)
+	var p: PanelContainer = parts[0]
+	var vb: VBoxContainer = parts[1]
+	var sub := UITheme.label("Level up and follow the Rookie Path to open more of the clubhouse.", UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(sub)
+	for f in Onboarding.next_locked(5):
+		var row := HBoxContainer.new()
+		row.name = "Locked_" + str(f.id)
+		row.add_theme_constant_override("separation", 10)
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
+		row.tooltip_text = "%s: %s.\n%s" % [str(f.name), Onboarding.lock_text(str(f.id)), str(f.get("text", ""))]
+		var ib := PanelContainer.new()
+		ib.add_theme_stylebox_override("panel", UITheme.panel_style(Color(1, 1, 1, 0.05), Color(1, 1, 1, 0.15), 1, 8, 4))
+		ib.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ib.add_child(UITheme.icon_rect(str(f.get("icon", "lock")), 24, Color(0.7, 0.76, 0.86)))
+		row.add_child(ib)
+		var tv := VBoxContainer.new()
+		tv.add_theme_constant_override("separation", -4)
+		tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tv.add_child(UITheme.label(str(f.name).to_upper(), UITheme.FS_LEAD, UITheme.OFFWHITE, UITheme.font_header()))
+		var ul := UITheme.label(Onboarding.lock_text(str(f.id)), UITheme.FS_MIN, Color(1.0, 0.78, 0.6), UITheme.font_body_bold())
+		ul.clip_text = true
+		tv.add_child(ul)
+		row.add_child(tv)
+		var lk := UITheme.icon_rect("lock", 22, UITheme.MUTED)
+		lk.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(lk)
+		vb.add_child(row)
+	return p
+
+
+# ---------------------------------------------------------------- Rookie Path strip
+
+## The Rookie Path in the open middle above the bottom bar: ten steps (done, current, to come, the
+## finale), the current step with its tip and progress or CLAIM, and the next reward.
+func _build_rookie_path() -> void:
+	if _path_panel and is_instance_valid(_path_panel):
+		_path_panel.get_parent().remove_child(_path_panel)
+		_path_panel.queue_free()
+	_path_panel = null
+	if not Onboarding.path_active():
+		if _caption:
+			_caption.offset_bottom = -BOTTOM_H - 16
+		return
+	var steps := Onboarding.path_steps()
+	var cur := Onboarding.path_claimed()
+	var inst := Onboarding.path_current()
+	var ready := Onboarding.path_can_claim()
+	var def := Onboarding.path_step_def(cur)
+	var p := PanelContainer.new()
+	p.name = "RookiePath"
+	var s := UITheme.panel_style(Color(0.025, 0.06, 0.1, 0.95), Color(PATH_GREEN, 0.7), 2, 14, 0)
+	s.content_margin_left = 20
+	s.content_margin_right = 20
+	s.content_margin_top = 12
+	s.content_margin_bottom = 14
+	s.shadow_color = Color(0, 0, 0, 0.45)
+	s.shadow_size = 14
+	p.add_theme_stylebox_override("panel", s)
+	p.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	p.offset_left = HERO_X + HERO_W + 40
+	p.offset_right = -TODAY_W - 28
+	p.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	p.offset_top = -BOTTOM_H - 18
+	p.offset_bottom = -BOTTOM_H - 18
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui.add_child(p)
+	ui.move_child(p, ui.get_child_count() - 1)
+	_path_panel = p
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 10)
+	p.add_child(vb)
+	# Head: ROOKIE PATH and STEP n / 10.
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	vb.add_child(head)
+	head.add_child(UITheme.icon_rect("trophy", 30, PATH_GREEN))
+	var tl := UITheme.label("ROOKIE PATH", 34, PATH_GREEN, UITheme.font_display())
+	tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
+	tl.add_theme_constant_override("shadow_offset_x", 2)
+	tl.add_theme_constant_override("shadow_offset_y", 2)
+	head.add_child(tl)
+	var sl := UITheme.label("STEP %d / %d" % [cur + 1, steps.size()], UITheme.FS_LEAD, UITheme.OFFWHITE, UITheme.font_header())
+	sl.name = "PathStepCount"
+	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(sl)
+	# The track.
+	var track := HBoxContainer.new()
+	track.name = "PathTrack"
+	track.add_theme_constant_override("separation", 0)
+	track.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_child(track)
+	for i in steps.size():
+		if i > 0:
+			var line := ColorRect.new()
+			line.color = Color(PATH_GREEN, 0.85) if i <= cur else Color(1, 1, 1, 0.14)
+			line.custom_minimum_size = Vector2(6, 4)
+			line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			track.add_child(line)
+		track.add_child(_path_node(i, cur, ready, steps[i]))
+	# The current step: icon, text and tip, progress or CLAIM.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	vb.add_child(row)
+	var ib := PanelContainer.new()
+	ib.add_theme_stylebox_override("panel", UITheme.panel_style(Color(PATH_GREEN, 0.14), Color(PATH_GREEN, 0.6), 2, 10, 6))
+	ib.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ib.add_child(UITheme.icon_rect(str(def.get("icon", "target")), 32, PATH_GREEN))
+	row.add_child(ib)
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 0)
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(tv)
+	var st := UITheme.label(Missions.text(inst).to_upper() if not inst.is_empty() else "", 28, UITheme.OFFWHITE, UITheme.font_header())
+	st.name = "PathStepText"
+	st.clip_text = true
+	tv.add_child(st)
+	var hint := UITheme.label("Done! Claim your reward." if ready else Missions.hint(inst), UITheme.FS_SMALL, Color(0.75, 0.95, 0.82) if ready else UITheme.MUTED, UITheme.font_body_bold())
+	hint.name = "PathHint"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.max_lines_visible = 2
+	tv.add_child(hint)
+	if ready:
+		var cb := UITheme.button("CLAIM", "primary", UITheme.FS_LEAD, "gift", UITheme.GREEN.darkened(0.3))
+		cb.name = "PathClaim"
+		cb.custom_minimum_size = Vector2(150, 54)
+		cb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		cb.tooltip_text = "Claim the Rookie Path reward: " + Missions.reward_text(Missions.reward(inst))
+		cb.pressed.connect(_claim_path.bind(cb))
+		row.add_child(cb)
+		_buttons.append(cb)
+		if _attn("path_claim"):
+			cb.resized.connect(func() -> void: cb.pivot_offset = cb.size * 0.5)
+			var tw := cb.create_tween().set_loops()
+			tw.tween_property(cb, "scale", Vector2(1.06, 1.06), 0.55).set_trans(Tween.TRANS_SINE)
+			tw.tween_property(cb, "scale", Vector2.ONE, 0.55).set_trans(Tween.TRANS_SINE)
+	else:
+		var pl := UITheme.label("%d / %d" % [int(inst.get("progress", 0)), int(inst.get("goal", 1))], 30, UITheme.OFFWHITE, UITheme.font_header())
+		pl.name = "PathProgress"
+		pl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(pl)
+	# The reward for this step, and what the finale pays.
+	var rw := HBoxContainer.new()
+	rw.name = "PathReward"
+	rw.add_theme_constant_override("separation", 12)
+	vb.add_child(rw)
+	rw.add_child(UITheme.label("REWARD", UITheme.FS_SMALL, UITheme.GOLD, UITheme.font_header()))
+	var chips := UITheme.reward_row(Missions.reward(inst), UITheme.FS_SMALL)
+	chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rw.add_child(chips)
+	var fin: Dictionary = steps[steps.size() - 1].get("reward", {})
+	var fl := UITheme.label("FINALE: %s" % ("CHAMPION PACK + A FREE AGENT" if str(fin.get("choice", "")) == "free_agent" else Missions.reward_text(fin).to_upper()),
+		UITheme.FS_MIN, Color(UITheme.GOLD, 0.85), UITheme.font_body_bold())
+	fl.name = "PathFinale"
+	fl.tooltip_text = "Finish the Rookie Path: %s" % Missions.reward_text(fin)
+	fl.mouse_filter = Control.MOUSE_FILTER_PASS
+	fl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rw.add_child(fl)
+	UITheme.animate_in(p, 0.35, 0.97)
+	# Keep the showcase caption clear of the strip.
+	var lift := func() -> void:
+		if _caption and is_instance_valid(p):
+			_caption.offset_bottom = -BOTTOM_H - 18 - p.get_combined_minimum_size().y - 10
+	lift.call_deferred()
+
+
+## One node on the track: done (a green check), the current step (gold ring), to come (number), the
+## finale (a trophy, bigger).
+func _path_node(i: int, cur: int, ready: bool, def: Dictionary) -> Control:
+	var finale := bool(def.get("finale", false))
+	var side := 46.0 if finale else 34.0
+	var done := i < cur
+	var now := i == cur
+	var bg := Color(0.06, 0.09, 0.15, 0.98)
+	var border := Color(1, 1, 1, 0.2)
+	if done:
+		bg = Color(PATH_GREEN, 0.9)
+		border = PATH_GREEN.lightened(0.3)
+	elif now:
+		bg = Color(PATH_GREEN.darkened(0.55), 0.98) if not ready else Color(UITheme.GOLD.darkened(0.45), 0.98)
+		border = UITheme.GOLD
+	elif finale:
+		bg = Color(0.18, 0.12, 0.02, 0.98)
+		border = Color(UITheme.GOLD, 0.8)
+	var n := Panel.new()
+	n.name = "PathStep%d" % (i + 1)
+	n.custom_minimum_size = Vector2(side, side)
+	n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	n.add_theme_stylebox_override("panel", UITheme.panel_style(bg, border, 3 if now else 2, int(side / 2), 0))
+	n.mouse_filter = Control.MOUSE_FILTER_PASS
+	n.tooltip_text = "Step %d: %s\nTeaches: %s\nReward: %s" % [i + 1, str(def.get("text", "")), str(def.get("teach", "")), Missions.reward_text(def.get("reward", {}))]
+	if done:
+		var ic := UITheme.icon_rect("check", side * 0.6, Color(0.02, 0.12, 0.06))
+		ic.position = Vector2(side * 0.2, side * 0.2)
+		n.add_child(ic)
+	elif finale:
+		var ic2 := UITheme.icon_rect("trophy", side * 0.62, UITheme.GOLD)
+		ic2.position = Vector2(side * 0.19, side * 0.19)
+		n.add_child(ic2)
+	else:
+		var l := UITheme.label(str(i + 1), 20, Color.WHITE if now else UITheme.MUTED, UITheme.font_header())
+		l.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		n.add_child(l)
+	if now:
+		n.pivot_offset = Vector2(side, side) * 0.5
+		var tw := n.create_tween().set_loops()
+		tw.tween_property(n, "scale", Vector2(1.14, 1.14), 0.7).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(n, "scale", Vector2.ONE, 0.7).set_trans(Tween.TRANS_SINE)
+	return n
+
+
+## CLAIM on the Rookie Path: pays the step, then any feature it opened gets its unlock card (and the
+## finale its free agent pick).
+func _claim_path(btn: Control = null) -> void:
+	var origin := btn.get_global_rect().get_center() if btn and is_instance_valid(btn) else Vector2(960, 800)
+	var step := Onboarding.path_claimed() + 1
+	var r := Onboarding.claim_path()
+	if r.is_empty():
+		return
+	Audio.play("achievement", -3.0)
+	Audio.play("coin", -6.0)
+	_float_reward(origin, r)
+	Router.toast("Rookie Path step %d done: %s" % [step, Missions.reward_text(r)], "achievement")
+	if not Onboarding.path_active():
+		UITheme.confetti_burst(ui, origin, 90)
+	Profile.save_soon()
+	_refresh_hub()
+	_queue_popups()
+
+
+# ---------------------------------------------------------------- popups
+
+## Shows the next Rookie Camp popup, one at a time: welcome back, a pick, NEW FEATURE UNLOCKED, the
+## coach's tip; then the PLAY spotlight. Popups stay off in automated runs (Onboarding.popups_enabled).
+func _queue_popups() -> void:
+	if not is_inside_tree():
+		return
+	if _popup and is_instance_valid(_popup):
+		return   # the running popup moves on to the next one when it closes
+	_next_popup()
+
+
+func _next_popup() -> void:
+	_popup = null
+	_popup_close = Callable()
+	if not is_inside_tree() or is_queued_for_deletion():
+		return
+	if Router.busy or get_tree().current_scene != self:
+		# A screen change is running: this hub is leaving (it never shows anything again) or the new
+		# hub is still fading in (try again in a moment).
+		if get_tree().current_scene == self:
+			var again := create_tween()
+			again.tween_interval(0.4)
+			again.tween_callback(_next_popup)
+		return
+	if Onboarding.popups_enabled():
+		var w := Onboarding.pending_welcome()
+		if not w.is_empty():
+			_show_welcome_back(w)
+			return
+		var c := Onboarding.pending_choice()
+		if not c.is_empty() and not _choice_later:
+			_show_choice(c)
+			return
+		var u := Onboarding.pending_unlocks()
+		if not u.is_empty():
+			_show_unlock(u.slice(0, 4))
+			return
+		var tip := Onboarding.coach_tip()
+		if not tip.is_empty():
+			_show_coach(tip)
+			return
+	_maybe_ftue()
+
+
+## A popup card on a spotlight layer: returns [layer, content VBox, card]. `targets` get spotlight holes.
+func _popup_card(card_name: String, accent: Color, targets: Array, width := 760.0, center := Vector2(-1, -1)) -> Array:
+	var sp := Hints.spotlight(self, targets, true)
+	sp.name = card_name
+	_popup = sp
+	var card := UITheme.card_panel(Color(accent, 0.9), 26, Color(0.035, 0.06, 0.11, 0.98), 3)
+	card.name = card_name + "Card"
+	card.custom_minimum_size = Vector2(width, 0)
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	sp.root.add_child(card)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 14)
+	card.add_child(vb)
+	var vis := get_viewport().get_visible_rect().size
+	var f := minf(1.0, minf(vis.x / DESIGN_SIZE.x, vis.y / DESIGN_SIZE.y))
+	var place := func() -> void:
+		if not is_instance_valid(card):
+			return
+		var cs := card.get_combined_minimum_size()
+		card.size = cs
+		card.pivot_offset = cs * 0.5
+		var c := center if center.x >= 0.0 else vis * 0.5
+		card.position = (c - cs * 0.5).clamp(Vector2(16, 16), vis - cs * f - Vector2(16, 16))
+	place.call_deferred()
+	card.scale = Vector2(f, f) * 0.9
+	card.modulate.a = 0.0
+	var tw := card.create_tween().set_parallel()
+	tw.tween_property(card, "modulate:a", 1.0, 0.22)
+	tw.tween_property(card, "scale", Vector2(f, f), 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	return [sp, vb, card]
+
+
+## Closes the current popup and moves on to the next one.
+func _close_popup() -> void:
+	var sp: Node = _popup
+	_popup = null
+	_popup_close = Callable()
+	if sp and is_instance_valid(sp):
+		if sp.has_method("close"):
+			sp.close()
+		else:
+			sp.queue_free()
+	var tw := create_tween()
+	tw.tween_interval(0.3)
+	tw.tween_callback(_next_popup)
+
+
+func _popup_buttons(vb: VBoxContainer) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "PopupButtons"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	vb.add_child(row)
+	return row
+
+
+## NEW FEATURE UNLOCKED: one card for the features that just opened, spotlights on their hub elements.
+func _show_unlock(feats: Array) -> void:
+	var targets: Array = []
+	for f in feats:
+		var t: Node = ui.find_child(str(f.get("hub", "")), true, false)
+		if t is Control:
+			targets.append(t)
+	# Keep the card clear of the spotlights: above them when they are low on the screen.
+	var low := targets.any(func(t: Control) -> bool: return t.get_global_rect().get_center().y > 800.0)
+	var vis := get_viewport().get_visible_rect().size
+	var parts := _popup_card("UnlockCelebration", UITheme.GOLD, targets, 680.0, Vector2(vis.x * 0.5, vis.y * (0.4 if low else 0.5)))
+	var vb: VBoxContainer = parts[1]
+	var card: Control = parts[2]
+	var rib := UITheme.slant_ribbon("NEW FEATURE%s UNLOCKED" % ("S" if feats.size() > 1 else ""), "star", 34, UITheme.SCARLET, false, 2)
+	rib.name = "UnlockRibbon"
+	rib.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vb.add_child(rib)
+	for f in feats:
+		var row := HBoxContainer.new()
+		row.name = "Unlocked_" + str(f.id)
+		row.add_theme_constant_override("separation", 18)
+		vb.add_child(row)
+		var art := Control.new()
+		art.custom_minimum_size = Vector2(96, 96)
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(art)
+		var rays := UITheme.rays(150.0, Color(1.0, 0.8, 0.25, 0.2))
+		rays.position = Vector2(-27, -27)
+		art.add_child(rays)
+		var disc := Panel.new()
+		disc.add_theme_stylebox_override("panel", UITheme.panel_style(UITheme.GOLD.darkened(0.55), UITheme.GOLD, 3, 48, 0))
+		disc.size = Vector2(96, 96)
+		disc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art.add_child(disc)
+		var ic := UITheme.icon_rect(str(f.get("icon", "star")), 56, Color.WHITE)
+		ic.position = Vector2(20, 20)
+		disc.add_child(ic)
+		var tv := VBoxContainer.new()
+		tv.add_theme_constant_override("separation", 2)
+		tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tv.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_child(tv)
+		tv.add_child(UITheme.label(str(f.name).to_upper(), 46 if feats.size() == 1 else 36, UITheme.GOLD, UITheme.font_display()))
+		var tx := UITheme.label(str(f.get("text", "")), UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+		tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tx.custom_minimum_size = Vector2(500, 0)
+		tv.add_child(tx)
+	var where := UITheme.label("Look for the glowing spot%s on your clubhouse." % ("s" if targets.size() > 1 else ""), UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
+	where.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(where)
+	var btns := _popup_buttons(vb)
+	var ids: Array = feats.map(func(f: Dictionary) -> String: return str(f.id))
+	var done := func() -> void:
+		for id in ids:
+			Onboarding.mark_announced(id)
+		_close_popup()
+	if feats.size() == 1 and _try_action(str(feats[0].id)).is_valid():
+		var go := UITheme.button("TRY IT  ▶", "primary", UITheme.FS_LEAD, "play", UITheme.GREEN.darkened(0.3))
+		go.name = "UnlockTry"
+		go.custom_minimum_size = Vector2(220, 58)
+		var act := _try_action(str(feats[0].id))
+		go.pressed.connect(func() -> void:
+			for id in ids:
+				Onboarding.mark_announced(id)
+			_popup = null
+			act.call())
+		btns.add_child(go)
+	var ok := UITheme.button("GOT IT", "secondary" if feats.size() == 1 else "primary", UITheme.FS_LEAD, "check", UITheme.GOLD)
+	ok.name = "UnlockOk"
+	ok.custom_minimum_size = Vector2(180, 58)
+	ok.pressed.connect(done)
+	btns.add_child(ok)
+	_popup_close = done
+	Audio.play("level_up", -2.0)
+	var burst := create_tween()
+	burst.tween_interval(0.25)
+	burst.tween_callback(func() -> void:
+		if is_instance_valid(card) and _popup and is_instance_valid(_popup):
+			UITheme.confetti_burst((_popup as Hints.Spotlight).root, card.get_global_rect().get_center() - Vector2(0, card.size.y * 0.4)))
+	ok.grab_focus.call_deferred()
+
+
+## Where TRY IT goes for a feature (an invalid Callable when there is nowhere to go).
+func _try_action(id: String) -> Callable:
+	match id:
+		"deck":
+			return func() -> void:
+				Session.menu_tab = "deck"
+				Router.goto("deck_builder")
+		"packs":
+			return func() -> void: Router.goto("packs")
+		"upgrades":
+			return func() -> void: Router.goto("card_upgrades")
+		"team":
+			return func() -> void: Router.goto("roster")
+		"shop":
+			return func() -> void: Router.open("shop")
+		"season":
+			return func() -> void: Router.open("season")
+		"scouting":
+			return func() -> void: Router.goto("scouting_book")
+		"missions":
+			return func() -> void:
+				Session.menu_tab = "missions"
+				Router.goto("progression")
+		"daily":
+			return func() -> void:
+				Session.menu_tab = "daily"
+				Router.goto("play_menu")
+		"quick", "standard", "boss_rush", "endless":
+			return func() -> void:
+				Profile.data.flags["last_mode"] = id
+				Session.menu_tab = "mode:" + id
+				Router.goto("play_menu")
+	return Callable()
+
+
+## A pick: three cards that suit the deck (Epic after game 3, Legendary on Rookie Week day 7) or the free
+## agents (Rookie Path finale). DECIDE LATER keeps it for the next visit.
+func _show_choice(c: Dictionary) -> void:
+	var kind := str(c.get("kind", ""))
+	var opts: Array = c.get("options", [])
+	var accent := UITheme.PURPLE.lightened(0.15) if kind == "epic" else (UITheme.GOLD if kind == "legendary" else UITheme.BLUE)
+	var parts := _popup_card("ChoicePopup", accent, [], 1020.0)
+	var vb: VBoxContainer = parts[1]
+	var title := {"epic": "PICK YOUR FIRST EPIC", "legendary": "PICK YOUR LEGENDARY", "free_agent": "SIGN A FREE AGENT"}.get(kind, "MAKE YOUR PICK")
+	var hh := UITheme.section_header(str(title), "star" if kind != "free_agent" else "roster", accent, 46)
+	hh.name = "ChoiceTitle"
+	hh.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_child(hh)
+	var sub := {"epic": "Three Epic cards that suit your deck and team. Keep one: it is yours for good.",
+		"legendary": "Rookie Week day 7! Three Legendary cards for your deck. Keep one.",
+		"free_agent": "You finished the Rookie Path! Sign one free agent now, long before their level, for free."}.get(kind, "")
+	var sl := UITheme.label(str(sub) + ("  (%s)" % str(c.get("source", "")) if str(c.get("source", "")) != "" and kind == "epic" else ""), UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(sl)
+	var row := HBoxContainer.new()
+	row.name = "ChoiceOptions"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 26)
+	vb.add_child(row)
+	var first: Button = null
+	for id in opts:
+		var col := VBoxContainer.new()
+		col.name = "Option_" + str(id)
+		col.add_theme_constant_override("separation", 8)
+		col.custom_minimum_size = Vector2(280, 0)
+		row.add_child(col)
+		if kind == "free_agent":
+			_agent_option(col, str(id))
+		else:
+			var cv := CardView.new(str(id), maxi(1, Profile.card_level(str(id))))
+			cv.custom_minimum_size = Vector2(214, 300)
+			cv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			cv.tooltip_text = DB.card_text(str(id), 1)
+			col.add_child(cv)
+			var nl := UITheme.label(str(DB.card(str(id)).get("name", id)).to_upper(), UITheme.FS_LEAD, Color(DB.rarity_color(kind)).lightened(0.3), UITheme.font_header())
+			nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			col.add_child(nl)
+			var why := UITheme.label(Onboarding.card_reason(str(id)), UITheme.FS_SMALL, Color(0.75, 0.95, 0.82), UITheme.font_body_bold())
+			why.name = "Reason"
+			why.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			why.custom_minimum_size = Vector2(270, 0)
+			col.add_child(why)
+		var pick := UITheme.button("SIGN" if kind == "free_agent" else "PICK", "primary", UITheme.FS_LEAD, "check", accent.darkened(0.35))
+		pick.name = "Pick_" + str(id)
+		pick.custom_minimum_size = Vector2(200, 54)
+		pick.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		pick.pressed.connect(_pick_option.bind(str(id), kind, col))
+		col.add_child(pick)
+		if first == null:
+			first = pick
+	var btns := _popup_buttons(vb)
+	var later := UITheme.button("DECIDE LATER", "ghost", UITheme.FS_BODY)
+	later.name = "ChoiceLater"
+	later.tooltip_text = "Close this (Esc). The pick waits for your next visit."
+	var close_fn := func() -> void:
+		_choice_later = true
+		_close_popup()
+	later.pressed.connect(close_fn)
+	btns.add_child(later)
+	_popup_close = close_fn
+	Audio.play("reveal_legendary" if kind == "legendary" else "reveal_epic", -4.0)
+	if first:
+		first.grab_focus.call_deferred()
+
+
+func _agent_option(col: VBoxContainer, id: String) -> void:
+	var d := DB.defender(id)
+	var accent := DB.defender_accent(id)
+	var pr := MenuScreen.portrait_rect(id, 190, accent)
+	pr.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(pr)
+	var nl := UITheme.label(str(d.name).to_upper(), 34, accent.lightened(0.3), UITheme.font_display())
+	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(nl)
+	var role := str(DB.roles.get(str(d.get("role", "")), {}).get("name", str(d.get("role", "")).capitalize()))
+	var sub := UITheme.label("#%d  ·  %s  ·  %s" % [int(d.get("number", 0)), role, str(d.get("title", ""))], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(sub)
+	var u: Dictionary = d.get("unlock", {})
+	var info := UITheme.label("Signature card: %s\nNormally level %d or %s coins" % [str(DB.card(str(d.get("signature", ""))).get("name", "")), int(u.get("value", 0)), UITheme.format_int(int(u.get("coins", 0)))],
+		UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(info)
+
+
+func _pick_option(id: String, kind: String, col: Control) -> void:
+	var r := Onboarding.choose(id)
+	if r.is_empty():
+		return
+	Audio.play("achievement", -2.0)
+	if _popup and is_instance_valid(_popup) and is_instance_valid(col):
+		UITheme.confetti_burst((_popup as Hints.Spotlight).root, col.get_global_rect().get_center(), 80)
+	if kind == "free_agent":
+		Router.toast("%s signed! Put them in your starting six on the Team screen." % str(r.name), "achievement", 4.0)
+	else:
+		Router.toast("%s joined your collection! Put it in your deck in Cards & Deck." % str(r.name), "achievement", 4.0)
+	_refresh_top_values()
+	var tw := create_tween()
+	tw.tween_interval(0.6)
+	tw.tween_callback(func() -> void:
+		_close_popup()
+		_refresh_hub())
+
+
+## WELCOME BACK after 3+ days away: the bonus (already paid) and a short recap.
+func _show_welcome_back(w: Dictionary) -> void:
+	var parts := _popup_card("WelcomeBack", UITheme.GOLD, [], 720.0)
+	var vb: VBoxContainer = parts[1]
+	var hh := UITheme.section_header("WELCOME BACK, MANAGER!", "star", UITheme.GOLD, 46)
+	hh.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_child(hh)
+	var away := UITheme.label("You were away %d days. The team kept your seat warm: here's a welcome-back bonus." % int(w.get("days", 3)),
+		UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+	away.name = "WelcomeDays"
+	away.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	away.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	away.custom_minimum_size = Vector2(660, 0)
+	vb.add_child(away)
+	var rp := PanelContainer.new()
+	rp.name = "WelcomeReward"
+	rp.add_theme_stylebox_override("panel", UITheme.panel_style(Color(UITheme.GOLD, 0.1), Color(UITheme.GOLD, 0.5), 2, 10, 12))
+	rp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var rr := UITheme.reward_row(w.get("granted", w.get("reward", {})), 30)
+	rr.alignment = BoxContainer.ALIGNMENT_CENTER
+	rr.add_theme_constant_override("separation", 22)
+	rp.add_child(rr)
+	vb.add_child(rp)
+	vb.add_child(UITheme.section_header("WHAT'S NEW", "info", UITheme.GOLD, UITheme.FS_H3))
+	var list := VBoxContainer.new()
+	list.name = "WelcomeRecap"
+	list.add_theme_constant_override("separation", 6)
+	vb.add_child(list)
+	for line in Onboarding.welcome_recap():
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var ic := UITheme.icon_rect(str(line[0]), 24, UITheme.GOLD)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		row.add_child(ic)
+		var l := UITheme.label(str(line[1]), UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(l)
+		list.add_child(row)
+	var btns := _popup_buttons(vb)
+	var go := UITheme.button("LET'S PLAY", "primary", UITheme.FS_LEAD, "play", UITheme.SCARLET)
+	go.name = "WelcomeOk"
+	go.custom_minimum_size = Vector2(240, 58)
+	var done := func() -> void:
+		Onboarding.dismiss_welcome()
+		_close_popup()
+	go.pressed.connect(done)
+	btns.add_child(go)
+	_popup_close = done
+	Audio.play("achievement", -3.0)
+	go.grab_focus.call_deferred()
+
+
+## After an early loss: the consolation reward, an easier difficulty, and (after two in a row) Auto Build.
+func _show_coach(tip: Dictionary) -> void:
+	var parts := _popup_card("CoachTip", UITheme.BLUE, [], 700.0)
+	var vb: VBoxContainer = parts[1]
+	var hh := UITheme.section_header("TOUGH GAME, MANAGER!", "info", UITheme.BLUE.lightened(0.3), 44)
+	hh.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_child(hh)
+	var t := UITheme.label("Every manager drops a few early games. Here's something to keep you going:", UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.custom_minimum_size = Vector2(640, 0)
+	vb.add_child(t)
+	var rr := UITheme.reward_row(tip.get("reward", {}), 28)
+	rr.alignment = BoxContainer.ALIGNMENT_CENTER
+	rr.name = "CoachReward"
+	vb.add_child(rr)
+	var easier := str(tip.get("easier", ""))
+	var auto := bool(tip.get("auto_build", false))
+	if easier != "" or auto:
+		var adv := UITheme.label(("Try %s: %s" % [DB.difficulty(easier).get("name", easier), DB.difficulty(easier).get("text", "")] if easier != "" else "")
+			+ ("\n" if easier != "" and auto else "") + ("Two in a row? Let Auto Build pick the strongest 8 cards from your collection." if auto else ""),
+			UITheme.FS_BODY, Color(0.75, 0.88, 1.0), UITheme.font_body_bold())
+		adv.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		adv.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		adv.custom_minimum_size = Vector2(640, 0)
+		vb.add_child(adv)
+	var btns := _popup_buttons(vb)
+	if easier != "":
+		var eb := UITheme.button("PLAY ON %s" % str(DB.difficulty(easier).get("name", easier)).to_upper(), "primary", UITheme.FS_BODY, "play", UITheme.GREEN.darkened(0.3))
+		eb.name = "CoachEasier"
+		eb.custom_minimum_size = Vector2(0, 54)
+		eb.pressed.connect(func() -> void:
+			var d := Onboarding.take_easier()
+			Router.toast("Difficulty set to %s." % str(DB.difficulty(d).get("name", d)), "info")
+			_close_popup()
+			_refresh_hero())
+		btns.add_child(eb)
+	if auto:
+		var ab := UITheme.button("AUTO BUILD MY DECK", "primary", UITheme.FS_BODY, "deck", UITheme.BLUE.darkened(0.2))
+		ab.name = "CoachAutoBuild"
+		ab.custom_minimum_size = Vector2(0, 54)
+		ab.pressed.connect(func() -> void:
+			var deck := Onboarding.auto_build_deck()
+			Router.toast("Auto Build: your deck now has %s." % ", ".join(deck.map(func(c: String) -> String: return str(DB.card(c).get("name", c)))) if not deck.is_empty()
+				else "Your deck is already the best Auto Build can make.", "info", 4.5)
+			if easier == "":
+				Onboarding.dismiss_coach()
+			ab.disabled = true
+			if easier == "":
+				_close_popup())
+		btns.add_child(ab)
+	var keep := UITheme.button("KEEP GOING", "ghost", UITheme.FS_BODY)
+	keep.name = "CoachClose"
+	var done := func() -> void:
+		Onboarding.dismiss_coach()
+		_close_popup()
+	keep.pressed.connect(done)
+	btns.add_child(keep)
+	_popup_close = done
+
+
+## Back from the first-session flow (flags.ftue_return_hub): a spotlight on PLAY for game 2. It never
+## blocks: any click or key fades it out. The flag is cleared once shown.
+func _maybe_ftue() -> void:
+	if not bool(Profile.data.flags.get("ftue_return_hub", false)) or _hero == null or not is_instance_valid(_hero):
+		return
+	Profile.data.flags["ftue_return_hub"] = false
+	Profile.save_soon()
+	var sp := Hints.spotlight(self, [_hero], false, 0.5)
+	sp.name = "PlaySpotlight"
+	var callout := UITheme.card_panel(Color(UITheme.GOLD, 0.9), 16, Color(0.04, 0.07, 0.13, 0.97), 3)
+	callout.name = "PlayCallout"
+	callout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cv := VBoxContainer.new()
+	cv.add_theme_constant_override("separation", 4)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	callout.add_child(cv)
+	cv.add_child(UITheme.label("READY FOR GAME 2?", 34, UITheme.GOLD, UITheme.font_display()))
+	var tx := UITheme.label("Press PLAY: your new cards are waiting.", UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+	cv.add_child(tx)
+	sp.root.add_child(callout)
+	var hr := _hero.get_global_rect()
+	callout.position = Vector2(hr.end.x + 40.0, hr.get_center().y - 48.0)
+	callout.modulate.a = 0.0
+	var tw := callout.create_tween()
+	tw.tween_property(callout, "modulate:a", 1.0, 0.3)
+	var bob := callout.create_tween().set_loops()
+	bob.tween_property(callout, "position:x", callout.position.x + 10.0, 0.6).set_trans(Tween.TRANS_SINE)
+	bob.tween_property(callout, "position:x", callout.position.x, 0.6).set_trans(Tween.TRANS_SINE)
+	_hero.grab_focus.call_deferred()
+
+
+# ---------------------------------------------------------------- screenshot / demo helper
+
+## `--rookie-demo=a,b,...` sets up a Rookie Camp moment for screenshots: fresh, unlock (level 2 just
+## reached), path (a step ready to claim), epic, legendary, agent (a pick), week (Rookie Week day 3 ready),
+## welcome (5 days away), coach (two early losses), ftue (back from the first game), established.
+func _rookie_demo_setup() -> void:
+	var demos: Array = []
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--rookie-demo="):
+			demos = Array(a.split("=")[1].split(","))
+	if demos.is_empty() or Profile.data.flags.get("rookie_demo_done", false):
+		return
+	Profile.data.flags["rookie_demo_done"] = true
+	Profile.data.flags.tutorial_done = true
+	var hist := func(won: bool) -> void:
+		Profile.add_history({"won": won, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "inning": 3, "score": 1200, "outs": 40, "runs": 0, "date": Time.get_datetime_string_from_system()})
+	for d in demos:
+		match str(d):
+			"established":
+				Onboarding.make_established()
+			"unlock":
+				hist.call(true)
+				Profile.data.stats["runs_played"] = 1.0
+				Profile.add_xp(Profile.xp_to_next(1) + 20)
+			"path":
+				hist.call(true)
+				Profile.data.stats["runs_played"] = 2.0
+				Profile.add_xp(Profile.xp_to_next(1) + 60)
+				var m := Missions.state()
+				m.starter_step = 3
+				m.starter = {}
+				Missions.refresh()
+				m.starter.progress = int(m.starter.goal)
+				for f in Onboarding.pending_unlocks():
+					Onboarding.mark_announced(str(f.id))
+				Profile.add_pack("rookie", "demo")
+				Profile.add_pack("rookie", "demo")
+			"epic", "legendary", "agent":
+				for f in Onboarding.pending_unlocks():
+					Onboarding.mark_announced(str(f.id))
+				Onboarding.queue_choice({"epic": "epic", "legendary": "legendary", "agent": "free_agent"}[str(d)], "demo")
+			"week":
+				var w: Dictionary = Onboarding.state().week
+				w.claims = 2
+				w.last_claim = DailyChallenge.shift_date(DailyChallenge.today(), -1)
+			"welcome":
+				Onboarding.state().last_seen = DailyChallenge.shift_date(DailyChallenge.today(), -5)
+				Onboarding.state().welcome = {}
+			"coach":
+				hist.call(false)
+				hist.call(false)
+				Profile.data.stats["runs_played"] = 2.0
+				Onboarding.state().losses_row = 2
+				var cr := Rewards.grant_bundle(Onboarding.data().consolation.reward, "demo")
+				Onboarding.state().coach = {"easier": "rookie", "difficulty": "standard", "mode": "quick", "auto_build": true, "losses": 2, "reward": cr}
+			"ftue":
+				Profile.data.flags["ftue_return_hub"] = true
+	Profile.save_now()

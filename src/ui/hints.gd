@@ -22,6 +22,9 @@ const HINTS := {
 	"menu_season": ["SEASON PASS", "Every game earns season XP (more for wins, missions and the Daily Challenge). Each tier pays a reward, with Champion Packs at tiers 15 and 30. A season lasts 14 days."],
 	"menu_streak": ["WIN STREAK", "Win games in a row for bonus coins: +10% for every win in the streak, up to +50%. A loss resets it. Your first win each day also pays double coins."],
 	"menu_shop": ["DAILY SHOP", "A free gift every day, plus card copies, a discounted pack and a star deal. The deals change at midnight, and you can sign free agents there too."],
+	# Update 13: Rookie Camp on the hub.
+	"menu_path": ["ROOKIE PATH", "Ten steps, each teaching one part of the game. Finish a step, then CLAIM its reward here: the rewards grow, some steps open new features, and the last one lets you sign a free agent."],
+	"menu_week": ["ROOKIE WEEK", "A bonus calendar for new managers: one big reward a day for seven days, with a Champion Pack and a Legendary of your choice on day 7. Miss a day and it waits for you."],
 	# Daily Shop and Season Pass screens (Update 9).
 	"shop_intro": ["THE SHOP", "New deals every day at midnight: a free gift, copies of cards you need, a discounted pack and a star deal. Each can be bought once. Free agents can be signed early for coins."],
 	"shop_free_agents": ["FREE AGENTS", "Sign a new defender early for coins instead of waiting for their account level. A signed defender joins your team list and brings their signature card pack."],
@@ -69,7 +72,7 @@ const HINTS := {
 
 ## Which hints each screen shows (in order) and replays from its "?" button.
 const SCREENS := {
-	"main_menu": ["menu_home", "menu_login", "menu_daily", "menu_season", "menu_streak", "menu_shop", "menu_promotion"],
+	"main_menu": ["menu_home", "menu_path", "menu_week", "menu_login", "menu_daily", "menu_season", "menu_streak", "menu_shop", "menu_promotion"],
 	"packs": ["packs_intro", "packs_rarity"],
 	"deck_builder": ["deck_intro", "deck_auto", "deck_compare", "deck_mastery", "deck_sets"],
 	"collection": ["deck_mastery", "deck_compare", "deck_sets", "packs_rarity"],
@@ -87,7 +90,7 @@ const SCREENS := {
 
 ## Feature hints: part of a screen's "?" replay, but shown automatically only when the screen
 ## passes them in `extra` (the player has actually met the feature).
-const FEATURE_ONLY := ["menu_promotion", "menu_streak", "menu_shop", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
+const FEATURE_ONLY := ["menu_promotion", "menu_streak", "menu_shop", "menu_path", "menu_week", "deck_mastery", "deck_sets", "deck_auto", "deck_compare", "team_traits",
 	"team_free_agents", "team_best", "team_compare", "play_daily", "play_boss_rush", "play_ranked", "play_endless", "play_practice", "play_streak",
 	"battle_combo", "battle_scout", "battle_boons"]
 
@@ -427,3 +430,157 @@ class HintDraw extends Control:
 		draw_line(from, tip - dir * 14.0, col, 4.0, true)
 		var side := Vector2(-dir.y, dir.x)
 		draw_colored_polygon(PackedVector2Array([tip, tip - dir * 18.0 + side * 10.0, tip - dir * 18.0 - side * 10.0]), col)
+
+
+# ---------------------------------------------------------------- spotlight (Update 13)
+
+## A dim overlay with a soft hole and a pulsing gold ring around each of `targets` (Controls): the hub's
+## NEW FEATURE UNLOCKED cards and its PLAY spotlight. Put the popup's own controls on the returned layer's
+## `root`. `blocking` swallows clicks everywhere except those controls; otherwise every click goes through
+## and the first click or key press fades the spotlight out (it never blocks the screen).
+static func spotlight(host: Node, targets: Array, blocking := true, dim := 0.64) -> Spotlight:
+	var s := Spotlight.new()
+	s.targets = targets.filter(func(t: Variant) -> bool: return t is Control and is_instance_valid(t))
+	s.blocking = blocking
+	s.dim = dim
+	host.add_child(s)
+	return s
+
+
+class Spotlight extends CanvasLayer:
+	const MAX_HOLES := 4
+	const SHADER := """
+shader_type canvas_item;
+uniform vec4 holes[4];
+uniform int count = 0;
+uniform float dim = 0.64;
+uniform vec2 size = vec2(1920.0, 1080.0);
+float sd_box(vec2 p, vec2 c, vec2 h, float r) {
+	vec2 q = abs(p - c) - h + vec2(r);
+	return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+void fragment() {
+	vec2 p = UV * size;
+	float a = dim;
+	for (int i = 0; i < 4; i++) {
+		if (i >= count) { break; }
+		vec4 h = holes[i];
+		float d = sd_box(p, h.xy + h.zw * 0.5, h.zw * 0.5 + vec2(12.0), 16.0);
+		a = min(a, dim * smoothstep(0.0, 30.0, d));
+	}
+	COLOR = vec4(0.01, 0.02, 0.05, a);
+}
+"""
+	static var _shader: Shader
+	var targets: Array = []
+	var blocking := true
+	var dim := 0.64
+	var root: Control
+	var _shade: ColorRect
+	var _rings: SpotRings
+	var _mat: ShaderMaterial
+	var _closing := false
+
+	func _init() -> void:
+		layer = 70
+		process_mode = Node.PROCESS_MODE_ALWAYS
+
+	func _ready() -> void:
+		if _shader == null:
+			_shader = Shader.new()
+			_shader.code = SHADER
+		_mat = ShaderMaterial.new()
+		_mat.shader = _shader
+		_shade = ColorRect.new()
+		_shade.name = "SpotShade"
+		_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_shade.material = _mat
+		_shade.mouse_filter = Control.MOUSE_FILTER_STOP if blocking else Control.MOUSE_FILTER_IGNORE
+		add_child(_shade)
+		_rings = SpotRings.new()
+		_rings.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_rings.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_rings)
+		root = Control.new()
+		root.name = "SpotRoot"
+		root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(root)
+		_shade.modulate.a = 0.0
+		_rings.modulate.a = 0.0
+		var tw := _shade.create_tween().set_parallel()
+		tw.tween_property(_shade, "modulate:a", 1.0, 0.3)
+		tw.tween_property(_rings, "modulate:a", 1.0, 0.3)
+		_update()
+
+	## The target rects on screen (visible targets only).
+	func hole_rects() -> Array[Rect2]:
+		var out: Array[Rect2] = []
+		for t in targets:
+			if t is Control and is_instance_valid(t) and (t as Control).is_visible_in_tree():
+				var c: Control = t
+				var xf := c.get_global_transform_with_canvas()
+				out.append(Rect2(xf.origin, c.size * xf.get_scale()))
+			if out.size() >= MAX_HOLES:
+				break
+		return out
+
+	func _process(_delta: float) -> void:
+		_update()
+
+	func _update() -> void:
+		if _mat == null:
+			return
+		var rects := hole_rects()
+		var packed: Array = []
+		for i in MAX_HOLES:
+			var r: Rect2 = rects[i] if i < rects.size() else Rect2()
+			packed.append(Vector4(r.position.x, r.position.y, r.size.x, r.size.y))
+		_mat.set_shader_parameter("holes", packed)
+		_mat.set_shader_parameter("count", rects.size())
+		_mat.set_shader_parameter("dim", dim)
+		_mat.set_shader_parameter("size", _shade.size)
+		_rings.rects = rects
+
+	## Fades out and frees the spotlight.
+	func close() -> void:
+		if _closing:
+			return
+		_closing = true
+		var tw := _shade.create_tween().set_parallel()
+		tw.tween_property(_shade, "modulate:a", 0.0, 0.2)
+		tw.tween_property(_rings, "modulate:a", 0.0, 0.2)
+		if root:
+			tw.tween_property(root, "modulate:a", 0.0, 0.2)
+		tw.chain().tween_callback(queue_free)
+
+	func is_closing() -> bool:
+		return _closing
+
+	func _input(event: InputEvent) -> void:
+		if blocking or _closing:
+			return
+		if (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) or (event is InputEventKey and (event as InputEventKey).pressed):
+			close()
+
+
+## The pulsing gold rings around the spotlight's holes.
+class SpotRings extends Control:
+	var rects: Array[Rect2] = []
+	var _t := 0.0
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		var pulse := 0.5 + 0.5 * sin(_t * 4.0)
+		for r in rects:
+			var sb := StyleBoxFlat.new()
+			sb.draw_center = false
+			sb.set_border_width_all(4)
+			sb.set_corner_radius_all(16)
+			sb.border_color = Color(Hints.ACCENT, 0.6 + 0.4 * pulse)
+			sb.shadow_color = Color(Hints.ACCENT, 0.35 * pulse)
+			sb.shadow_size = 14
+			draw_style_box(sb, r.grow(10.0 + 4.0 * pulse))

@@ -1,0 +1,52 @@
+{
+  "_comment": "Update 13 'Rookie Camp' (src/core/onboarding.gd). 'features': the hub's progressive unlock order. A feature opens at account level 'level' or once Rookie Path step 'path' is claimed (whichever comes first); every feature opens for an established manager (account level 5+, 5+ games, or flags.unlock_all). Locked features stay visible as teasers with 'Unlocks at level N'. 'hub' names the hub element the NEW FEATURE UNLOCKED spotlight points at. 'rookie_week': a 7-day bonus calendar for new managers (one claim per calendar day; a missed day pauses it, it never resets); 'choice' lets the player pick a card of that rarity. 'early_games': a bonus pack for each of the first games. 'consolation': a loss in the first 'games' games pays 'reward' and offers an easier difficulty; 'coach_losses' losses in a row also suggest Auto Build. 'welcome_back': after 'days' days away, 'reward' (or 'reward_long' after 'long_days'), with the recap card. 'badge_budget': attention badges a new manager sees on the hub at once, by 'badge_priority' (first = most important).",
+  "established": {"level": 5, "games": 5},
+  "features": [
+    {"id": "quick", "name": "Quick Defense", "icon": "speed", "kind": "mode", "level": 1, "hub": "Mode_quick",
+     "text": "A short three-inning game: the best way to warm up."},
+    {"id": "deck", "name": "Cards & Deck", "icon": "deck", "level": 1, "hub": "Tile_deck",
+     "text": "Your collection and the 8 cards you take into every game."},
+    {"id": "packs", "name": "Card Packs", "icon": "gift", "level": 1, "hub": "Tile_packs",
+     "text": "Open packs for new cards and copies to upgrade them."},
+    {"id": "upgrades", "name": "Upgrade Cards", "icon": "upgrade", "level": 2, "path": 3, "hub": "Tile_upgrades",
+     "text": "Spend copies and coins to make your cards stronger in every game."},
+    {"id": "team", "name": "Team", "icon": "roster", "level": 2, "path": 3, "hub": "Tile_team",
+     "text": "Pick your starting six and a captain, choose traits and gear."},
+    {"id": "standard", "name": "Standard Siege", "icon": "trophy", "kind": "mode", "level": 3, "path": 5, "hub": "Mode_standard",
+     "text": "The full nine-inning siege with three bosses and the biggest rewards."},
+    {"id": "missions", "name": "Missions", "icon": "target", "level": 3, "path": 5, "hub": "MissionsWidget",
+     "text": "Three new missions every day and one every week, each with a reward."},
+    {"id": "daily", "name": "Daily Challenge", "icon": "calendar", "kind": "mode", "level": 3, "path": 5, "hub": "DailyPanel",
+     "text": "A new game every day with the same rules for every manager, and a bonus pack."},
+    {"id": "shop", "name": "Shop", "icon": "coin", "level": 4, "path": 7, "hub": "ShopTile",
+     "text": "A free gift every day, card deals and free agents to sign."},
+    {"id": "season", "name": "Season Pass", "icon": "progression", "level": 4, "path": 7, "hub": "SeasonBar",
+     "text": "Every game earns season XP: 30 tiers of rewards, Champion Packs at 15 and 30."},
+    {"id": "boss_rush", "name": "Boss Rush", "icon": "boss", "kind": "mode", "level": 5, "path": 9, "hub": "Mode_boss_rush",
+     "text": "Three innings, three bosses, a boon draft after each."},
+    {"id": "endless", "name": "The Endless Ninth", "icon": "wave", "kind": "mode", "level": 5, "path": 9, "hub": "Mode_endless",
+     "text": "Survive as long as you can: records, milestones and a new twist every inning."},
+    {"id": "scouting", "name": "Scouting Book", "icon": "search", "level": 5, "path": 9, "hub": "ScoutingBookTile",
+     "text": "Every runner and boss you meet, and the cards that stop them."},
+    {"id": "ranked", "name": "Promotion Challenge", "icon": "crown", "kind": "mode", "level": 5, "path": 9, "hub": "PlayButton",
+     "text": "Earn rank points and win the challenge to move up a division."}
+  ],
+  "rookie_week": {
+    "days": [
+      {"coins": 300, "packs": ["rookie"]},
+      {"packs": ["rookie", "rookie"]},
+      {"coins": 300, "packs": ["pro"]},
+      {"stars": 25, "packs": ["rookie"]},
+      {"packs": ["pro", "pro"]},
+      {"coins": 600, "packs": ["pro"]},
+      {"packs": ["champion"], "choice": "legendary"}
+    ]
+  },
+  "early_games": {"packs": ["rookie", "rookie", "pro"], "source": "Rookie Camp bonus"},
+  "consolation": {"games": 5, "reward": {"coins": 150, "packs": ["rookie"]}, "coach_losses": 2},
+  "welcome_back": {"days": 3, "reward": {"coins": 500, "packs": ["pro"]}, "long_days": 7, "reward_long": {"coins": 800, "packs": ["pro", "pro"]},
+    "news": "Rookie Camp: the Rookie Path, Rookie Week and card picks for new managers."},
+  "badge_budget": 2,
+  "badge_priority": ["path_claim", "packs", "week_claim", "login_claim", "choice", "deck_new", "upgrade_ready", "missions_claim",
+    "season_claim", "daily_new", "shop_gift", "trait", "scouting_new"]
+}
