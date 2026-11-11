@@ -24,9 +24,14 @@ var guide_card := ""
 const FIRST_GAME_SEED := 1301
 const FIRST_GAME_INNINGS := 2
 const FIRST_GAME_TUNING := {"enemy_hp": 0.85, "budget": 0.85, "boss_hp": 0.3}
-## Funnel steps in the order a new player normally reaches them (Profile.data.onboarding_funnel).
+## Detailed funnel steps (Profile.data.onboarding_funnel.ftue), in the order a new player normally
+## reaches them. The shared keys of Profile.data.onboarding_funnel (Onboarding.funnel_default:
+## first_launch, first_game, first_win, first_pack, game_2, day2_return) are datetime strings: this
+## flow writes first_launch and first_pack there, Onboarding writes the rest.
 const FUNNEL_STEPS := ["first_launch", "intro_done", "first_game_start", "first_throw", "first_card",
 	"first_win", "first_pack_opened", "deck_edited", "game2_start", "day2_return"]
+## Detailed steps mirrored into the shared funnel keys.
+const FUNNEL_SHARED := {"first_launch": "first_launch", "first_pack_opened": "first_pack"}
 
 
 func _ready() -> void:
@@ -149,14 +154,18 @@ func finish_ftue_rewards(go := true) -> void:
 		Router.goto("main_menu")
 
 
-## The first-session funnel (Profile.data.onboarding_funnel): step -> unix time of the first time it
-## was reached, plus "day" (the local calendar day index since the first launch, at the last launch)
-## and "days" (each day index the game was opened on). Created here if the profile has no default yet.
+## The detailed first-session funnel (Profile.data.onboarding_funnel.ftue): step -> unix time of the
+## first time it was reached, plus "day" (the local calendar day index since the first launch, at the
+## last launch) and "days" (each day index the game was opened on). Created here when missing.
 func funnel() -> Dictionary:
-	var f: Variant = Profile.data.get("onboarding_funnel", null)
+	var root: Variant = Profile.data.get("onboarding_funnel", null)
+	if typeof(root) != TYPE_DICTIONARY:
+		root = Onboarding.funnel_default()
+		Profile.data["onboarding_funnel"] = root
+	var f: Variant = (root as Dictionary).get("ftue", null)
 	if typeof(f) != TYPE_DICTIONARY:
 		f = {}
-		Profile.data["onboarding_funnel"] = f
+		(root as Dictionary)["ftue"] = f
 	return f
 
 
@@ -169,6 +178,8 @@ func funnel_mark(step: String) -> bool:
 	if f.has(step):
 		return false
 	f[step] = _now()
+	if FUNNEL_SHARED.has(step):
+		Onboarding.funnel_mark(str(FUNNEL_SHARED[step]))   # keeps its first value
 	print("[FTUE] %s %.1f" % [step, funnel_seconds(step)])
 	Profile.save_soon()
 	return true
@@ -197,7 +208,7 @@ func funnel_on_launch() -> void:
 		days.append(day)
 	f["days"] = days
 	if day >= 1:
-		funnel_mark("day2_return")
+		funnel_mark("day2_return")   # the detailed one (the hub writes the shared day2_return)
 	Profile.save_soon()
 
 

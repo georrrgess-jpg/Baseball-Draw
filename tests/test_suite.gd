@@ -64,6 +64,12 @@ func _run() -> void:
 	await test_u9_e2_screens()
 	test_update9_economy()
 	test_update11_cards()
+	test_u13_onboarding()
+	test_u13_rookie_path()
+	test_u13_choices_and_pacing()
+	test_u13_rookie_week()
+	test_u13_welcome_back()
+	test_u13_migration()
 	await test_update13_first_session()   # last: it changes the profile's first-session flags
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -765,7 +771,7 @@ func test_missions() -> void:
 	# Starter chain advances step by step.
 	var st0 := str(s.starter.id)
 	Profile.bump_stat("cards_played", 3)
-	ok(Missions.can_claim(s.starter), "starter step 1 (%s) completes after 3 cards" % st0)
+	ok(Missions.can_claim(s.starter), "Rookie Path step 1 (%s) is done after the won game" % st0)
 	Missions.claim("starter")
 	ok(int(s.starter_step) == 1 and str(s.starter.id) == str(Missions.starter_steps()[1].id) and int(s.starter.progress) == 0, "claiming moves the chain to step 2")
 	# Day rollover: unclaimed finished missions are paid out, new missions, reroll back.
@@ -4441,6 +4447,381 @@ func test_update11_cards() -> void:
 	Profile.reset_profile()
 
 
+# ---------------------------------------------------------------- Update 13: Rookie Camp (stream B)
+
+## Value of a reward bundle in coins, for "the rewards escalate" checks (a Rookie Pack 200, Pro 500,
+## Champion 2,000, a star 20 coins).
+func _bundle_value(r: Dictionary) -> int:
+	var v := int(r.get("coins", 0)) + 20 * int(r.get("stars", 0))
+	for p in Rewards.bundle_packs(r):
+		v += {"rookie": 200, "pro": 500, "champion": 2000}.get(p, 200)
+	if str(r.get("choice", "")) != "":
+		v += 3000
+	return v
+
+
+func _u13_game(mode: String, won: bool, diff := "standard") -> Dictionary:
+	var cfg := Session.new_run_config(mode)
+	cfg.difficulty = diff
+	cfg.arena = "steel_yard"
+	var r := RunState.create(cfg)
+	r.inning = 3 if won else 2
+	r.wave = 3 if won else 1
+	r.coins_earned = 500
+	r.outs_total = 100
+	return Rewards.apply(r, won)
+
+
+func _u13_write_save(d: Dictionary) -> void:
+	var f := FileAccess.open(Profile.SAVE_PATH, FileAccess.WRITE)
+	f.store_string(JSON.stringify(d))
+	f.close()
+	Profile.load_profile()
+
+
+func test_u13_onboarding() -> void:
+	section("update 13: onboarding (feature unlocks)")
+	DailyChallenge.date_override = "2026-11-02"
+	Profile.reset_profile()
+	# Data: every feature is drawable, the order follows the plan's groups.
+	var ids := Onboarding.feature_ids()
+	ok(ids.size() == 14, "fourteen gated features (%d)" % ids.size())
+	var hubs := {}
+	for f in Onboarding.features():
+		ok(str(f.get("name", "")) != "" and str(f.get("text", "")) != "" and DB.icon(str(f.get("icon", ""))) != null, "feature %s has a name, a text and an icon" % f.id)
+		hubs[str(f.hub)] = true
+	ok(hubs.size() == ids.size(), "every feature points the spotlight at its own hub element")
+	var groups := [["quick", "deck", "packs"], ["upgrades", "team"], ["standard", "missions", "daily"], ["shop", "season"], ["boss_rush", "endless", "scouting", "ranked"]]
+	var order_ok := true
+	for gi in groups.size():
+		for id in groups[gi]:
+			order_ok = order_ok and Onboarding.unlock_level(id) == gi + 1
+	ok(order_ok, "unlock order: Quick, Deck, Packs; then Upgrades, Team; Siege, Missions, Daily; Shop, Season; Boss Rush, Endless, Scouting, Promotion")
+	# A new manager: only the first group is open; the rest are teasers that say when they open.
+	ok(Onboarding.is_new_player() and not Onboarding.established(), "a new profile is a new manager")
+	ok(Onboarding.is_unlocked("quick") and Onboarding.is_unlocked("deck") and Onboarding.is_unlocked("packs"), "Quick Defense, Cards & Deck and Card Packs are open at the start")
+	ok(not Onboarding.is_unlocked("upgrades") and not Onboarding.is_unlocked("shop") and not Onboarding.is_unlocked("boss_rush"), "the later features start locked")
+	ok(Onboarding.is_unlocked("progression") and Onboarding.is_unlocked("practice"), "ungated destinations are always open")
+	ok(Onboarding.lock_text("team") == "Unlocks at level 2 or Rookie Path step 3" and Onboarding.lock_short("team") == "LV 2", "a teaser says when it opens (%s)" % Onboarding.lock_text("team"))
+	ok(Onboarding.mode_lock("quick") == "" and Onboarding.mode_lock("standard").begins_with("Unlocks at level 3"), "modes: Quick is open, Standard Siege says when it opens")
+	ok(Onboarding.mode_lock("ranked").begins_with("Unlocks at level 5"), "the Promotion Challenge waits for level 5 first")
+	ok(Onboarding.pending_unlocks().is_empty(), "nothing to celebrate at the start")
+	# Level 2 opens Upgrade Cards and Team: they wait for their NEW FEATURE UNLOCKED card.
+	Profile.add_xp(Profile.xp_to_next(1))
+	var pend: Array = Onboarding.pending_unlocks().map(func(f: Dictionary) -> String: return str(f.id))
+	ok(int(Profile.data.level) == 2 and pend == ["upgrades", "team"], "level 2 opens Upgrade Cards and Team, waiting to be announced %s" % [pend])
+	for id in pend:
+		Onboarding.mark_announced(id)
+	ok(Onboarding.pending_unlocks().is_empty() and Onboarding.is_unlocked("team"), "announced features are celebrated once")
+	# A Rookie Path step opens its group before the level does.
+	Missions.state().starter_step = 5
+	ok(int(Profile.data.level) == 2 and Onboarding.is_unlocked("standard") and Onboarding.is_unlocked("daily") and not Onboarding.is_unlocked("shop"),
+		"claiming Rookie Path step 5 opens Standard Siege, Missions and the Daily before level 3")
+	ok(Onboarding.next_locked(2).map(func(f: Dictionary) -> String: return str(f.id)) == ["shop", "season"], "COMING UP lists the next locked features")
+	# Established managers: 5 games, level 5 or the flag open everything.
+	Profile.reset_profile()
+	Profile.data.stats["runs_played"] = 5.0
+	ok(Onboarding.established() and Onboarding.is_unlocked("ranked") and Onboarding.mode_lock("boss_rush") == "", "five games open everything")
+	Profile.reset_profile()
+	Profile.data.flags["unlock_all"] = true
+	ok(Onboarding.established() and Onboarding.is_unlocked("scouting"), "flags.unlock_all opens everything")
+	Profile.reset_profile()
+	Profile.data.level = 5
+	ok(Onboarding.established() and Onboarding.is_unlocked("endless"), "account level 5 opens everything")
+	Profile.reset_profile()
+	Onboarding.make_established()
+	ok(not Onboarding.is_new_player() and not Onboarding.path_active() and not Onboarding.week_active() and Onboarding.pending_unlocks().is_empty()
+		and Onboarding.pending_choice().is_empty(), "make_established: everything open, silently, no Rookie Path or Rookie Week")
+	ok(Onboarding.badge_budget() > 100, "an established manager has no badge budget")
+	Profile.reset_profile()
+	ok(Onboarding.badge_budget() == 2, "a new manager sees at most two attention badges")
+	ok(Onboarding.badge_rank("path_claim") < Onboarding.badge_rank("packs") and Onboarding.badge_rank("packs") < Onboarding.badge_rank("shop_gift")
+		and Onboarding.badge_rank("nonsense") > Onboarding.badge_rank("scouting_new"), "badge priority: Rookie Path, then packs ... unknown last")
+	ok(Profile.data.has("onboarding_funnel") and Profile.data.onboarding_funnel.has("first_launch") and Profile.data.onboarding_funnel.has("day2_return"),
+		"the profile has the first-session funnel block")
+	DailyChallenge.date_override = ""
+
+
+func test_u13_rookie_path() -> void:
+	section("update 13: Rookie Path")
+	DailyChallenge.date_override = "2026-11-02"
+	Profile.reset_profile()
+	var steps := Onboarding.path_steps()
+	ok(steps.size() == 10, "the Rookie Path has ten steps (%d)" % steps.size())
+	var seen_ids := {}
+	var esc := true
+	var prev := 0
+	var teach_ok := true
+	var feature_of := {"Quick Defense": "quick", "Card Packs": "packs", "Cards & Deck": "deck", "Upgrade Cards": "upgrades", "Team": "team",
+		"Standard Siege": "standard", "Daily Challenge": "daily", "Shop": "shop", "Season Pass": "season", "Boss Rush": "boss_rush"}
+	for i in steps.size():
+		var st: Dictionary = steps[i]
+		seen_ids[str(st.id)] = true
+		ok(str(st.get("text", "")) != "" and str(st.get("hint", "")) != "" and not Missions.reward(Missions._starter_instance(i)).is_empty(), "step %d (%s) has a text, a tip and a reward" % [i + 1, st.id])
+		var v := _bundle_value(st.get("reward", {}))
+		esc = esc and v >= prev
+		prev = v
+		# The feature a step teaches is open once the steps before it are claimed.
+		var fid := str(feature_of.get(str(st.get("teach", "")), ""))
+		var f := Onboarding.feature(fid)
+		teach_ok = teach_ok and fid != "" and (int(f.get("level", 1)) <= 1 or int(f.get("path", 99)) <= i)
+	ok(seen_ids.size() == 10, "step ids are unique")
+	ok(esc, "the rewards escalate step by step")
+	ok(_bundle_value(steps[9].reward) >= 2 * _bundle_value(steps[8].reward) and str(steps[9].reward.get("choice", "")) == "free_agent"
+		and "champion" in Rewards.bundle_packs(steps[9].reward), "the finale is big: a Champion Pack and a free agent of your choice")
+	ok(teach_ok, "each step teaches one feature, open by the time the step comes")
+	ok("a free agent of your choice" in Missions.reward_text(steps[9].reward) and "2 Rookie Packs" in Missions.reward_text(steps[2].reward), "reward texts name packs and the pick")
+	# Step 1: win a game. The game pays, the step completes, CLAIM pays the step's reward and moves on.
+	ok(Onboarding.path_active() and str(Onboarding.path_current().id) == "rp_win" and not Onboarding.path_can_claim(), "a new manager starts on step 1: win a game")
+	_u13_game("quick", true, "rookie")
+	ok(Onboarding.path_can_claim(), "a win finishes step 1")
+	var coins := int(Profile.data.coins)
+	var rookies := Profile.pack_count("rookie")
+	var r := Onboarding.claim_path()
+	ok(int(r.get("coins", 0)) == 150 and int(Profile.data.coins) == coins + 150 and Profile.pack_count("rookie") == rookies + 1, "claiming step 1 pays 150 coins and a Rookie Pack")
+	ok(Onboarding.path_claimed() == 1 and str(Onboarding.path_current().id) == "rp_pack" and Onboarding.claim_path().is_empty(), "the path moves on to step 2, which is not done yet")
+	Profile.open_pack(Profile.data.packs.size() - 1)
+	ok(Onboarding.path_can_claim(), "opening a pack finishes step 2")
+	Onboarding.claim_path()
+	# Step 3: a deck with a new card.
+	Profile.set_deck(Profile.STARTER_DECK.duplicate())
+	ok(not Onboarding.path_can_claim(), "saving the starter deck again does not count")
+	var deck: Array = Profile.STARTER_DECK.duplicate()
+	Profile.grant_card("splitter")
+	deck[0] = "splitter"
+	ok(Profile.set_deck(deck) and Onboarding.path_can_claim() and Profile.stat("decks_customised") == 1.0, "putting a new card in the deck finishes step 3")
+	ok(not Onboarding.is_unlocked("upgrades") or int(Profile.data.level) >= 2, "Upgrade Cards opens with the level or step 3")
+	Onboarding.claim_path()
+	ok(Onboarding.is_unlocked("upgrades") and Onboarding.is_unlocked("team"), "claiming step 3 opens Upgrade Cards and Team")
+	# Step 5's event: a team or captain change.
+	var team: Array = Profile.data.team.duplicate()
+	Profile.set_team(team, str(Profile.data.captain))
+	ok(Profile.stat("team_changes") == 0.0, "saving the same team is not a change")
+	Profile.set_team(team, str(team[1]))
+	ok(Profile.stat("team_changes") == 1.0, "a new captain counts as a team change")
+	# The finale: a Champion Pack, 1,000 coins and the free agent pick.
+	Missions.state().starter_step = 9
+	Missions.state().starter = {}
+	Missions.refresh()
+	ok(str(Onboarding.path_current().id) == "rp_boss_rush", "step 10 is the finale")
+	Profile.bump_stat("wins_boss_rush")
+	var champs := Profile.pack_count("champion")
+	coins = int(Profile.data.coins)
+	Onboarding.claim_path()
+	ok(Profile.pack_count("champion") == champs + 1 and int(Profile.data.coins) == coins + 1000, "the finale pays a Champion Pack and 1,000 coins")
+	ok(not Onboarding.path_active() and Profile.stat("rookie_path_done") == 1.0, "the Rookie Path is finished")
+	var c := Onboarding.pending_choice()
+	ok(str(c.get("kind", "")) == "free_agent" and (c.options as Array).size() == 3 and "moose" in c.options and "sid" in c.options, "the finale offers the three free agents %s" % [c.get("options", [])])
+	ok(Onboarding.choose("ace").is_empty(), "a defender that was not offered cannot be picked")
+	var got := Onboarding.choose("rosa")
+	ok(str(got.get("name", "")) == "Rosa" and Profile.is_defender_unlocked("rosa") and Onboarding.pending_choice().is_empty(), "picking Rosa signs her for free")
+	ok(Profile.data.packs.any(func(pk: Dictionary) -> bool: return pk.type == "signature" and str(pk.get("card", "")) == "signal_caller") or Profile.is_card_owned("signal_caller"),
+		"the signed free agent brings her signature pack (unless the card is already owned)")
+	# Every free agent already signed: coins instead of an empty pick.
+	for id in ["moose", "sid"]:
+		Profile.unlock_defender(id)
+	coins = int(Profile.data.coins)
+	Onboarding.queue_choice("free_agent", "test")
+	ok(Onboarding.pending_choice().is_empty() and int(Profile.data.coins) == coins + 5000, "with every free agent signed the pick becomes 5,000 coins")
+	DailyChallenge.date_override = ""
+
+
+func test_u13_choices_and_pacing() -> void:
+	section("update 13: picks and early pacing")
+	DailyChallenge.date_override = "2026-11-02"
+	Profile.reset_profile()
+	# Faster account levels 1-5.
+	ok(Profile.xp_to_next(1) == 150 and Profile.xp_to_next(2) == 250 and Profile.xp_to_next(3) == 350 and Profile.xp_to_next(4) == 450, "levels 1-5 come faster (150 / 250 / 350 / 450 XP)")
+	ok(Profile.xp_to_next(5) == 750 and Profile.xp_to_next(10) == 1375, "from level 5 the curve is unchanged")
+	var to5 := 0
+	for l in range(1, 5):
+		to5 += Profile.xp_to_next(l)
+	ok(to5 == 1200, "level 5 needs 1,200 XP (was 1,750)")
+	# The first three games each pay a bonus pack, win or lose.
+	var res1 := _u13_game("quick", true, "rookie")
+	var res2 := _u13_game("quick", false, "standard")
+	var res3 := _u13_game("quick", true)
+	var res4 := _u13_game("quick", true)
+	var bonus := func(res: Dictionary) -> Array:
+		return (res.packs as Array).filter(func(pk: Dictionary) -> bool: return str(pk.source) == "Rookie Camp bonus").map(func(pk: Dictionary) -> String: return str(pk.type))
+	ok(bonus.call(res1) == ["rookie"] and bonus.call(res2) == ["rookie"] and bonus.call(res3) == ["pro"] and bonus.call(res4).is_empty(),
+		"the first three games pay a bonus pack (Rookie, Rookie, Pro), the fourth does not")
+	ok(str(res1.rookie.get("bonus_pack", "")) == "rookie" and (res2.packs as Array).any(func(pk: Dictionary) -> bool: return str(pk.source).begins_with("Quick Defense")),
+		"a lost game still pays its own pack and the bonus")
+	# The early loss: a consolation and an easier difficulty.
+	ok(int(res2.rookie.get("consolation", {}).get("coins", 0)) == 150 and str(res2.rookie.coach.easier) == "rookie" and not bool(res2.rookie.coach.auto_build),
+		"an early loss pays 150 coins and a Rookie Pack and suggests Rookie")
+	ok(int(res2.coins_total) >= int(res2.coins) + 150, "the consolation coins are in the coin total")
+	ok(Onboarding.coach_tip().is_empty(), "a win clears the coach's tip")
+	# The Epic pick after the third game.
+	var c := Onboarding.pending_choice()
+	ok(bool(res3.rookie.get("epic_pick", false)) and str(c.get("kind", "")) == "epic", "after the third game: pick 1 of 3 Epic cards")
+	var opts: Array = c.get("options", [])
+	var distinct := {}
+	var all_epic := true
+	for id in opts:
+		distinct[id] = true
+		all_epic = all_epic and str(DB.card(str(id)).rarity) == "epic" and not Profile.is_card_owned(str(id))
+		var lk := str(DB.card(str(id)).get("linked", ""))
+		all_epic = all_epic and (lk == "" or lk in Profile.data.team)
+		ok(Onboarding.card_reason(str(id)) != "", "the pick says why %s suits the deck (%s)" % [id, Onboarding.card_reason(str(id))])
+	ok(opts.size() == 3 and distinct.size() == 3 and all_epic, "three different unowned Epics, signatures only for the team %s" % [opts])
+	ok(str(Onboarding.card_options("epic")) == str(opts), "the options are deterministic")
+	var roles := {}
+	for id in opts:
+		roles[str(DeckAI.analyze(str(id)).role)] = true
+	ok(roles.size() >= 2, "the options cover different roles (%s)" % [roles.keys()])
+	var pick := str(opts[1])
+	Profile.data.pity["epic"] = 7
+	ok(str(Onboarding.choose(pick).get("id", "")) == pick and Profile.is_card_owned(pick) and Onboarding.pending_choice().is_empty(), "picking an Epic adds it to the collection")
+	ok(int(Profile.data.pity.epic) == 0, "the free Epic counts as the Epic guarantee: its pity counter starts again")
+	_u13_game("quick", true)
+	ok(Onboarding.pending_choice().is_empty(), "the Epic pick is offered once")
+	ok(Onboarding.card_options("legendary").size() == 3, "three Legendary options for Rookie Week day 7")
+	# Two early losses in a row: Auto Build too; a loss after game 5 pays nothing extra.
+	Profile.reset_profile()
+	Profile.data.difficulty = "standard"
+	var l1 := _u13_game("standard", false)
+	var l2 := _u13_game("standard", false)
+	ok(not bool(l1.rookie.coach.auto_build) and bool(l2.rookie.coach.auto_build) and int(l2.rookie.coach.losses) == 2, "two early losses in a row suggest Auto Build")
+	ok(Onboarding.take_easier() == "rookie" and str(Profile.data.difficulty) == "rookie" and Onboarding.coach_tip().is_empty(), "taking the tip switches to Rookie")
+	var deck := Onboarding.auto_build_deck()
+	ok(Profile.data.deck.size() == Profile.DECK_SIZE and (deck.is_empty() or deck == Profile.data.deck), "Auto Build from the tip keeps a valid deck")
+	var l3 := _u13_game("quick", false, "rookie")
+	ok(str(l3.rookie.coach.get("easier", "x")) == "", "on Rookie there is no easier difficulty to offer")
+	_u13_game("quick", true)
+	_u13_game("quick", true)
+	var l6 := _u13_game("quick", false)
+	ok(not l6.rookie.has("consolation") and not l6.rookie.has("coach"), "a loss after the first five games pays no consolation")
+	# Established managers get none of it.
+	Profile.reset_profile()
+	Onboarding.make_established()
+	var e1 := _u13_game("quick", false)
+	ok((e1.rookie as Dictionary).is_empty() and not (e1.packs as Array).any(func(pk: Dictionary) -> bool: return str(pk.source) == "Rookie Camp bonus"), "an established manager gets no rookie bonus")
+	ok(str(Profile.data.onboarding_funnel.first_game) != "" and str(Profile.data.onboarding_funnel.first_game) == str(Profile.data.onboarding_funnel.first_game), "the first game's funnel timestamp is written at the game end")
+	DailyChallenge.date_override = ""
+
+
+func test_u13_rookie_week() -> void:
+	section("update 13: Rookie Week")
+	DailyChallenge.date_override = "2026-11-02"
+	Profile.reset_profile()
+	var days := Onboarding.week_days()
+	ok(days.size() == 7 and Onboarding.week_active() and Onboarding.week_can_claim() and Onboarding.week_day() == 1, "a new manager starts Rookie Week on day 1")
+	var bigger := true
+	for i in 7:
+		bigger = bigger and _bundle_value(days[i]) > _bundle_value(DailyRewards.reward_for(i + 1))
+	ok(bigger, "every Rookie Week day pays more than the same login day")
+	ok("champion" in Rewards.bundle_packs(days[6]) and str(days[6].get("choice", "")) == "legendary", "day 7: a Champion Pack and a Legendary of your choice")
+	ok(Onboarding.week_calendar().size() == 7 and bool(Onboarding.week_calendar()[0].today), "the calendar shows seven days, today first")
+	var coins := int(Profile.data.coins)
+	var r := Onboarding.week_claim()
+	ok(int(r.get("day", 0)) == 1 and int(Profile.data.coins) == coins + 300 and Profile.pack_count("rookie") >= 1, "day 1 pays 300 coins and a Rookie Pack")
+	ok(not Onboarding.week_can_claim() and Onboarding.week_claim().is_empty() and Onboarding.week_status_text().begins_with("Next reward in"), "one claim a day, then a countdown")
+	ok(DailyRewards.can_claim(), "the normal login calendar is separate")
+	DailyChallenge.date_override = "2026-11-03"
+	ok(Onboarding.week_can_claim() and Onboarding.week_day() == 2, "the next day pays day 2")
+	Onboarding.week_claim()
+	DailyChallenge.date_override = "2026-11-07"   # three days missed
+	ok(Onboarding.week_can_claim() and Onboarding.week_day() == 3 and Onboarding.week_status_text().begins_with("Paused at day 3"), "missed days pause Rookie Week, never reset it")
+	for d in range(3, 7):
+		Onboarding.week_claim()
+		DailyChallenge.date_override = DailyChallenge.shift_date(DailyChallenge.date_override, 1)
+	ok(Onboarding.week_day() == 7 and Onboarding.week_active(), "day 7 is next")
+	var champs := Profile.pack_count("champion")
+	Onboarding.week_claim()
+	ok(Profile.pack_count("champion") == champs + 1 and str(Onboarding.pending_choice().get("kind", "")) == "legendary", "day 7 pays a Champion Pack and opens the Legendary pick")
+	var lc: Array = Onboarding.pending_choice().options
+	ok(lc.size() == 3 and lc.all(func(id: String) -> bool: return str(DB.card(id).rarity) == "legendary"), "three Legendary options")
+	Onboarding.choose(str(lc[0]))
+	ok(Profile.is_card_owned(str(lc[0])), "the picked Legendary is in the collection")
+	ok(not Onboarding.week_active() and not Onboarding.week_can_claim(), "Rookie Week leaves the hub after day 7")
+	# Save round trip.
+	Profile.save_now()
+	Profile.load_profile()
+	ok(Onboarding.week_claims() == 7 and not Onboarding.week_active(), "Rookie Week progress survives save and load")
+	DailyChallenge.date_override = ""
+
+
+func test_u13_welcome_back() -> void:
+	section("update 13: welcome back")
+	DailyChallenge.date_override = "2026-11-02"
+	Profile.reset_profile()
+	Onboarding.on_hub_open()
+	ok(str(Onboarding.state().last_seen) == "2026-11-02" and Onboarding.pending_welcome().is_empty(), "the hub remembers the day")
+	DailyChallenge.date_override = "2026-11-04"
+	Onboarding.on_hub_open()
+	ok(Onboarding.pending_welcome().is_empty() and str(Profile.data.onboarding_funnel.day2_return) != "", "two days away: no bonus; the day-2 return is noted")
+	DailyChallenge.date_override = "2026-11-08"
+	var coins := int(Profile.data.coins)
+	var pros := Profile.pack_count("pro")
+	Onboarding.on_hub_open()
+	var w := Onboarding.pending_welcome()
+	ok(int(w.get("days", 0)) == 4 and int(Profile.data.coins) == coins + 500 and Profile.pack_count("pro") == pros + 1, "four days away: 500 coins and a Pro Pack")
+	var recap := Onboarding.welcome_recap()
+	ok(recap.size() >= 3 and recap.size() <= 5 and str(recap[0][1]).begins_with("Rookie Camp"), "the recap card has a short what's-new list (%d lines)" % recap.size())
+	ok(recap.any(func(l: Array) -> bool: return str(l[1]).contains("Rookie Week")) and recap.any(func(l: Array) -> bool: return str(l[1]).contains("Daily Login")), "the recap names what waited (Rookie Week, login)")
+	Onboarding.on_hub_open()
+	ok(int(Profile.data.coins) == coins + 500, "the bonus is paid once")
+	Onboarding.dismiss_welcome()
+	ok(Onboarding.pending_welcome().is_empty(), "the card is dismissed")
+	DailyChallenge.date_override = "2026-11-20"
+	coins = int(Profile.data.coins)
+	Onboarding.on_hub_open()
+	ok(int(Profile.data.coins) == coins + 800 and int(Onboarding.pending_welcome().days) == 12, "a long absence pays the bigger bonus")
+	DailyChallenge.date_override = ""
+
+
+func test_u13_migration() -> void:
+	section("update 13: saves from before Rookie Camp")
+	DailyChallenge.date_override = "2026-11-02"
+	Profile.reset_profile()
+	var base: Dictionary = Profile.data.duplicate(true)
+	base.erase("onboarding")
+	base.erase("onboarding_funnel")
+	# A veteran: everything open, silently; the Rookie Path done; no Rookie Week or Epic pick.
+	var vet := base.duplicate(true)
+	vet.level = 12
+	vet.stats = {"runs_played": 40}
+	vet.missions = {"starter_step": 5, "starter": {}, "daily": [], "weekly": []}
+	_u13_write_save(vet)
+	ok(Profile.load_status == "ok" and Onboarding.established() and not Onboarding.is_new_player(), "a veteran's old save is established")
+	ok(Onboarding.pending_unlocks().is_empty() and not Onboarding.path_active() and not Onboarding.week_active() and Onboarding.pending_choice().is_empty(),
+		"a veteran gets everything open with no cards, no Rookie Path and no Rookie Week")
+	# Five games at level 3: established too.
+	var five := base.duplicate(true)
+	five.level = 3
+	five.stats = {"runs_played": 6}
+	_u13_write_save(five)
+	ok(Onboarding.established() and Onboarding.is_unlocked("boss_rush"), "six games played: established")
+	# A newer manager mid-way through the old starter chain (step 4 of 5: cards, win, pack done).
+	var mid := base.duplicate(true)
+	mid.level = 2
+	mid.stats = {"runs_played": 2}
+	mid.missions = {"starter_step": 3, "starter": {"id": "s_upgrade", "kind": "starter", "event": "cards_upgraded", "goal": 1, "progress": 0, "claimed": false, "step": 3},
+		"daily": [], "weekly": []}
+	_u13_write_save(mid)
+	ok(not Onboarding.established() and Onboarding.is_new_player() and Onboarding.week_active(), "a newer manager keeps the guided hub and gets Rookie Week")
+	ok(Onboarding.path_claimed() == 2 and str(Onboarding.path_current().get("id", "")) == "rp_deck", "the old chain maps onto the Rookie Path (win and pack done: step 3 next)")
+	ok(Onboarding.pending_unlocks().is_empty() and Onboarding.is_unlocked("team"), "features the manager could already use are not celebrated again")
+	ok(not Onboarding.is_unlocked("shop"), "features beyond the level stay teasers")
+	# A finished but unclaimed old step counts as done.
+	ok(Onboarding.migrate_starter_step(1, {"id": "s_win", "progress": 1, "goal": 1, "claimed": false}) == 1 and Onboarding.migrate_starter_step(0, {}) == 0
+		and Onboarding.migrate_starter_step(5, {}) == 2, "old steps map: done win -> 1, nothing -> 0, the whole old chain -> 2")
+	# An Update 13 save keeps its state; a broken block is repaired.
+	Onboarding.state().announced.append("shop")
+	Onboarding.state().week.claims = 3
+	Profile.save_now()
+	Profile.load_profile()
+	ok("shop" in Onboarding.state().announced and Onboarding.week_claims() == 3, "Rookie Camp state survives save and load")
+	Profile.data.onboarding = {"announced": "x", "week": 5, "choices": [{"kind": "bogus"}, "junk"], "losses_row": -3}
+	Profile._sanitize()
+	ok(typeof(Onboarding.state().announced) == TYPE_ARRAY and Onboarding.week_claims() == 0 and Onboarding.state().choices.is_empty() and int(Onboarding.state().losses_row) == 0,
+		"a broken Rookie Camp block is repaired")
+	Profile.reset_profile()
+	DailyChallenge.date_override = ""
+
+
 # ---------------------------------------------------------------- Update 13 (stream A): the first session
 
 func test_update13_first_session() -> void:
@@ -4495,10 +4876,11 @@ func test_update13_first_session() -> void:
 
 	# The funnel.
 	Profile.data.erase("onboarding_funnel")
-	ok(not Session.funnel_mark("intro_done") and not Profile.data.onboarding_funnel.has("intro_done"), "no funnel step before the first launch")
+	ok(not Session.funnel_mark("intro_done") and not Session.funnel().has("intro_done"), "no funnel step before the first launch")
 	Session.funnel_on_launch()
 	var f := Session.funnel()
 	ok(f.has("first_launch") and int(f.day) == 0 and f.days == [0], "the first launch starts the funnel on day 0")
+	ok(str(Profile.data.onboarding_funnel.get("first_launch", "")) != "" and Profile.data.onboarding_funnel.has("first_game"), "the shared first_launch key is written next to Onboarding's keys")
 	ok(Session.funnel_mark("intro_done") and not Session.funnel_mark("intro_done"), "a funnel step is recorded once")
 	ok(Session.funnel_seconds("intro_done") >= 0.0 and Session.funnel_seconds("first_win") < 0.0, "funnel_seconds")
 	ok(Session.day_index(float(f.first_launch) + 3600.0) <= 1 and Session.day_index(float(f.first_launch) + 86400.0 * 3.0) == 3, "day index counts calendar days")

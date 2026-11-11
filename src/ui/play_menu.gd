@@ -1,5 +1,6 @@
 extends MenuScreen
-## Play screen: big mode cards (what the mode is, your best record, what a win pays, lock state),
+## Play screen: big mode cards (what the mode is, your best record, what a win pays, lock state; Update 13:
+## a mode a new manager has not unlocked yet is a teaser that says when it opens, Onboarding.mode_lock),
 ## the selected mode's details, a readable difficulty selector, a compact stadium carousel (locked
 ## stadiums listed with their unlock text), and the team, deck, win streak bonus and START.
 
@@ -127,19 +128,19 @@ func _ready() -> void:
 	var cur_diff: String = Profile.data.difficulty
 	_select_difficulty(cur_diff, true)
 	var last := str(Profile.data.flags.get("last_mode", "standard"))
-	if last in ["practice", "ranked", "daily", "daily_long"] or not _mode_buttons.has(last):
-		last = "standard"
+	if last in ["practice", "ranked", "daily", "daily_long"] or not _mode_buttons.has(last) or Onboarding.mode_lock(last) != "":
+		last = "standard" if Onboarding.mode_lock("standard") == "" else "quick"
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--play-mode="):   # screenshot helper: --play-mode=daily, =boss_rush...
 			var pm := a.split("=")[1]
 			Session.menu_tab = "daily" if pm == "daily" else "mode:" + pm
 	if Session.menu_tab == "daily":   # opened from the main menu's Daily Challenge tile
-		last = "daily"
+		last = "daily" if Onboarding.mode_lock("daily") == "" else last
 	elif Session.menu_tab == "ranked":   # "Promotion Challenge" from the main menu or Results
-		last = "ranked" if Profile.promotion_available() else last
+		last = "ranked" if Onboarding.mode_lock("ranked") == "" else last
 	elif Session.menu_tab.begins_with("mode:"):   # PLAY on the hub, with the mode picked there
 		var want := Session.menu_tab.substr(5)
-		if _mode_buttons.has(want) and MenuScreen.mode_locked_reason(want) == "":
+		if _mode_buttons.has(want) and Onboarding.mode_lock(want) == "":
 			last = want
 	elif Profile.has_saved_run():
 		last = "quick"
@@ -187,7 +188,7 @@ func _accent(id: String) -> Color:
 func _mode_card(id: String, accent: Color, icon: String) -> Button:
 	var m := DB.mode(id)
 	var slim := id == "practice"
-	var lock := MenuScreen.mode_locked_reason(id)
+	var lock := Onboarding.mode_lock(id)
 	var b := Button.new()
 	b.name = "ModeCard_" + id
 	b.toggle_mode = true
@@ -239,7 +240,7 @@ func _mode_card(id: String, accent: Color, icon: String) -> Button:
 	tv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(tv)
-	var title := UITheme.label(str(m.name).to_upper(), 30, UITheme.OFFWHITE if lock == "" else UITheme.MUTED, UITheme.font_display())
+	var title := UITheme.label(str(m.name).to_upper(), 30, UITheme.OFFWHITE if lock == "" else Color(0.72, 0.77, 0.86), UITheme.font_display())
 	title.clip_text = true
 	tv.add_child(title)
 	var pitch := UITheme.label(_pitch(id, lock), UITheme.FS_SMALL, _pitch_color(id, lock), UITheme.font_body_bold())
@@ -264,7 +265,9 @@ func _mode_card(id: String, accent: Color, icon: String) -> Button:
 			bd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			rec_row.add_child(bd)
 		vb.add_child(rec_row)
-		if lock != "":
+		if lock != "" and not Onboarding.is_unlocked(id):   # a teaser: what the mode is and when it opens
+			vb.add_child(_card_row("lock", lock, Color(1.0, 0.78, 0.6)))
+		elif lock != "":
 			vb.add_child(_card_row("lock", "Locked: " + lock, Color(1.0, 0.7, 0.6)))
 		else:
 			vb.add_child(_card_row("gift", _pays_text(id), Color(0.85, 0.95, 0.75)))
@@ -274,6 +277,8 @@ func _mode_card(id: String, accent: Color, icon: String) -> Button:
 		b.tooltip_text = "Locked: %s" % lock
 		if id == "ranked":
 			b.tooltip_text += "\nEarn rank points by winning games (higher difficulties earn more)."
+		if not Onboarding.is_unlocked(id):
+			b.tooltip_text = "%s: %s.\n%s" % [m.name, lock, str(m.get("text", ""))]
 	else:
 		b.tooltip_text = str(m.get("text", ""))
 	b.mouse_entered.connect(func() -> void:
@@ -325,6 +330,8 @@ func _pitch_color(id: String, lock: String) -> Color:
 
 func _mode_badge(id: String, lock: String) -> Control:
 	if lock != "":
+		if not Onboarding.is_unlocked(id):   # Rookie Camp: the level it opens at
+			return UITheme.badge("LEVEL %d" % Onboarding.unlock_level(id), Color(0.25, 0.27, 0.32, 0.95))
 		return UITheme.badge("LOCKED", Color(0.25, 0.27, 0.32, 0.95))
 	match id:
 		"daily":
@@ -599,6 +606,8 @@ func _build_difficulty() -> Control:
 	scout.tooltip_text = "Know who you will face: runners, bosses and elites, what they do and which cards stop them"
 	scout.pressed.connect(func() -> void: Router.open("scouting_book"))
 	dhead.add_child(scout)
+	if not Onboarding.is_unlocked("scouting"):   # Rookie Camp: opens with the Scouting Book
+		scout.visible = false
 	var dh := HBoxContainer.new()
 	dh.add_theme_constant_override("separation", 8)
 	dv.add_child(dh)
@@ -938,6 +947,9 @@ func _fill_summary() -> void:
 	edit_team.custom_minimum_size = Vector2(96, 40)
 	edit_team.pressed.connect(func() -> void: Router.open("roster"))
 	team_head.add_child(edit_team)
+	if not Onboarding.is_unlocked("team"):   # Rookie Camp: the Team screen opens at level 2
+		edit_team.disabled = true
+		edit_team.tooltip_text = "Team: %s" % Onboarding.lock_text("team")
 	_summary.add_child(team_head)
 	var grid := GridContainer.new()
 	grid.columns = 3

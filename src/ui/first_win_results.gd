@@ -244,7 +244,9 @@ func _packs_moment() -> Control:
 	var big := UITheme.title("%d NEW PACK%s!" % [n, "" if n == 1 else "S"] if n > 0 else "NO PACKS", 56, UITheme.OFFWHITE)
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(big)
-	vb.add_child(_caption("FULL OF NEW CARDS"))
+	var rk: Variant = result.get("rookie", {})
+	var bonus := typeof(rk) == TYPE_DICTIONARY and str((rk as Dictionary).get("bonus_pack", "")) != ""
+	vb.add_child(_caption("INCLUDES A ROOKIE CAMP BONUS" if bonus else "FULL OF NEW CARDS"))
 	return vb.get_parent()
 
 

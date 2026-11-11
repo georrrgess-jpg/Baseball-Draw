@@ -15,6 +15,9 @@ extends RefCounted
 ##   Pack at 10 and 20 (they replace the old Rookie Pack per 5 innings).
 ## * Boss Rush: a win pays a Pro Pack; the fastest win is records.best_time_boss_rush (run.stats.time).
 ## * Promotion rewards (Profile.promote), and coins from extra copies of max-level cards (overflow_coins).
+## Update 13 ("Rookie Camp", Onboarding.on_game_end): a bonus pack for each of a new manager's first three
+## games, a consolation reward after a loss in the first five (with an easier difficulty / Auto Build tip),
+## and the Epic pick after the third game. Result key "rookie".
 ## `coins` stays the game's own coins; every bonus has its own key and `coins_total` adds them all up.
 
 # Tuned with tools/balance/economy.py (Update 5), then every coin reward raised by 50 % (coin boost):
@@ -182,6 +185,9 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 		first_win = true
 		Profile.add_coins(FIRST_WIN_COINS)
 		Profile.add_pack(FIRST_WIN_PACK, "First win bonus")
+	# Rookie Camp (Update 13): a bonus pack for each of the first games, a consolation reward and a coach tip
+	# after an early loss, and the Epic pick after the third game (result key "rookie").
+	var rookie := Onboarding.on_game_end(run, won)
 	var records: Array = []
 	if run.mode_id == "endless":
 		var reached := run.inning
@@ -231,7 +237,8 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 
 	var overflow_coins := int(Profile.stat("overflow_coins") - overflow_before)
 	var coins_total := coins + streak_bonus_coins + first_win_today_coins + milestone_coins + (FIRST_WIN_COINS if first_win else 0) \
-		+ int(daily.get("bonus_coins", 0)) + int(promotion_reward.get("coins", 0)) + overflow_coins
+		+ int(daily.get("bonus_coins", 0)) + int(promotion_reward.get("coins", 0)) + overflow_coins \
+		+ int(rookie.get("consolation", {}).get("coins", 0))
 	var result := {
 		"won": won, "mode": run.mode_id, "difficulty": run.difficulty_id, "arena": run.arena_id,
 		"inning": run.inning, "innings_cleared": cleared, "outs": run.outs_total, "runs": run.runs, "run_limit": run.run_limit,
@@ -251,6 +258,8 @@ static func apply(run: RunState, won: bool) -> Dictionary:
 		"promotion_reward": promotion_reward, "overflow_coins": overflow_coins,
 		"best_time": float(Profile.data.records.get("best_time_boss_rush", 0.0)) if run.mode_id == "boss_rush" else 0.0,
 		"coins_total": coins_total,
+		# Update 13: {"bonus_pack", "consolation" (granted bundle), "coach" ({easier, auto_build, ...}), "epic_pick"}
+		"rookie": rookie,
 	}
 	Profile.add_history({"won": won, "mode": run.mode_id, "difficulty": run.difficulty_id, "arena": run.arena_id,
 		"inning": run.inning, "score": run.score, "outs": run.outs_total, "runs": run.runs, "date": result.date})
