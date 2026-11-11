@@ -5,6 +5,9 @@ extends RefCounted
 ## {"id", "text", "detail", "icon", "accent", "go": Callable}.
 
 const DAILY_ACCENT := Color("#FF8A3D")
+## The Onboarding feature each suggestion opens (an unlisted id is always available).
+const FEATURE_OF := {"promotion": "ranked", "missions": "missions", "upgrade": "upgrades", "trait": "team", "daily": "daily",
+	"packs": "packs", "set": "deck", "deck": "deck"}
 
 
 ## `just_played_daily`: the game that just ended was today's Daily Challenge (do not suggest it).
@@ -62,7 +65,8 @@ static func suggestions(just_played_daily := false) -> Array:
 			"detail": "Put new cards into your deck", "go": func() -> void:
 				Session.menu_tab = "deck"
 				Router.goto("deck_builder")})
-	return out
+	# New managers: never point at a feature that is still locked (Update 13 progressive unlocks).
+	return out.filter(func(sg: Dictionary) -> bool: return Onboarding.is_unlocked(str(FEATURE_OF.get(str(sg.id), "deck"))))
 
 
 ## Missions ready to claim, if the progression code provides missions (Profile or a Missions class).
