@@ -8,6 +8,10 @@ extends MenuScreen
 ## Auto Build (DeckAI, four styles) fills the deck with the best pick for the team and explains it in a
 ## banner and a chip on each slot; Undo puts the previous deck back. COMPARE in the inspector (or
 ## shift-click a card) then a click on a second card opens the side-by-side CardCompare overlay.
+## Update 13: the guided "put your new card in your deck" step (Session.guide == "deck", after the
+## guided first pack): a coach bubble and a pulsing ring on the new card ("Tap your new card"), then
+## on a suggested deck card ("Tap a card to swap out"); the swap saves the deck, DECK READY! pops and
+## one button goes back to the hub (PLAY spotlighted there via flags.ftue_return_hub).
 
 const SLOT_SIZE := Vector2(136, 190)
 const SLOT_GAP := 10
@@ -71,12 +75,28 @@ var _pick_side := -1                 # waiting for a card for this compare side 
 var _pick_bar: Control
 var _pick_label: Label
 var _compare_btn: Button
+# Guided deck step (Update 13): "" (off), "pick" (tap the new card), "swap" (tap a deck card), "done".
+var guide_phase := ""
+var guide_card := ""
+var _guide_layer: Control
+var _guide_bubble: PanelContainer
+var _guide_title: Label
+var _guide_text: Label
+var _guide_btn: Button
+var _guide_ring: GuideRing
 
 
 func _ready() -> void:
 	CardUpgradesScreen.apply_debug_args()
 	MasteryUI.apply_demo_args()
 	collection_mode = Session.menu_tab == "collection"
+	if Session.guide == "deck":
+		if Session.guide_card != "" and Profile.is_card_owned(Session.guide_card) and not Session.guide_card in Profile.data.deck:
+			collection_mode = false
+			guide_card = Session.guide_card
+			guide_phase = "pick"
+		else:
+			Session.finish_ftue_rewards(false)
 	setup_screen("COLLECTION" if collection_mode else "CARDS & DECK",
 		"Every ability card. New cards and upgrade copies come from card packs." if collection_mode
 		else "Choose the 8 cards you take into every game.")
@@ -102,6 +122,9 @@ func _ready() -> void:
 		_update_deck_info()
 	_refresh_collection()
 	_refresh_detail()
+	if guide_phase != "":
+		_start_guide()
+		return   # no first-visit tips on top of the guided step
 	set_help("collection" if collection_mode else "deck_builder", _hint_targets, _hint_features)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--claim-set="):   # screenshot helper: the set-complete moment
@@ -449,9 +472,12 @@ func _after_change() -> void:
 	if deck.size() == Profile.DECK_SIZE and Profile.set_deck(deck):
 		_dirty = false
 		_flash_saved()
+		Session.funnel_mark("deck_edited")
 	_update_deck_info()
 	_update_marks()
 	_refresh_detail()
+	if guide_phase in ["pick", "swap"] and guide_card in deck and deck.size() == Profile.DECK_SIZE:
+		_guide_finish()
 
 
 # ================================================================ deck edits
@@ -466,6 +492,9 @@ func _add_card(id: String, from: Control) -> void:
 		_remove_at(deck.find(id))
 		return
 	if deck.size() >= Profile.DECK_SIZE:
+		if guide_phase in ["pick", "swap"] and id == guide_card:
+			_guide_hold()
+			return
 		_deck_full()
 		return
 	var idx := deck.size()
@@ -816,6 +845,8 @@ func _card_input(e: InputEvent, id: String, cv: CardView, deck_index: int) -> vo
 			_compare_pick(id)
 		elif mb.shift_pressed:         # shift-click: compare this card with the next one clicked
 			_start_compare(id)
+		elif deck_index >= 0 and guide_phase == "swap":
+			_guide_swap(deck_index)
 		elif deck_index >= 0:
 			_remove_at(deck_index)
 		else:
@@ -1601,6 +1632,220 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	super._unhandled_input(event)
+
+
+# ================================================================ guided step (Update 13)
+
+func _start_guide() -> void:
+	# Show every card, so the new one is on screen.
+	filter_tab = ""
+	filter_rarity = ""
+	search = ""
+	for k in _tab_btns.keys():
+		_tab_btns[k].button_pressed = k == ""
+	_refresh_collection()
+	_inspect(guide_card)
+	_guide_layer = Control.new()
+	_guide_layer.name = "DeckGuide"
+	_guide_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_guide_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_guide_layer.z_index = 50
+	add_child(_guide_layer)
+	_guide_ring = GuideRing.new()
+	_guide_ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_guide_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_guide_ring.target_fn = _guide_target
+	_guide_layer.add_child(_guide_ring)
+	_guide_bubble = PanelContainer.new()
+	var st := UITheme.panel_style(Color(0.035, 0.06, 0.12, 0.97), Color(UITheme.GOLD, 0.9), 2, 16, 16)
+	st.shadow_color = Color(0, 0, 0, 0.55)
+	st.shadow_size = 16
+	_guide_bubble.add_theme_stylebox_override("panel", st)
+	_guide_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_guide_layer.add_child(_guide_bubble)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	_guide_bubble.add_child(vb)
+	_guide_title = UITheme.label("", 34, UITheme.GOLD, UITheme.font_display())
+	vb.add_child(_guide_title)
+	_guide_text = UITheme.label("", 22, UITheme.OFFWHITE, UITheme.font_body_bold())
+	_guide_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_guide_text.custom_minimum_size = Vector2(380, 0)
+	vb.add_child(_guide_text)
+	_guide_btn = UITheme.menu_button("BACK TO THE CLUBHOUSE  ▶", UITheme.GOLD, 30)
+	_guide_btn.name = "GuideContinue"
+	_guide_btn.custom_minimum_size = Vector2(420, 66)
+	_guide_btn.visible = false
+	_guide_btn.pressed.connect(func() -> void: Session.finish_ftue_rewards())
+	vb.add_child(_guide_btn)
+	_guide_say("YOUR NEW CARD!", "Tap %s to put it in your deck." % str(DB.card(guide_card).name))
+	_scroll_to_guide.call_deferred()
+
+
+func _scroll_to_guide() -> void:
+	await get_tree().process_frame
+	var cv: Control = _col_views.get(guide_card)
+	if cv and is_instance_valid(cv):
+		var sc := cv.get_parent()
+		while sc and not sc is ScrollContainer:
+			sc = sc.get_parent()
+		if sc:
+			(sc as ScrollContainer).ensure_control_visible(cv)
+
+
+func _guide_say(title: String, text: String) -> void:
+	_guide_title.text = title
+	_guide_text.text = text
+	_guide_bubble.modulate.a = 0.0
+	var tw := _guide_bubble.create_tween()
+	tw.tween_interval(0.05)
+	tw.tween_property(_guide_bubble, "modulate:a", 1.0, 0.2)
+
+
+## The ring's target: the new card while picking, the suggested deck card while swapping.
+func _guide_target() -> Variant:
+	match guide_phase:
+		"pick":
+			var cv: Control = _col_views.get(guide_card)
+			return cv.get_global_rect() if cv and is_instance_valid(cv) and cv.is_visible_in_tree() else null
+		"swap":
+			var i := suggested_swap()
+			if i >= 0 and i < _slot_cards.size() and _slot_cards[i] != null and is_instance_valid(_slot_cards[i]):
+				return (_slot_cards[i] as Control).get_global_rect()
+		"done":
+			return _guide_btn.get_global_rect() if _guide_btn.is_visible_in_tree() else null
+	return null
+
+
+## The deck card the guide suggests swapping out: the lowest rarity, the same category as the new
+## card first, then the dearest; never one of the two cards the first game taught if avoidable.
+func suggested_swap() -> int:
+	var nc := DB.card(guide_card)
+	var best := -1
+	var best_score := INF
+	for i in deck.size():
+		var c := DB.card(str(deck[i]))
+		var score := DB.rarity_index(str(c.get("rarity", "common"))) * 100.0 + (0.0 if c.get("category", "") == nc.get("category", "") else 50.0) - float(c.get("cost", 0))
+		if str(deck[i]) in ["power_throw", "heat_wave"]:   # the cards the first game taught: keep them
+			score += 30.0
+		if score < best_score:
+			best_score = score
+			best = i
+	return best
+
+
+## The new card was tapped with a full deck: hold it and ask for the card to swap out.
+func _guide_hold() -> void:
+	guide_phase = "swap"
+	Audio.ui("ui_confirm")
+	var cv: CardView = _col_views.get(guide_card)
+	if cv:
+		cv.selected = true
+		_pop(cv)
+	var out := str(DB.card(str(deck[suggested_swap()])).name) if suggested_swap() >= 0 else "a card"
+	_guide_say("SWAP IT IN", "Your deck holds 8 cards. Tap %s (or any deck card) to swap it out." % out)
+
+
+func _guide_swap(i: int) -> void:
+	if i < 0 or i >= deck.size():
+		return
+	deck[i] = guide_card
+	Audio.play("card_whoosh", -6.0)
+	_rebuild_deck(i)
+	var src: Control = _col_views.get(guide_card)
+	if src and is_instance_valid(src):
+		_fly(guide_card, src.get_global_rect(), i)
+	elif _slot_cards[i] != null:
+		(_slot_cards[i] as Control).modulate.a = 1.0
+	_after_change()
+
+
+## The new card is in the saved deck: celebrate, then one button back to the hub.
+func _guide_finish() -> void:
+	guide_phase = "done"
+	Session.guide = ""
+	Audio.play("level_up", -6.0)
+	_guide_say("DECK READY!", "%s is in your deck. Let's play your next game!" % str(DB.card(guide_card).name))
+	_guide_btn.visible = true
+	_guide_btn.pivot_offset = _guide_btn.custom_minimum_size * 0.5
+	var lp := _guide_btn.create_tween().set_loops()
+	lp.tween_property(_guide_btn, "scale", Vector2(1.04, 1.04), 0.6).set_trans(Tween.TRANS_SINE)
+	lp.tween_property(_guide_btn, "scale", Vector2.ONE, 0.6).set_trans(Tween.TRANS_SINE)
+
+
+func _process(_delta: float) -> void:
+	if _guide_bubble == null or not is_instance_valid(_guide_bubble):
+		return
+	# Keep the coach bubble beside its target, inside the screen.
+	var vs := get_viewport_rect().size
+	var bs := _guide_bubble.get_combined_minimum_size()
+	_guide_bubble.size = bs
+	var t: Variant = _guide_target()
+	var pos := Vector2((vs.x - bs.x) * 0.5, vs.y * 0.45)
+	if t is Rect2:
+		var r: Rect2 = t
+		if guide_phase == "done":
+			pos = Vector2((vs.x - bs.x) * 0.5, vs.y * 0.42)
+		elif r.get_center().y > vs.y * 0.5:
+			pos = Vector2(r.get_center().x - bs.x * 0.5, r.position.y - bs.y - 70.0)
+		else:
+			pos = Vector2(r.get_center().x - bs.x * 0.5, r.end.y + 70.0)
+	pos.x = clampf(pos.x, 20.0, vs.x - bs.x - 20.0)
+	pos.y = clampf(pos.y, 20.0, vs.y - bs.y - 20.0)
+	_guide_bubble.position = pos
+	_guide_ring.bubble = Rect2(pos, bs)
+
+
+func _exit_tree() -> void:
+	if guide_phase != "" and Session.guide == "deck":
+		Session.finish_ftue_rewards(false)
+
+
+## A pulsing gold ring around the guide's target, with an arrow from the coach bubble.
+class GuideRing:
+	extends Control
+	var target_fn: Callable
+	var bubble := Rect2()
+	var t := 0.0
+
+	func _process(delta: float) -> void:
+		t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		if not target_fn.is_valid():
+			return
+		var r: Variant = target_fn.call()
+		if not r is Rect2:
+			return
+		var rr: Rect2 = r
+		rr.position -= get_global_rect().position
+		var p := 0.5 + 0.5 * sin(t * 4.5)
+		var gold := Color(1.0, 0.8, 0.25)
+		var g := rr.grow(6.0 + p * 6.0)
+		# Spotlight: everything but the target a little darker.
+		var hole := rr.grow(14.0)
+		var dim := Color(0.0, 0.01, 0.04, 0.45)
+		var full := Rect2(Vector2.ZERO, size)
+		draw_rect(Rect2(0, 0, full.size.x, hole.position.y), dim)
+		draw_rect(Rect2(0, hole.end.y, full.size.x, full.size.y - hole.end.y), dim)
+		draw_rect(Rect2(0, hole.position.y, hole.position.x, hole.size.y), dim)
+		draw_rect(Rect2(hole.end.x, hole.position.y, full.size.x - hole.end.x, hole.size.y), dim)
+		draw_rect(g, Color(gold, 0.95), false, 5.0)
+		draw_rect(g.grow(9.0), Color(gold, 0.25 * p), false, 8.0)
+		if bubble.size == Vector2.ZERO:
+			return
+		var b := Rect2(bubble.position - get_global_rect().position, bubble.size)
+		var c := g.get_center()
+		var start := Vector2(clampf(c.x, b.position.x + 30, b.end.x - 30), b.end.y if c.y > b.end.y else b.position.y)
+		var aim := Vector2(c.x, g.position.y if c.y > b.end.y else g.end.y)
+		if start.distance_to(aim) < 24.0:
+			return
+		var dir := (aim - start).normalized()
+		var tip := aim - dir * (6.0 + p * 6.0)
+		draw_line(start, tip - dir * 18.0, Color(gold, 0.95), 5.0, true)
+		var side := Vector2(-dir.y, dir.x)
+		draw_colored_polygon(PackedVector2Array([tip, tip - dir * 26.0 + side * 14.0, tip - dir * 26.0 - side * 14.0]), Color(gold, 0.95))
 
 
 func go_back() -> void:

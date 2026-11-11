@@ -8,6 +8,10 @@ extends Node3D
 ## that tears with a bigger burst, and every card is dealt into a PackSummary grid.
 ## Update 9: the pity counters ("Epic or better within N packs") under your packs, a link to the
 ## Daily Shop, and the coins from extra copies of maxed cards in the reveal summary.
+## Update 13: the guided first pack (Session.guide == "pack", after the first win): the side panels
+## and the multi-open buttons stay hidden, a pulsing ring and "TAP TO OPEN!" sit on the pack, then
+## "TAP A CARD TO FLIP IT!", and when every card is face up the best new card is named and one
+## button takes the player to Cards & Deck to put it in the deck (Session.guide = "deck").
 
 const CARD_W := 0.86
 const CARD_H := 1.204
@@ -82,10 +86,20 @@ var _pack_base := 1.0
 var _star_tex: Texture2D
 var _dot_tex: Texture2D
 var _rng := RandomNumberGenerator.new()
+# Guided first pack (Update 13).
+var guided := false
+var guide_card := ""               # the best new card of the guided pack
+var _guide_label: Label
+var _guide_sub: Label
+var _guide_halo: GuideHalo
+var _guide_named := false
 
 
 func _ready() -> void:
 	_rng.randomize()
+	guided = Session.guide == "pack" and Profile.pack_count() > 0
+	if Session.guide == "pack" and not guided:
+		Session.finish_ftue_rewards(false)
 	_star_tex = _make_star_texture()
 	_dot_tex = _make_dot_texture()
 	_build_stage()
@@ -95,6 +109,8 @@ func _ready() -> void:
 	Profile.packs_changed.connect(_refresh_panels)
 	_refresh_panels()
 	_select_default()
+	if guided:
+		_start_guide()
 	Audio.play_music("menu_theme")
 	# Debug/screenshot helper: `--pack-demo=<type>` adds a pack, opens it and reveals every card.
 	for a in OS.get_cmdline_user_args():
@@ -650,8 +666,9 @@ func _build_ui() -> void:
 		if state in ["reveal", "done"]:
 			_on_action()
 		return true
-	_screen.set_help("packs", func() -> Dictionary:
-		return {"packs_intro": _action if _action.is_visible_in_tree() and not _action.disabled else _right})
+	if Session.guide != "pack":   # no first-visit tips on top of the guided first pack
+		_screen.set_help("packs", func() -> Dictionary:
+			return {"packs_intro": _action if _action.is_visible_in_tree() and not _action.disabled else _right})
 
 	_banner = Label.new()
 	_banner.add_theme_font_override("font", UITheme.font_display())
@@ -673,6 +690,145 @@ func _build_ui() -> void:
 	_flash.color = Color(1, 1, 1, 0)
 	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_flash)
+
+
+# ---------------------------------------------------------------- guided first pack (Update 13)
+
+func _start_guide() -> void:
+	# The biggest pack first (the first-win Pro Pack): the best first reveal.
+	var types := _pack_entries().map(func(e: Dictionary) -> String: return str(e.type) if str(e.card) == "" else "")
+	for t in ["champion", "pro", "rookie"]:
+		if t in types:
+			_show_pack(t)
+			break
+	_left.visible = false
+	_right.visible = false
+	var layer: CanvasLayer = _screen.get_parent()
+	_guide_halo = GuideHalo.new()
+	_guide_halo.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_guide_halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_guide_halo.rect_fn = _guide_target
+	layer.add_child(_guide_halo)
+	_guide_label = UITheme.title("TAP TO OPEN!", 84, UITheme.GOLD)
+	_guide_label.name = "GuideLabel"
+	_guide_label.add_theme_constant_override("outline_size", 14)
+	_guide_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_guide_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_guide_label.offset_left = -700
+	_guide_label.offset_right = 700
+	_guide_label.offset_top = 96
+	_guide_label.offset_bottom = 200
+	_guide_label.pivot_offset = Vector2(700, 52)
+	_guide_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_guide_label)
+	_guide_sub = UITheme.label("", 30, UITheme.OFFWHITE, UITheme.font_body_bold())
+	_guide_sub.add_theme_constant_override("outline_size", 8)
+	_guide_sub.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	_guide_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_guide_sub.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_guide_sub.offset_left = -700
+	_guide_sub.offset_right = 700
+	_guide_sub.offset_top = 196
+	_guide_sub.offset_bottom = 244
+	_guide_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_guide_sub)
+	var bob := _guide_label.create_tween().set_loops()
+	bob.tween_property(_guide_label, "scale", Vector2(1.06, 1.06), 0.55).set_trans(Tween.TRANS_SINE)
+	bob.tween_property(_guide_label, "scale", Vector2.ONE, 0.55).set_trans(Tween.TRANS_SINE)
+	_update_action()
+
+
+## What the guide's ring circles: the pack, then nothing while the cards flip, then the button.
+func _guide_target() -> Variant:
+	match state:
+		"idle":
+			return _pack_screen_rect().grow(18.0)
+		"done":
+			return _action.get_global_rect() if _action.is_visible_in_tree() else null
+	return null
+
+
+func _pack_screen_rect() -> Rect2:
+	var a := camera.unproject_position(_pack_root.global_position + Vector3(-PACK_W * 0.6, -PACK_H * 0.6, 0))
+	var b := camera.unproject_position(_pack_root.global_position + Vector3(PACK_W * 0.6, PACK_H * 0.6, 0))
+	return Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (b - a).abs())
+
+
+func _guide_text(big: String, sub: String) -> void:
+	if _guide_label == null:
+		return
+	_guide_label.text = big
+	_guide_sub.text = sub
+	_guide_label.modulate.a = 0.0
+	_guide_sub.modulate.a = 0.0
+	var tw := create_tween().set_parallel()
+	tw.tween_property(_guide_label, "modulate:a", 1.0, 0.25)
+	tw.tween_property(_guide_sub, "modulate:a", 1.0, 0.25).set_delay(0.1)
+
+
+## The best new card of the opened pack (rarest first), or "" when it held no new card.
+func best_new_card(res: Dictionary) -> String:
+	var best := ""
+	for c in res.get("cards", []):
+		if not bool(c.get("new", false)) or str(c.id) in Profile.data.deck:
+			continue
+		if best == "" or DB.rarity_index(str(c.rarity)) > DB.rarity_index(str(DB.card(best).rarity)):
+			best = str(c.id)
+	return best
+
+
+## Every card is face up: name the new card and offer to put it in the deck.
+func _guide_done() -> void:
+	guide_card = best_new_card(_result)
+	if guide_card != "":
+		var cd := DB.card(guide_card)
+		_guide_text("NEW CARD: %s!" % str(cd.name).to_upper(), "Let's put it in your deck.")
+		_guide_label.add_theme_color_override("font_color", DB.rarity_color(str(cd.rarity)).lightened(0.3))
+	else:
+		_guide_text("NICE PULL!", "Every card makes your collection stronger.")
+
+
+func _guide_continue() -> void:
+	if guide_card != "":
+		Session.guide = "deck"
+		Session.guide_card = guide_card
+		Router.goto("deck_builder")
+	else:
+		Session.finish_ftue_rewards()
+
+
+func _exit_tree() -> void:
+	# Left the guided pack another way (BACK): the hub still gets its PLAY spotlight.
+	if guided and Session.guide == "pack":
+		Session.finish_ftue_rewards(false)
+
+
+## A pulsing gold ring around whatever `rect_fn` returns (a Rect2, or null for nothing).
+class GuideHalo:
+	extends Control
+	var rect_fn: Callable
+	var t := 0.0
+
+	func _process(delta: float) -> void:
+		t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		if not rect_fn.is_valid():
+			return
+		var r: Variant = rect_fn.call()
+		if not r is Rect2:
+			return
+		var rr: Rect2 = r
+		var p := 0.5 + 0.5 * sin(t * 4.5)
+		var g := rr.grow(6.0 + p * 10.0)
+		var gold := Color(1.0, 0.8, 0.25)
+		draw_rect(g, Color(gold, 0.9), false, 5.0)
+		draw_rect(g.grow(10.0), Color(gold, 0.25 * p), false, 9.0)
+		# A bouncing arrow above it.
+		var tip := Vector2(g.get_center().x, g.position.y - 14.0 - p * 12.0)
+		draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-26, -34), tip + Vector2(26, -34)]), Color(gold, 0.95))
+		draw_rect(Rect2(tip + Vector2(-9, -70), Vector2(18, 38)), Color(gold, 0.95))
 
 
 func _pass_through(n: Node) -> void:
@@ -941,8 +1097,11 @@ func _update_action() -> void:
 	var owned_n := _selected_count() if state == "idle" else 0
 	for n in _open_multi_btns:
 		var mb: Button = _open_multi_btns[n]
-		mb.visible = owned_n >= int(n)
+		mb.visible = owned_n >= int(n) and not guided
 		mb.disabled = owned_n < int(n)
+	if guided:
+		_update_guided_action()
+		return
 	match state:
 		"idle":
 			var owned := _find_pack_index() >= 0
@@ -975,6 +1134,32 @@ func _update_action() -> void:
 				var left := Profile.pack_count()
 				_action.text = "OPEN NEXT PACK  (%d)" % left if left > 0 else "DONE"
 				_hint.text = _summary_text()
+
+
+func _update_guided_action() -> void:
+	_hint.text = "Your first card pack, earned with your first win!" if state == "idle" else ""
+	match state:
+		"idle":
+			_action.disabled = _find_pack_index() < 0
+			_action.text = "OPEN PACK"
+		"opening":
+			_action.disabled = true
+			_action.text = "OPENING..."
+			if _guide_label and _guide_label.modulate.a > 0.0:
+				var tw := create_tween().set_parallel()
+				tw.tween_property(_guide_label, "modulate:a", 0.0, 0.2)
+				tw.tween_property(_guide_sub, "modulate:a", 0.0, 0.2)
+		"reveal":
+			_action.disabled = false
+			_action.text = "REVEAL ALL"
+			if _guide_label and _guide_label.text != "TAP A CARD TO FLIP IT!":
+				_guide_text("TAP A CARD TO FLIP IT!", "")
+		"done":
+			_action.disabled = false
+			if _guide_label and not _guide_named:
+				_guide_named = true
+				_guide_done()
+			_action.text = "ADD IT TO MY DECK  ▶" if guide_card != "" else "CONTINUE  ▶"
 
 
 func _summary_text() -> String:
@@ -1031,7 +1216,9 @@ func _on_action() -> void:
 			else:
 				_reveal_all()
 		"done":
-			if _multi:
+			if guided:
+				_guide_continue()
+			elif _multi:
 				_finish_multi()
 			else:
 				_finish_reveal()
@@ -1089,6 +1276,7 @@ func _open_selected() -> void:
 	_result = Profile.open_pack(idx)
 	if _result.is_empty():
 		return
+	Session.funnel_mark("first_pack_opened")
 	state = "opening"
 	_update_action()
 	_set_panels_visible(false)
@@ -1158,6 +1346,7 @@ func _open_multi(n: int) -> void:
 	_result = Profile.open_packs(type, n, str(selected.get("card", "")))
 	if _result.is_empty():
 		return
+	Session.funnel_mark("first_pack_opened")
 	state = "opening"
 	_update_action()
 	_set_panels_visible(false)

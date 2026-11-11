@@ -66,6 +66,8 @@ static func create(cfg: Dictionary) -> RunState:
 	var m := DB.mode(r.mode_id)
 	r.waves_per_inning = int(m.get("waves_per_inning", 3))
 	r.max_innings = int(m.get("innings", 9))
+	if int(cfg.get("innings", 0)) > 0 and r.max_innings > 0:   # the shorter first game (Update 13)
+		r.max_innings = int(cfg.innings)
 	var diff := DB.difficulty(r.difficulty_id)
 	r.run_limit = int(diff.get("run_limit", 3))
 	r.shields = int(diff.get("shields", 1))

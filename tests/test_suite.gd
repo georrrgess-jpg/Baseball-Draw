@@ -64,6 +64,7 @@ func _run() -> void:
 	await test_u9_e2_screens()
 	test_update9_economy()
 	test_update11_cards()
+	await test_update13_first_session()   # last: it changes the profile's first-session flags
 	print("==== %d checks, %d failed ====" % [checks, failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -4437,4 +4438,234 @@ func test_update11_cards() -> void:
 	cv.owned = false
 	ok(cv.prestige_stars() == 0, "unowned cards are never Prestige cards")
 	cv.free()
+	Profile.reset_profile()
+
+
+# ---------------------------------------------------------------- Update 13 (stream A): the first session
+
+func test_update13_first_session() -> void:
+	section("update 13: first session")
+	Engine.time_scale = 1.0   # an earlier battle may have been freed mid slow-motion
+	Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	var flags: Dictionary = Profile.data.flags
+	# Who gets the first session.
+	ok(Session.is_new_player(), "a fresh profile is a new player")
+	flags["tutorial_done"] = true
+	ok(not Session.is_new_player(), "the welcome/tutorial flag makes an existing player")
+	flags["tutorial_done"] = false
+	flags["battle_tutorial_done"] = true
+	ok(not Session.is_new_player(), "a finished battle tutorial makes an existing player")
+	flags["battle_tutorial_done"] = false
+	Profile.data.history.append({"won": true})
+	ok(not Session.is_new_player(), "a played game makes an existing player")
+	Profile.data.history.clear()
+	Profile.data.stats["runs_played"] = 2
+	ok(not Session.is_new_player(), "games played make an existing player")
+	Profile.data.stats.erase("runs_played")
+	ok(Session.is_new_player(), "back to a new player")
+
+	# The first game's configuration and assist.
+	var cfg := Session.first_game_config()
+	ok(cfg.mode == "quick" and cfg.difficulty == "rookie" and bool(cfg.first_game) and int(cfg.seed) == Session.FIRST_GAME_SEED
+		and int(cfg.innings) == 2 and cfg.bosses == {"2": "iron_slugger"}, "first game: a 2-inning Rookie Quick Defense, fixed seed, Iron Slugger last")
+	var r := RunState.create(cfg)
+	ok(r.max_innings == 2 and r.boss_for_inning(2) == "iron_slugger" and r.boss_for_inning(1) == "" and r.boss_for_inning(3) == "", "first game run: 2 innings, boss in inning 2")
+	r.inning = 2
+	ok(r.is_final_inning(), "inning 2 is the first game's final inning")
+	var r2 := RunState.from_dict(r.to_dict())
+	ok(r2.max_innings == 2 and bool(r2.config.get("first_game", false)), "a saved first game keeps its 2 innings")
+	var normal_cfg := Session.new_run_config("quick")
+	normal_cfg.difficulty = "rookie"
+	var rn := RunState.create(normal_cfg)
+	ok(rn.max_innings == 3, "a normal Quick Defense keeps 3 innings")
+	var endless_cfg := Session.new_run_config("endless")
+	endless_cfg["innings"] = 2
+	ok(RunState.create(endless_cfg).max_innings == 0, "an innings override never makes Endless finite")
+	var rf := RunState.create(cfg)
+	ok(is_equal_approx(WaveGenerator.hp_multiplier(rf), WaveGenerator.hp_multiplier(rn) * 0.85), "first-game assist: runners 15 % weaker")
+	ok(is_equal_approx(WaveGenerator.mode_tuning(rf, "budget"), WaveGenerator.mode_tuning(rn, "budget") * 0.85), "first-game assist: smaller waves")
+	ok(is_equal_approx(WaveGenerator.boss_hp_tuning(rf, "iron_slugger"), WaveGenerator.boss_hp_tuning(rn, "iron_slugger") * 0.3), "first-game assist: the boss tease has 30 % health")
+	rf.inning = 2
+	var w := WaveGenerator.generate(rf, 2, 4)
+	ok(str(w.boss) == "iron_slugger", "the first game's last wave is the Iron Slugger")
+	var w1a := WaveGenerator.generate(RunState.create(cfg), 1, 4)
+	var w1b := WaveGenerator.generate(RunState.create(cfg), 1, 4)
+	ok(w1a.total == w1b.total and str(w1a.groups) == str(w1b.groups), "the first game's waves are the same every time (fixed seed)")
+
+	# The funnel.
+	Profile.data.erase("onboarding_funnel")
+	ok(not Session.funnel_mark("intro_done") and not Profile.data.onboarding_funnel.has("intro_done"), "no funnel step before the first launch")
+	Session.funnel_on_launch()
+	var f := Session.funnel()
+	ok(f.has("first_launch") and int(f.day) == 0 and f.days == [0], "the first launch starts the funnel on day 0")
+	ok(Session.funnel_mark("intro_done") and not Session.funnel_mark("intro_done"), "a funnel step is recorded once")
+	ok(Session.funnel_seconds("intro_done") >= 0.0 and Session.funnel_seconds("first_win") < 0.0, "funnel_seconds")
+	ok(Session.day_index(float(f.first_launch) + 3600.0) <= 1 and Session.day_index(float(f.first_launch) + 86400.0 * 3.0) == 3, "day index counts calendar days")
+	ok(not Session.note_game_start(Session.new_run_config("quick")), "no game 2 before the first game")
+	Session.funnel_mark("first_game_start")
+	ok(not Session.note_game_start(Session.first_game_config()), "the first game is not game 2")
+	ok(not Session.note_game_start(Session.new_run_config("practice")), "Practice is not game 2")
+	ok(Session.note_game_start(Session.new_run_config("quick")) and f.has("game2_start"), "the next new game is game 2")
+	f.first_launch = float(f.first_launch) - 86400.0 * 2.0
+	Session.funnel_on_launch()
+	ok(int(f.day) == 2 and f.has("day2_return") and 2 in f.days, "a launch two days later: day 2, day2_return recorded")
+	# Existing players are never tracked.
+	Profile.reset_profile()
+	Profile.data.flags["tutorial_done"] = true
+	Profile.data.erase("onboarding_funnel")
+	Session.funnel_on_launch()
+	ok(not Session.funnel().has("first_launch"), "an existing player's launch starts no funnel")
+
+	# Guided rewards bookkeeping.
+	Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	Session.funnel_on_launch()
+	ok(not Session.ftue_rewards_pending(), "no guided rewards before the first game")
+	Session.funnel_mark("first_game_start")
+	ok(Session.ftue_rewards_pending(), "guided rewards are owed after the guided first game")
+	Session.finish_ftue_rewards(false)
+	ok(not Session.ftue_rewards_pending() and bool(Profile.data.flags.ftue_return_hub) and Session.guide == "", "finishing them asks the hub for its PLAY spotlight")
+	Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	Session.funnel_on_launch()
+	Session.skip_onboarding()
+	ok(not Session.is_new_player() and bool(Profile.data.flags.battle_tutorial_done) and bool(Profile.data.flags.ftue_skipped)
+		and not Session.ftue_rewards_pending() and Session.funnel().has("skipped"), "\"I've played before\" skips everything and is recorded")
+
+	# The story intro: three cards, under 15 s, next/skip/played-before.
+	var intro := StoryIntro.new()
+	add_child(intro)
+	await get_tree().process_frame
+	ok(StoryIntro.STORIES.size() == 3 and StoryIntro.CARD_TIME * 3.0 + 1.0 < 15.0, "three story cards in under 15 s")
+	ok(intro.index == 0 and intro.find_child("StoryCard1", true, false) != null, "the intro opens on card 1")
+	intro.next()
+	await get_tree().process_frame
+	ok(intro.index == 1 and intro.find_child("StoryCard2", true, false) != null, "next() shows card 2")
+	var got := [null]
+	intro.finished.connect(func(s: bool) -> void: got[0] = s)
+	intro.skip()
+	for i in 30:
+		await _wait(0.1)
+		if got[0] != null:
+			break
+	ok(got[0] == true, "SKIP finishes the intro as skipped (%s, time scale %.2f)" % [got[0], Engine.time_scale])
+	intro.queue_free()
+	var intro2 := StoryIntro.new()
+	add_child(intro2)
+	await get_tree().process_frame
+	var before := [false]
+	intro2.played_before.connect(func() -> void: before[0] = true)
+	(intro2.find_child("PlayedBefore", true, false) as Button).pressed.emit()
+	ok(before[0], "\"I've played before\" in the intro signals the title")
+	intro2.queue_free()
+
+	# First-time Results: big moments for the first win of a guided player, the classic layout otherwise.
+	Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	Session.funnel_on_launch()
+	Session.funnel_mark("first_game_start")
+	var result := {"won": true, "mode": "quick", "difficulty": "rookie", "arena": "steel_yard", "coins": 120, "coins_total": 140, "xp": 200, "rp": 10,
+		"levels": 1, "outs": 40, "runs": 0, "run_limit": 5, "score": 4000, "mvp": "ace", "defender_xp": {},
+		"packs": [{"type": "rookie", "source": "test"}, {"type": "pro", "source": "First win bonus"}], "stats": {}}
+	var res: Control = load("res://src/ui/results_screen.gd").new()
+	res.result = result
+	add_child(res)
+	await get_tree().process_frame
+	ok(bool(res.first_time) and res.find_child("FirstWin", true, false) != null, "the first win of a guided player gets the first-time Results")
+	ok(res.find_child("CoinsMoment", true, false) != null and res.find_child("LevelMoment", true, false) != null and res.find_child("PacksMoment", true, false) != null,
+		"first-time Results: coins, level and packs moments")
+	var open_btn: Button = res.find_child("OpenFirstPack", true, false)
+	ok(open_btn != null and open_btn.text == "OPEN YOUR PACK!" and res.find_child("PlayAgain", true, false) == null, "first-time Results: one OPEN YOUR PACK! button")
+	ok(Session.funnel().has("first_win"), "the first win is in the funnel")
+	(res.find_child("FullResults", true, false) as Button).pressed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok(not bool(res.first_time) and res.find_child("PlayAgain", true, false) != null, "\"See full results\" switches to the classic layout")
+	res.queue_free()
+	var lost := result.duplicate()
+	lost.won = false
+	var res2: Control = load("res://src/ui/results_screen.gd").new()
+	res2.result = lost
+	add_child(res2)
+	await get_tree().process_frame
+	ok(not bool(res2.first_time) and res2.find_child("FirstWin", true, false) == null, "a loss gets the classic Results")
+	res2.queue_free()
+	await get_tree().process_frame
+
+	# The guided first game: steps, the hand helper and the staged pack (Heat Wave -> triple play).
+	Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	Session.funnel_on_launch()
+	Profile.data.flags["tutorial_done"] = true
+	Session.run_config = Session.first_game_config()
+	var packed: PackedScene = load("res://scenes/battle.tscn")
+	battle = packed.instantiate()
+	add_child(battle)
+	for i in 60:
+		await _wait(0.1)
+		if battle.state == "setup":
+			break
+	await _wait(0.3)
+	var tut: Node = battle.hud.get_node_or_null("Tutorial")
+	ok(tut != null and bool(tut.first_game) and tut._steps.size() == 4 and tut._waiting == "moved", "first game: the tutorial starts with the drag step (4 steps)")
+	if tut == null:
+		battle.queue_free()
+		return
+	var ddf: Defender = tut._drag_df
+	ok(ddf != null and ddf.id != battle.run.captain and battle.placement_error(tut._drag_spot, ddf) == "" and tut._drag_spot.distance_to(ddf.post) > 1.0,
+		"the drag step suggests a valid new spot for a fielder")
+	var slot: int = tut._ensure_in_hand("heat_wave")
+	ok(slot >= 0 and battle.cards.hand[slot] == "heat_wave" and battle.cards.check(slot) == "" and not "heat_wave" in battle.cards.draw_pile
+		and not "heat_wave" in battle.cards.discard, "_ensure_in_hand puts a playable Heat Wave in the hand, once")
+	ok(tut._ensure_in_hand("heat_wave") == slot, "_ensure_in_hand keeps a card already in hand")
+	ok(not tut._card_ready(), "the card step waits for a runner on the field")
+	# Jump to the staged step.
+	tut._step = tut._index_of("combo") - 1
+	tut._advance()
+	ok(tut._waiting == "combo" and tut._cond.is_valid() and not tut._active, "the staged step waits for its moment")
+	battle.begin_wave()
+	battle.spawn_queue.clear()
+	battle.wave_total = 0
+	battle.wave_time = 2.0
+	ok(not tut._pack_ready() and not tut.pack_spawned, "no pack in the first wave")
+	battle.run.wave = 1   # the second wave of the inning
+	battle.wave_time = 6.0
+	ok(not tut._pack_ready() and not tut.pack_spawned, "no pack mid-wave")
+	battle.wave_time = 2.0
+	ok(not tut._pack_ready() and tut.pack_spawned and tut.pack.size() == 3, "the staged pack spawns (3 runners)")
+	ok(battle.wave_total == 3, "the pack counts toward the wave")
+	var pk0: Enemy = tut.pack[0]
+	ok(absf(pk0.max_hp - 110.0) < 1.0, "a pack runner has %.0f health (one Heat Wave)" % pk0.max_hp)
+	var caster: Defender = battle.effects.caster_info("heat_wave").caster
+	var cz := caster.global_position.z if caster else 1.0
+	for k in tut.pack.size():
+		var pe: Enemy = tut.pack[k]
+		pe.tunnel_left = 0.0
+		pe.d = maxf(0.5, (cz - 14.0 + 26.0) - k * 0.85)
+		pe._update_transform(0.0)
+	ok(tut._pack_ready(), "the pack in range triggers the staged moment")
+	tut._hide()
+	tut._show_step(tut._steps[tut._step])
+	ok(tut._active and Engine.time_scale < 0.2, "bullet time while the pack waits for Heat Wave (%.2f)" % Engine.time_scale)
+	var triples0 := int(battle.run.stats.get("triple_plays", 0))
+	battle.card_cast.emit("heat_wave")
+	ok(is_equal_approx(Engine.time_scale, 1.0), "casting brings normal speed back")
+	var center := Vector3.ZERO
+	for pe in tut.pack:
+		center += (pe as Enemy).global_position / 3.0
+	battle.effects.execute("heat_wave", 1, {"point": center})
+	for i in 40:
+		await _wait(0.1)
+		if tut.celebrated:
+			break
+	ok(tut.celebrated and tut.staged_outs == 3, "Heat Wave puts the whole pack out together (%d outs)" % tut.staged_outs)
+	ok(int(battle.run.stats.get("triple_plays", 0)) == triples0 + 1, "the staged moment is a TRIPLE PLAY")
+	await _wait(2.0)
+	ok(tut._core_done and bool(Profile.data.flags.get("battle_tutorial_done", false)), "the tutorial's core steps are done after it")
+	tut.finish()
+	Engine.time_scale = 1.0
+	battle.queue_free()
+	battle = null
+	await get_tree().process_frame
 	Profile.reset_profile()

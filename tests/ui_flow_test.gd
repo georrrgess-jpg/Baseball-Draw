@@ -7,11 +7,18 @@ extends Node
 var battle: Battle
 var results: Array[String] = []
 var failures := 0
+## Real seconds as the game's own frames count them (a frame stalled by loading counts as one
+## frame's delta): what a player on a normal machine would sit through (FTUE timings, Update 13).
+var _frame_clock := 0.0
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_run.call_deferred()
+
+
+func _process(delta: float) -> void:
+	_frame_clock += delta / maxf(Engine.time_scale, 0.01)
 
 
 func _check(cond: bool, what: String) -> void:
@@ -91,6 +98,10 @@ func _button_center(b: Button) -> Vector2:
 
 
 func _run() -> void:
+	if "--ui-test-section=ftue" in OS.get_cmdline_user_args():
+		await _test_ftue()
+		_finish()
+		return
 	if "--ui-test-section=hub" in OS.get_cmdline_user_args():
 		await _test_u9_hub_play_results()
 		await _test_u10_hub()
@@ -406,6 +417,7 @@ func _run() -> void:
 	await _test_draft()
 	await _test_u11_boss_bar()
 	await _test_u11_prestige()
+	await _test_ftue()   # last: it starts again from a brand-new profile
 	_finish()
 
 
@@ -1292,9 +1304,12 @@ func _ctl_center(c: Control) -> Vector2:
 	return get_viewport().get_final_transform() * c.get_global_rect().get_center()
 
 
-## 14. Guided first game: pop-ups advance on NEXT and on the player's actions.
+## 14. Guided game (Update 13: learn by doing): every step waits for the action itself, with no
+## NEXT buttons and no pause. Here outside the first game (no staged pack): drag, PLAY BALL, a card
+## (in slow motion, with keys this time), then the tutorial is done and normal speed returns.
 func _test_tutorial() -> void:
 	Profile.data.flags["battle_tutorial_done"] = false
+	Engine.time_scale = 1.0
 	var cfg := Session.new_run_config("quick")
 	cfg.difficulty = "rookie"
 	Session.start(cfg)
@@ -1310,23 +1325,13 @@ func _test_tutorial() -> void:
 		return
 	await _wait(1.0)
 	var tut: Node = battle.hud.get_node_or_null("Tutorial")
-	_check(tut != null and tut._bubble.visible, "first game shows the tutorial pop-up")
+	_check(tut != null and tut._bubble.visible and tut._steps.size() == 3, "a guided game shows the tutorial (3 steps outside the first game)")
 	if tut == null:
 		return
-	await _wait(0.5)
-	for i in 3:
-		var nb := _find_button(tut, "NEXT  ▶")
-		if nb:
-			await _click(_button_center(nb))
-			await _wait(0.6)
-	_check(tut._waiting == "moved", "tutorial asks the player to drag a defender")
-	var df: Defender = battle.defenders[battle.defenders.size() - 1]
-	var dest := df.post
-	for off in [Vector3(2.5, 0, 0), Vector3(-2.5, 0, 0), Vector3(0, 0, 2.5), Vector3(0, 0, -2.5), Vector3(2, 0, 2), Vector3(-2, 0, -2)]:
-		if battle.placement_error(df.post + off, df) == "":
-			dest = df.post + off
-			break
-	_check(dest != df.post, "found a valid spot to drag %s to" % df.id)
+	_check(tut._waiting == "moved" and _find_button(tut, "NEXT  ▶") == null, "tutorial asks the player to drag a defender, no NEXT button")
+	var df: Defender = tut._drag_df
+	var dest: Vector3 = tut._drag_spot
+	_check(df != null and dest.distance_to(df.post) > 1.0 and battle.placement_error(dest, df) == "", "the drag step suggests a valid spot for %s" % (df.id if df else "-"))
 	var from := _screen_of(df.global_position + Vector3(0, 1.0, 0))
 	var to := _screen_of(dest)
 	_mouse_move(from)
@@ -1338,56 +1343,30 @@ func _test_tutorial() -> void:
 		await _wait(0.05)
 	_mouse_button(to, false)
 	await _wait(0.6)
-	_check(tut._step == 4, "moving a defender advances the tutorial (step %d)" % tut._step)
-	await _wait(0.5)
-	var nb2 := _find_button(tut, "NEXT  ▶")
-	if nb2:
-		await _click(_button_center(nb2))
-		await _wait(0.6)
-	_check(tut._waiting == "wave", "tutorial asks to start the wave")
+	_check(tut._step == 1 and tut._waiting == "wave", "moving a defender advances to PLAY BALL (step %d)" % tut._step)
 	await _key("start_wave")
-	for i in 80:
+	await _wait(0.3)
+	_check(battle.state == "wave" and not get_tree().paused and tut._waiting == "card", "Space starts the wave and the game keeps running")
+	for i in 250:
 		await _wait(0.1)
-		if tut._title.text == "HERE THEY COME!" and tut._bubble.visible:
+		if tut._active and tut._waiting == "card" and tut._tip_until == 0:
 			break
-	_check(get_tree().paused and tut._title.text == "HERE THEY COME!", "wave tip pauses the game (state %s, step %d, waiting %s, paused %s, title %s)" % [
-		battle.state, tut._step, tut._waiting, get_tree().paused, tut._title.text])
-	await _wait(0.6)
-	var nb3 := _find_button(tut, "NEXT  ▶")
-	if nb3:
-		await _click(_button_center(nb3))
-		await _wait(0.6)
-	_check(not get_tree().paused and tut._waiting == "card", "card step lets the game run")
-	for i in 60:
-		await _wait(0.1)
-		if battle.cards.energy >= 3.0 and not battle.lead_runners(1).is_empty():
-			break
-	for idx in battle.cards.hand.size():
-		if battle.cards.check(idx) == "":
-			await _key("card_%d" % (idx + 1))
-			var id: String = battle.cards.hand[idx]
-			var tpos: Vector3 = battle.lead_runners(1)[0].global_position if not battle.lead_runners(1).is_empty() else Field.MOUND
-			if DB.card(id).target == "defender":
-				tpos = battle.defenders[0].global_position
-			var sp := _screen_of(tpos + Vector3(0, 1.0, 0))
-			_mouse_move(sp)
-			await _wait(0.2)
-			var lead_now := battle.lead_runners(1)
-			if not lead_now.is_empty() and DB.card(id).target == "enemy":
-				sp = _screen_of(lead_now[0].center())   # the runner kept running meanwhile
-			await _click(sp)
-			break
+	_check(tut._active and Engine.time_scale < 0.5 and not get_tree().paused, "the card step runs in slow motion (scale %.2f)" % Engine.time_scale)
+	var idx: int = battle.cards.hand.find("power_throw")
+	_check(idx >= 0 and battle.cards.check(idx) == "", "Power Throw is in the hand and playable")
+	if idx >= 0:
+		await _key("card_%d" % (idx + 1))
+		await _wait(0.2)
+		var lead := battle.lead_runners(1)
+		if not lead.is_empty():
+			await _click(_screen_of((lead[0] as Enemy).center()))
 	for i in 30:
 		await _wait(0.1)
-		if tut._step == 8:
+		if tut._core_done:
 			break
-	_check(tut._step == 8 and get_tree().paused, "playing a card advances to the last step (step %d, paused %s, energy %.1f)" % [tut._step, get_tree().paused, battle.cards.energy])
-	await _wait(0.6)
-	var go := _find_button(tut, "LET'S GO!")
-	if go:
-		await _click(_button_center(go))
-		await _wait(0.6)
-	_check(bool(Profile.data.flags.get("battle_tutorial_done", false)) and not get_tree().paused, "tutorial completes and the game resumes")
+	_check(bool(Profile.data.flags.get("battle_tutorial_done", false)) and tut._core_done and is_equal_approx(Engine.time_scale, 1.0) and not get_tree().paused,
+		"playing the card completes the tutorial and normal speed returns (scale %.2f)" % Engine.time_scale)
+	_check(battle.hud.get_node_or_null("Tutorial") != null, "the tutorial stays for its one-off tips")
 
 
 ## Navigation and hints (Update 6): a screen's first-visit hint shows once, "GOT IT" moves
@@ -1655,11 +1634,15 @@ func _find_label(root: Node, text: String) -> bool:
 
 
 ## Title screen: the logo and prompt appear, input during the intro skips it, a key opens the menu.
+## (A returning player: the story intro and the guided first game are only for new players, see
+## _test_ftue.)
 func _test_title() -> void:
+	Profile.data.flags["tutorial_done"] = true
 	Router.goto("title")
 	_check(await _wait_scene("title"), "the title screen opens")
 	await _wait(0.4)
 	var ts: Node = get_tree().current_scene
+	_check(ts.find_child("PlayedBefore", true, false) == null, "a returning player gets no \"I've played before\" on the title")
 	_mouse_button(Vector2(800, 450), true)   # a press during the intro skips to the prompt
 	await _wait(0.1)
 	_mouse_button(Vector2(800, 450), false)
@@ -1675,6 +1658,453 @@ func _test_title() -> void:
 	k2.pressed = false
 	Input.parse_input_event(k2)
 	_check(await _wait_scene("main_menu"), "pressing a key opens the main menu")
+	await _wait(0.5)
+
+
+# ---------------------------------------------------------------- Update 13: Rookie Camp (first session)
+
+## `--ftue-shots=<dir>`: saves the screen at each step of the FTUE section (docs screenshots).
+func _shot(name: String) -> void:
+	var dir := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--ftue-shots="):
+			dir = a.split("=")[1]
+	if dir == "":
+		return
+	await RenderingServer.frame_post_draw
+	DirAccess.make_dir_recursive_absolute(dir)
+	get_viewport().get_texture().get_image().save_png("%s/%s.png" % [dir, name])
+	print("[UITEST] shot ", name)
+
+
+func _press_key(code: Key) -> void:
+	var k := InputEventKey.new()
+	k.keycode = code
+	k.physical_keycode = code
+	k.pressed = true
+	Input.parse_input_event(k)
+	await _wait(0.08)
+	var k2 := k.duplicate() as InputEventKey
+	k2.pressed = false
+	Input.parse_input_event(k2)
+	await _wait(0.1)
+
+
+## Title -> START for a new player: returns the title scene once its story intro is open (or null).
+func _ftue_title_to_intro(shot := "") -> Node:
+	Router.goto("title")
+	if not await _wait_scene("title"):
+		return null
+	await _wait(0.4)
+	var ts: Node = get_tree().current_scene
+	_mouse_button(Vector2(800, 450), true)   # skip the logo animation
+	await _wait(0.1)
+	_mouse_button(Vector2(800, 450), false)
+	await _wait(0.5)
+	if shot != "":
+		await _wait(0.8)
+		await _shot(shot)
+	await _press_key(KEY_SPACE)
+	for i in 80:
+		await _wait(0.1)
+		if ts.get("intro") != null:
+			return ts
+	return ts
+
+
+func _wait_battle_setup(max_s := 40.0) -> Battle:
+	for i in int(max_s * 10):
+		await _wait(0.1)
+		var sc := get_tree().current_scene
+		if sc is Battle and (sc as Battle).state == "setup" and not Router.busy:
+			return sc
+	return null
+
+
+## Puts out every runner on the field except those in `keep` (UI flow, not balance), starts waves
+## from setup and breaks, until the battle reaches one of `want`.
+func _ftue_play_until(want: Array, keep: Array = [], max_steps := 900) -> bool:
+	for i in max_steps:
+		if battle.state in want:
+			return true
+		if battle.state == "results" and not "results" in want:
+			return false
+		if battle.state in ["setup", "break"]:
+			battle.begin_wave()
+		elif battle.state == "wave":
+			battle.wave_time += 2.0
+			for e: Enemy in battle.enemies.duplicate():
+				if is_instance_valid(e) and e.alive and e.targetable() and not e in keep:
+					battle.deal_damage(e, e.hp + 10.0, {"kind": "throw", "true": true, "pierce": 1.0})
+		await _wait(0.1)
+	return battle.state in want
+
+
+## Update 13 fresh-player flow: a brand-new profile goes title -> story intro (a click to the next
+## card, then SKIP) -> straight into the guided first game (no hub) -> drag, PLAY BALL, the first
+## throw, a card on a runner (slow motion), the staged pack (Heat Wave -> triple play) -> the boss
+## tease -> the first win -> the first-time Results -> the guided first pack -> the guided deck add ->
+## the hub with flags.ftue_return_hub -> game 2. Then a second new player watches the whole intro
+## (no skip, under 15 s) and a third takes "I've played before". Checks the funnel's order and
+## prints the measured times.
+func _test_ftue() -> void:
+	Engine.time_scale = 1.0
+	Session.guide = ""
+	if not Session.is_new_player():   # the full run reaches here with a used profile
+		Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	_check(Session.is_new_player(), "FTUE: a fresh profile is a new player")
+	var wall0 := Time.get_ticks_msec()
+	var clock0 := _frame_clock
+	Session.funnel_on_launch()   # what boot does on every launch
+	var f := Session.funnel()
+	_check(f.has("first_launch") and int(f.get("day", -1)) == 0 and f.get("days", []) == [0], "FTUE: the first launch starts the funnel on day 0")
+
+	# 1. Title -> story intro -> SKIP.
+	var ts := await _ftue_title_to_intro("title_new_player")
+	_check(ts != null and ts.find_child("PlayedBefore", true, false) != null, "FTUE: a new player's title offers \"I've played before\"")
+	var intro: StoryIntro = ts.get("intro") if ts else null
+	_check(intro != null and intro.index == 0 and intro.find_child("StoryCard1", true, false) != null, "FTUE: START opens the story intro on card 1 (not the hub)")
+	if intro == null:
+		return
+	await _wait(1.3)
+	await _shot("intro_1_wreckers")
+	await _click(get_viewport().get_final_transform() * Vector2(960, 540))
+	await _wait(0.3)
+	_check(intro.index == 1, "FTUE: a click moves the intro to card 2 (index %d)" % intro.index)
+	await _wait(1.2)
+	await _shot("intro_2_team")
+	await _click(get_viewport().get_final_transform() * Vector2(960, 540))
+	await _wait(1.5)
+	await _shot("intro_3_cards")
+	var skip_btn: Button = intro.find_child("IntroSkip", true, false)
+	_check(skip_btn != null and intro.find_child("PlayedBefore", true, false) != null, "FTUE: the intro has SKIP and \"I've played before\"")
+	await _press_key(KEY_ESCAPE)
+	await _wait(0.35)
+	await _shot("intro_4_play_ball")
+	battle = await _wait_battle_setup()
+	_check(battle != null, "FTUE: skipping the intro goes straight into the first game")
+	if battle == null:
+		return
+	_check(f.has("intro_done") and bool(f.get("intro_skipped", false)) and f.has("first_game_start"), "FTUE: the funnel has intro_done (skipped) and first_game_start")
+	var cfg := battle.run.config
+	_check(bool(cfg.get("first_game", false)) and battle.run.difficulty_id == "rookie" and battle.run.mode_id == "quick" and battle.run.max_innings == 2 \
+		and battle.run.boss_for_inning(2) == "iron_slugger", "FTUE: the first game is a 2-inning Rookie Quick Defense with the Iron Slugger last")
+	_check(bool(Profile.data.flags.get("tutorial_done", false)) and not bool(Profile.data.flags.get("battle_tutorial_done", true)), "FTUE: no welcome panel later, the battle tutorial is on")
+	await _wait(1.2)
+	var tut: Node = battle.hud.get_node_or_null("Tutorial")
+	_check(tut != null and tut._bubble.visible and tut._waiting == "moved" and tut._title.text == "DRAG A FIELDER" and tut._pointer.drag,
+		"FTUE: step 1 asks to drag a fielder, with the ghost hand")
+	if tut == null:
+		return
+	await _wait(0.6)
+	await _shot("tutorial_1_drag")
+	# 2. Drag the suggested fielder onto the ring.
+	var df: Defender = tut._drag_df
+	var from := _screen_of(df.global_position + Vector3(0, 1.0, 0))
+	var to := _screen_of(tut._drag_spot)
+	_mouse_move(from)
+	await _wait(0.2)
+	_mouse_button(from, true)
+	await _wait(0.1)
+	for k in 10:
+		_mouse_move(from.lerp(to, (k + 1) / 10.0))
+		await _wait(0.05)
+	_mouse_button(to, false)
+	await _wait(0.6)
+	_check(tut._waiting == "wave" and tut._title.text == "PLAY BALL!", "FTUE: the drag moves on to PLAY BALL (waiting %s)" % tut._waiting)
+	await _wait(0.3)
+	await _shot("tutorial_2_play_ball")
+	await _click(_ctl_center(battle.hud._start_btn))
+	for i in 150:
+		await _wait(0.1)
+		if f.has("first_throw"):
+			break
+	_check(f.has("first_throw"), "FTUE: the defenders' first throw is recorded")
+	var throw_wall := float(Time.get_ticks_msec() - wall0) / 1000.0
+	var throw_clock := _frame_clock - clock0
+	await _wait(0.4)
+	if tut._title.text == "THEY'RE ON IT!":
+		await _shot("tutorial_3_throw_tip")
+	# 3. PLAY A CARD: slow motion, Power Throw in hand, card then runner.
+	for i in 250:
+		await _wait(0.1)
+		if tut._waiting == "card" and tut._active and tut._tip_until == 0:
+			break
+	_check(tut._waiting == "card" and tut._active and Engine.time_scale < 0.5 and "power_throw" in battle.cards.hand,
+		"FTUE: the card step slows the game and puts Power Throw in the hand (scale %.2f)" % Engine.time_scale)
+	await _wait(0.3)
+	await _shot("tutorial_4_card")
+	var cv: Control = tut._card_view("power_throw")
+	if cv:
+		await _click(_ctl_center(cv))
+		await _wait(0.3)
+		await _shot("tutorial_4b_card_aim")
+	_check(battle.targeting_card() == "power_throw" and tut._body.text.contains("runner"), "FTUE: tapping the card asks for a runner")
+	var lead := battle.lead_runners(1)
+	if not lead.is_empty():
+		await _click(_screen_of((lead[0] as Enemy).center()))
+	for i in 30:
+		await _wait(0.1)
+		if tut._waiting != "card":
+			break
+	_check(tut._waiting == "combo" and f.has("first_card") and is_equal_approx(Engine.time_scale, 1.0),
+		"FTUE: a card on a runner completes the step and normal speed returns (waiting %s, scale %.2f)" % [tut._waiting, Engine.time_scale])
+	# 4. The staged pack: finish wave 1, then wave 2 brings three runners in a tight pack.
+	var reached := await _ftue_play_until(["break"])
+	_check(reached, "FTUE: wave 1 cleared")
+	battle.begin_wave()
+	for i in 600:
+		await _wait(0.1)
+		for e: Enemy in battle.enemies.duplicate():   # the rest of the wave goes out, the pack stays
+			if is_instance_valid(e) and e.alive and e.targetable() and not e in tut.pack and tut.pack_spawned:
+				battle.deal_damage(e, e.hp + 10.0, {"kind": "throw", "true": true, "pierce": 1.0})
+		if tut._waiting == "combo" and tut._active and tut._tip_until == 0:
+			break
+		if tut._waiting != "combo":
+			break
+	_check(tut.pack_spawned and tut.pack.size() == 3 and tut._waiting == "combo" and tut._active and Engine.time_scale < 0.2 and "heat_wave" in battle.cards.hand,
+		"FTUE: the pack triggers bullet time with Heat Wave in hand (scale %.2f, waiting %s)" % [Engine.time_scale, tut._waiting])
+	await _wait(0.3)
+	await _shot("tutorial_5_pack")
+	cv = tut._card_view("heat_wave")
+	if cv:
+		await _click(_ctl_center(cv))
+		await _wait(0.3)
+		await _shot("tutorial_5b_pack_aim")
+	var pp: Variant = tut._pack_point()
+	if pp is Vector2:
+		await _click(get_viewport().get_final_transform() * (pp as Vector2))
+	for i in 60:
+		await _wait(0.1)
+		if tut.celebrated:
+			break
+	await _wait(0.25)
+	await _shot("tutorial_6_triple_play")
+	var plays := int(battle.run.stats.get("triple_plays", 0)) + int(battle.run.stats.get("double_plays", 0))
+	_check(tut.celebrated and tut.staged_outs >= 2 and plays >= 1, "FTUE: Heat Wave into the pack is a staged %d-out play (triple %d, double %d)" % [
+		tut.staged_outs, int(battle.run.stats.get("triple_plays", 0)), int(battle.run.stats.get("double_plays", 0))])
+	await _wait(2.0)
+	_check(bool(Profile.data.flags.get("battle_tutorial_done", false)) and tut._core_done, "FTUE: the guided steps are done after the staged play")
+	# 5. On to the dugout, inning 2 and the boss tease.
+	Engine.time_scale = 3.0
+	reached = await _ftue_play_until(["dugout"])
+	Engine.time_scale = 1.0
+	_check(reached, "FTUE: inning 1 ends in the dugout")
+	var dug: Node = null
+	for i in 60:
+		await _wait(0.1)
+		dug = battle.hud.get("_dugout")
+		if dug and is_instance_valid(dug):
+			break
+	var nxt := _find_button(dug, "NEXT INNING  ▶") if dug else null
+	if nxt:
+		await _wait(0.6)
+		await _click(_button_center(nxt))
+	for i in 100:
+		await _wait(0.1)
+		if battle.run.inning == 2 and battle.state == "setup":
+			break
+	_check(battle.run.inning == 2, "FTUE: NEXT INNING starts inning 2")
+	var boss: Enemy = null
+	Engine.time_scale = 3.0
+	for step in 900:
+		if battle.state in ["setup", "break"]:
+			battle.begin_wave()
+		elif battle.state == "wave":
+			battle.wave_time += 2.0
+			if battle.boss_alive:
+				boss = battle.boss_alive
+				break
+			for e: Enemy in battle.enemies.duplicate():
+				if is_instance_valid(e) and e.alive and e.targetable():
+					battle.deal_damage(e, e.hp + 10.0, {"kind": "throw", "true": true, "pierce": 1.0})
+		await _wait(0.1)
+	Engine.time_scale = 1.0
+	_check(boss != null and boss.id == "iron_slugger", "FTUE: the Iron Slugger closes the first game")
+	_check(battle._boss_intro_node != null and is_instance_valid(battle._boss_intro_node), "FTUE: the first boss gets its intro (the boss tease)")
+	for i in 120:
+		await _wait(0.1)
+		if tut._title.text.begins_with("BOSS") and tut._bubble.visible:
+			break
+	_check(tut._title.text.begins_with("BOSS") and tut._bubble.visible, "FTUE: a short boss tip follows the intro (%s)" % tut._title.text)
+	await _shot("tutorial_7_boss")
+	var boss_hp_share := boss.max_hp / float(DB.enemy("iron_slugger").hp) if boss else 0.0
+	_check(boss_hp_share < 0.6, "FTUE: the first boss is weakened (%.0f %% of its base health)" % (boss_hp_share * 100.0))
+	Engine.time_scale = 3.0
+	reached = await _ftue_play_until(["results"])
+	Engine.time_scale = 1.0
+	for i in 80:   # the game ends 1.6 s after the last out
+		if battle.run.finished:
+			break
+		await _wait(0.1)
+	_check(reached and battle.run.won, "FTUE: the first game is won (state %s, runs %d)" % [battle.state, battle.run.runs])
+	_check(f.has("first_win"), "FTUE: the funnel has first_win")
+	# 6. First-time Results: big moments and one button.
+	var res: Control = null
+	for i in 60:
+		await _wait(0.1)
+		res = battle.hud.get("_results")
+		if res and is_instance_valid(res):
+			break
+	_check(res != null and bool(res.get("first_time")) and res.find_child("FirstWin", true, false) != null, "FTUE: the first win gets the first-time Results layout")
+	if res == null:
+		return
+	for nm in ["CoinsMoment", "LevelMoment", "PacksMoment"]:
+		_check(res.find_child(nm, true, false) != null, "FTUE: Results shows the %s" % nm)
+	_check(res.find_child("WhatsNext", true, false) == null and res.find_child("FullResults", true, false) != null, "FTUE: no detail columns, a \"See full results\" link instead")
+	var fw: Control = res.find_child("FirstWin", true, false)
+	var ts_min := 99.0
+	var c_res := _frame_clock
+	for i in 150:   # the build-up takes about 4.2 s (game time)
+		await _wait(0.1)
+		ts_min = minf(ts_min, Engine.time_scale)
+		var ttl: Control = fw.find_child("ResultTitle", true, false) if fw else null
+		var ob: Control = fw.find_child("OpenFirstPack", true, false) if fw else null
+		if ttl and ob and ttl.modulate.a > 0.99 and ob.modulate.a > 0.99 and _frame_clock - c_res > 4.6:
+			break
+	print("[UITEST] FTUE results build-up: %.1f s frame clock, lowest time scale %.2f" % [_frame_clock - c_res, ts_min])
+	_check(res.is_visible_in_tree() and fw != null and fw.modulate.a > 0.9 and (fw.find_child("ResultTitle", true, false) as Control).modulate.a > 0.9,
+		"FTUE: the first-time Results are on screen after their build-up (visible %s, first %.2f, title %.2f, hud %s, root %s)" % [
+			res.is_visible_in_tree(), fw.modulate.a if fw else -1.0, (fw.find_child("ResultTitle", true, false) as Control).modulate.a if fw else -1.0,
+			battle.hud.visible, (battle.hud.get("root") as CanvasItem).visible if battle.hud.get("root") else false])
+	await _shot("results_first_win")
+	var open_btn: Button = res.find_child("OpenFirstPack", true, false)
+	_check(open_btn != null and open_btn.text == "OPEN YOUR PACK!", "FTUE: one big OPEN YOUR PACK! button")
+	if open_btn == null:
+		return
+	await _click(_button_center(open_btn))
+	_check(await _wait_scene("packs"), "FTUE: OPEN YOUR PACK! opens Card Packs")
+	await _wait(1.0)
+	# 7. The guided first pack.
+	var ps: Node = get_tree().current_scene
+	_check(bool(ps.get("guided")) and not (ps.get("_left") as Control).visible and (ps.get("_guide_label") as Label).text == "TAP TO OPEN!",
+		"FTUE: the guided pack hides the shelves and says TAP TO OPEN!")
+	await _shot("pack_1_tap_to_open")
+	var prect: Rect2 = ps.call("_pack_screen_rect")
+	await _click(get_viewport().get_final_transform() * prect.get_center())
+	for i in 120:
+		await _wait(0.1)
+		if ps.get("state") == "reveal":
+			break
+	_check(ps.get("state") == "reveal" and f.has("first_pack_opened"), "FTUE: tapping the pack opens it (state %s)" % ps.get("state"))
+	_check((ps.get("_guide_label") as Label).text == "TAP A CARD TO FLIP IT!", "FTUE: then TAP A CARD TO FLIP IT!")
+	await _wait(0.4)
+	await _shot("pack_2_flip")
+	var act: Button = ps.get("_action")
+	await _click(_button_center(act))
+	for i in 100:
+		await _wait(0.1)
+		if ps.get("state") == "done":
+			break
+	await _wait(1.2)
+	await _shot("pack_3_new_card")
+	var new_card := str(ps.get("guide_card"))
+	_check(ps.get("state") == "done" and (new_card == "" or act.text.begins_with("ADD IT TO MY DECK")), "FTUE: every card face up -> %s (%s)" % [act.text, new_card])
+	await _click(_button_center(act))
+	if new_card == "":
+		_check(await _wait_scene("main_menu"), "FTUE: no new card: straight to the hub")
+	else:
+		# 8. The guided deck step.
+		_check(await _wait_scene("deck_builder"), "FTUE: ADD IT TO MY DECK opens Cards & Deck")
+		await _wait(1.0)
+		var db: Node = get_tree().current_scene
+		_check(db.get("guide_phase") == "pick" and db.find_child("DeckGuide", true, false) != null, "FTUE: the deck guide asks for the new card")
+		await _shot("deck_1_pick")
+		var ncv: Control = (db.get("_col_views") as Dictionary).get(new_card)
+		if ncv:
+			await _click(_ctl_center(ncv))
+			await _wait(0.5)
+		_check(db.get("guide_phase") == "swap", "FTUE: tapping the new card asks which deck card to swap out")
+		await _shot("deck_2_swap")
+		var si: int = db.call("suggested_swap")
+		var slot_cv: Control = (db.get("_slot_cards") as Array)[si]
+		if slot_cv:
+			await _click(_ctl_center(slot_cv))
+			await _wait(0.8)
+		_check(db.get("guide_phase") == "done" and new_card in Profile.data.deck and f.has("deck_edited"), "FTUE: the swap saves the deck with %s" % new_card)
+		var cont: Button = db.find_child("GuideContinue", true, false)
+		_check(cont != null and cont.is_visible_in_tree(), "FTUE: DECK READY! offers one button back")
+		await _wait(0.4)
+		await _shot("deck_3_ready")
+		if cont:
+			await _click(_button_center(cont))
+		_check(await _wait_scene("main_menu"), "FTUE: the button returns to the hub")
+	_check(bool(Profile.data.flags.get("ftue_return_hub", false)) and bool(Profile.data.flags.get("ftue_rewards_done", false)), "FTUE: the hub is asked to spotlight PLAY (flags.ftue_return_hub)")
+	await _wait(1.5)
+	await _shot("hub_return")
+	# 9. Game 2.
+	var cfg2 := Session.new_run_config("quick")
+	Session.start(cfg2)
+	battle = await _wait_battle_setup()
+	_check(battle != null and f.has("game2_start") and not bool(battle.run.config.get("first_game", false)) and battle.run.max_innings == 3,
+		"FTUE: game 2 is a normal Quick Defense and is recorded")
+	_check(battle != null and battle.hud.get_node_or_null("Tutorial") == null, "FTUE: game 2 has no tutorial")
+	# Funnel order and timings.
+	var order := ["first_launch", "intro_done", "first_game_start", "first_throw", "first_card", "first_win", "first_pack_opened", "deck_edited", "game2_start"]
+	var ok := true
+	for i in order.size():
+		if not f.has(order[i]) or (i > 0 and float(f[order[i]]) < float(f[order[i - 1]])):
+			ok = false
+	_check(ok, "FTUE: the funnel has every step, in order")
+	var line := ""
+	for s in order:
+		line += "%s=%.1f " % [s, Session.funnel_seconds(s)]
+	print("[UITEST] FTUE funnel (s since first launch, wall clock): ", line)
+	print("[UITEST] FTUE time to first throw (intro skipped): wall %.1f s, frame clock %.1f s" % [throw_wall, throw_clock])
+	_check(throw_clock < 60.0, "FTUE: the first throw comes within a minute of launch (frame clock %.1f s)" % throw_clock)
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+	# 10. A second new player watches the whole intro.
+	Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	Session.funnel_on_launch()
+	var ts2 := await _ftue_title_to_intro()
+	var intro2: StoryIntro = ts2.get("intro") if ts2 else null
+	_check(intro2 != null, "FTUE (no skip): the intro opens")
+	if intro2:
+		var c0 := _frame_clock
+		var max_index := 0
+		var done := [false]
+		intro2.finished.connect(func(_s: bool) -> void: done[0] = true)
+		for i in 300:
+			await _wait(0.1)
+			max_index = maxi(max_index, intro2.index)
+			if done[0]:
+				break
+		var dur := _frame_clock - c0
+		_check(done[0] and max_index >= 2 and not bool(Session.funnel().get("intro_skipped", false)), "FTUE (no skip): all three story cards play, then the game starts")
+		_check(dur < 15.0, "FTUE (no skip): the intro takes %.1f s (under 15 s)" % dur)
+		print("[UITEST] FTUE intro without skipping: %.1f s" % dur)
+		battle = await _wait_battle_setup()
+		_check(battle != null and bool(battle.run.config.get("first_game", false)), "FTUE (no skip): the first game follows")
+	Router.goto("main_menu")
+	await _wait_scene("main_menu")
+
+	# 11. A third new player: "I've played before" (in the intro) goes to the hub.
+	Profile.reset_profile()
+	Profile.data.erase("onboarding_funnel")
+	Session.funnel_on_launch()
+	var ts3 := await _ftue_title_to_intro()
+	var intro3: StoryIntro = ts3.get("intro") if ts3 else null
+	var pb: Button = intro3.find_child("PlayedBefore", true, false) if intro3 else null
+	if pb:
+		await _wait(0.7)
+		await _click(_button_center(pb))
+	_check(await _wait_scene("main_menu"), "FTUE: \"I've played before\" goes to the hub")
+	_check(bool(Profile.data.flags.get("battle_tutorial_done", false)) and bool(Profile.data.flags.get("ftue_skipped", false)) and not Session.is_new_player(),
+		"FTUE: \"I've played before\" skips the guided game for good")
+	Router.goto("title")
+	await _wait_scene("title")
+	await _wait(0.4)
+	_check(get_tree().current_scene.find_child("PlayedBefore", true, false) == null, "FTUE: the next launch's title is the returning player's")
+	_mouse_button(Vector2(800, 450), true)
+	await _wait(0.1)
+	_mouse_button(Vector2(800, 450), false)
+	await _wait(0.5)
+	await _press_key(KEY_SPACE)
+	_check(await _wait_scene("main_menu"), "FTUE: and START goes to the hub, not the intro")
 	await _wait(0.5)
 
 

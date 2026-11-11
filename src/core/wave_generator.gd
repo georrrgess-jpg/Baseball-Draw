@@ -41,9 +41,17 @@ static func mini_boss_for(run: RunState, wave_index: int) -> String:
 
 ## Per-mode fine tuning on top of the difficulty (data/modes.json "tuning": {difficulty or
 ## "all": {"enemy_hp", "budget"}}), so Quick Defense and Standard Siege can be balanced apart.
+## A run's own "tuning" (the first game's assist, Update 13) multiplies on top.
 static func mode_tuning(run: RunState, key: String) -> float:
 	var t: Dictionary = DB.mode(run.mode_id).get("tuning", {})
-	return float(t.get("all", {}).get(key, 1.0)) * float(t.get(run.difficulty_id, {}).get(key, 1.0))
+	return float(t.get("all", {}).get(key, 1.0)) * float(t.get(run.difficulty_id, {}).get(key, 1.0)) * _run_tuning(run, key)
+
+
+static func _run_tuning(run: RunState, key: String) -> float:
+	var rt: Variant = run.config.get("tuning", {})
+	if typeof(rt) != TYPE_DICTIONARY or typeof((rt as Dictionary).get(key, 1.0)) not in [TYPE_INT, TYPE_FLOAT]:
+		return 1.0
+	return float(rt.get(key, 1.0))
 
 
 ## Per-mode boss health on top of the usual scaling (data/modes.json "tuning": {difficulty or "all":
@@ -57,7 +65,7 @@ static func boss_hp_tuning(run: RunState, boss_id: String) -> float:
 			mult *= float((v as Dictionary).get(boss_id, 1.0))
 		else:
 			mult *= float(v)
-	return mult
+	return mult * _run_tuning(run, "boss_hp")
 
 
 ## Boss health (Update 11). Bosses take BOSS_HP_SHARE of the run's health multiplier (they have

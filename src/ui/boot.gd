@@ -1,7 +1,8 @@
 extends Control
-## Startup: once autoloads settle, opens the animated title screen (then the main menu).
+## Startup: once autoloads settle, opens the animated title screen (then the main menu, or for a
+## brand-new player the story intro and the guided first game).
 ## Command-line flags (after `--`) support automated testing:
-##   --test-battle=<mode>   jump straight into a battle
+##   --test-battle=<mode>   jump straight into a battle (`first_game`: the guided first game's setup)
 ##   --auto                 let the battle play itself (auto-start waves, autoplay cards)
 ##   --smoke-test           release-build check: menu, a Quick Defense autopilot game, save/reload (CI)
 ##   --deck=a,b,...  --seed=N  fixed deck / run seed for balance simulations (tools/balance)
@@ -36,9 +37,13 @@ func _ready() -> void:
 		var t: Node = load("res://tests/ui_flow_test.gd").new()
 		get_tree().root.add_child.call_deferred(t)
 		return
+	# First-session funnel (Update 13): a new player's first launch, and the day index of this launch.
+	Session.funnel_on_launch()
 	for a in args:
 		if a.begins_with("--test-battle="):
-			var cfg := Session.new_run_config(a.split("=")[1])
+			var mode_arg := a.split("=")[1]
+			# `--test-battle=first_game`: the guided first game's configuration (with --auto: measure it).
+			var cfg := Session.first_game_config() if mode_arg == "first_game" else Session.new_run_config(mode_arg)
 			cfg.auto_test = "--auto" in args
 			for b in args:
 				if b.begins_with("--arena="):

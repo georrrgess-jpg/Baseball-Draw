@@ -5,6 +5,9 @@ extends Node3D
 ## and the team celebrates on the field.
 ## Foreground: the Baseball Draw logo slams in (flash, light rays, shine sweep, gold sparkles), then
 ## "PRESS ANY BUTTON TO START" pulses at the bottom. Any key, click or pad button opens the main menu.
+## Update 13: a brand-new player (Session.is_new_player) goes to the story intro (StoryIntro, over this
+## stadium) and then straight into the guided first game; "I've played before" under the prompt (and
+## in the intro) skips all of it and opens the hub.
 
 const ARENA := "champions_citadel"
 const LOGO_PATH := "res://assets/textures/logo/logo_tagline.png"
@@ -36,6 +39,11 @@ var _prompt_box: Control
 var _prompt_band: Panel
 var _sparkles: CPUParticles2D
 var _intro_tw: Tween
+# Update 13 (Rookie Camp): a brand-new player goes from here to the story intro and the guided first
+# game; "I've played before" goes to the hub instead.
+var _new_player := false
+var _before_btn: Button
+var intro: StoryIntro
 
 
 func _ready() -> void:
@@ -58,6 +66,7 @@ func _ready() -> void:
 	_place_camera(0.0)
 	_spawn_team()
 	_build_searchlights()
+	_new_player = Session.is_new_player()
 	_build_overlay()
 
 	Audio.play_music("menu_theme")
@@ -349,6 +358,23 @@ void fragment() {
 	_prompt.modulate.a = 0.0
 	_prompt_box.add_child(_prompt)
 
+	if _new_player:
+		# A returning player on a new device can skip the guided first session.
+		_before_btn = UITheme.button("I've played before  ▸", "ghost", 24)
+		_before_btn.name = "PlayedBefore"
+		_before_btn.add_theme_color_override("font_color", Color(1, 1, 1, 0.82))
+		_before_btn.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		_before_btn.add_theme_constant_override("outline_size", 6)
+		_before_btn.tooltip_text = "Skip the intro and the guided first game, and go to the clubhouse."
+		_before_btn.focus_mode = Control.FOCUS_NONE
+		_before_btn.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_before_btn.custom_minimum_size = Vector2(260, 48)
+		_before_btn.position = Vector2(-130, -82)
+		_before_btn.modulate.a = 0.0
+		_before_btn.visible = false
+		_before_btn.pressed.connect(played_before)
+		root.add_child(_before_btn)
+
 	var ver := UITheme.label("v%s" % ProjectSettings.get_setting("application/config/version", "1.0"), 16, Color(1, 1, 1, 0.35))
 	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	ver.position = Vector2(-90, -36)
@@ -419,10 +445,15 @@ func _logo_impact() -> void:
 
 func _show_prompt() -> void:
 	_ready_for_input = true
+	if "--title-autostart" in OS.get_cmdline_user_args():   # screenshot helper: press start by itself
+		get_tree().create_timer(0.6).timeout.connect(start)
 	_prompt.modulate.a = 0.0
 	var tw := _prompt.create_tween().set_parallel()
 	tw.tween_property(_prompt, "modulate:a", 1.0, 0.4)
 	tw.tween_property(_prompt_band, "modulate:a", 1.0, 0.4)
+	if _before_btn:
+		_before_btn.visible = true
+		tw.tween_property(_before_btn, "modulate:a", 1.0, 0.4).set_delay(0.3)
 	var pulse := _prompt.create_tween().set_loops()
 	pulse.tween_property(_prompt, "scale", Vector2(1.05, 1.05), 0.75).set_trans(Tween.TRANS_SINE)
 	pulse.parallel().tween_property(_prompt, "self_modulate", Color(1.15, 1.05, 0.75), 0.75).set_trans(Tween.TRANS_SINE)
@@ -440,8 +471,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		pressed = true
 	elif event is InputEventJoypadButton and event.pressed:
 		pressed = true
-	if not pressed:
-		return
+	if not pressed or intro != null:
+		return   # the story intro handles its own input
 	get_viewport().set_input_as_handled()
 	if _started:
 		return
@@ -464,11 +495,15 @@ func _skip_intro() -> void:
 	_show_prompt()
 
 
-## Leaves for the main menu: a burst, the crowd roars, the logo rushes toward the camera.
+## Leaves for the main menu: a burst, the crowd roars, the logo rushes toward the camera. A brand-new
+## player gets the story intro instead, and then the guided first game.
 func start() -> void:
 	if _started:
 		return
 	_started = true
+	if _before_btn:
+		_before_btn.disabled = true
+		_before_btn.create_tween().tween_property(_before_btn, "modulate:a", 0.0, 0.2)
 	Audio.ui("ui_confirm")
 	Audio.play("crowd_roar", -2.0)
 	_flash.color = Color(1.0, 0.95, 0.85, 0.5)
@@ -481,7 +516,35 @@ func start() -> void:
 	tw.tween_property(_rays, "modulate:a", 0.0, 0.3)
 	if stadium.fireworks:
 		stadium.fireworks.launch_show(5, 0.6, Vector3(0, 0, -36), Vector2(28, 6), Vector2(20, 30))
-	tw.chain().tween_callback(func() -> void: Router.goto("main_menu"))
+	if _new_player:
+		tw.chain().tween_callback(_open_intro)
+	else:
+		tw.chain().tween_callback(func() -> void: Router.goto("main_menu"))
+
+
+## "I've played before" (title or intro): no intro, no guided game; straight to the hub.
+func played_before() -> void:
+	if _started and intro == null:
+		return
+	_started = true
+	Session.skip_onboarding()
+	Audio.ui("ui_confirm")
+	Router.goto("main_menu")
+
+
+## The story intro over the live stadium; when it ends (or is skipped) the first game starts.
+func _open_intro() -> void:
+	intro = StoryIntro.new()
+	intro.name = "StoryIntro"
+	intro.finished.connect(func(skipped: bool) -> void:
+		if skipped:
+			Session.funnel()["intro_skipped"] = true
+		Session.funnel_mark("intro_done")
+		Session.start_first_game())
+	intro.played_before.connect(played_before)
+	add_child(intro)
+	if stadium.crowd:
+		stadium.crowd.cheer(0.6, 1.2)
 
 
 ## Rotating light rays drawn behind the logo.

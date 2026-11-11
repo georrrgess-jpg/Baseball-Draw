@@ -837,10 +837,12 @@ func spawn_enemy(id: String, route: Route, start_d := 0.0, opts: Dictionary = {}
 
 
 ## Boss entrance (see BossIntro): camera to the gate, gate burst, name card, camera back.
-## Skipped in auto tests, during the guided first game, while another cinematic holds the
-## camera, and in Practice after the first time each boss is spawned.
+## Skipped in auto tests, while the guided first game's core steps are on, while another cinematic
+## holds the camera, and in Practice after the first time each boss is spawned. (The first game's
+## boss, after the core steps, gets its intro: the boss tease of Update 13.)
 func _boss_intro(e: Enemy, route: Route) -> void:
-	if auto_test or cam.cinematic or (hud and hud.get_node_or_null("Tutorial") != null):
+	if auto_test or cam.cinematic or (hud and hud.get_node_or_null("Tutorial") != null \
+			and not bool(Profile.data.flags.get("battle_tutorial_done", false))):
 		return
 	if practice and _intro_seen.has(e.id):
 		return

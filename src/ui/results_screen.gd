@@ -26,6 +26,12 @@ const SEASON_ACCENT := Color("#B27BF0")
 var _rv: VBoxContainer
 var _again: Button
 var _season_row: Control
+## Update 13: the first win of a player who came through the guided first game gets a simple,
+## big-moment layout (FirstWin) that leads into the guided first pack; "See full results" switches
+## to the classic three columns.
+var first_time := false
+var _first: Control
+var _classic: Control
 
 
 func _ready() -> void:
@@ -38,7 +44,34 @@ func _ready() -> void:
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 	UITheme.bound_tween(dim).tween_property(dim, "color:a", 0.7, 1.0).set_delay(1.0)
+	var won: bool = result.get("won", false)
+	if won and not result.get("practice", false):
+		Session.funnel_mark("first_win")
+	first_time = won and not result.get("practice", false) and (Session.ftue_rewards_pending() or "--ftue-results" in OS.get_cmdline_user_args())
+	if first_time:
+		_first = FirstWinResults.new()
+		_first.set("result", result)
+		_first.set("on_full", _show_classic)
+		add_child(_first)
+		_again = _first.get("open_btn")
+		return
+	_build_classic()
+
+
+## "See full results" from the first-win layout.
+func _show_classic() -> void:
+	if _classic:
+		return
+	if _first and is_instance_valid(_first):
+		_first.queue_free()
+		_first = null
+	first_time = false
+	_build_classic()
+
+
+func _build_classic() -> void:
 	var margin := MarginContainer.new()
+	_classic = margin
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right"]:
 		margin.add_theme_constant_override("margin_" + side, 40)
@@ -921,6 +954,10 @@ func _play_again() -> void:
 	cfg.erase("start_inning")
 	cfg.erase("start_wave")
 	cfg.erase("auto_test")
+	if bool(cfg.get("first_game", false)):   # the next one is a normal Quick Defense (Update 13)
+		for k in ["first_game", "innings", "bosses", "tuning"]:
+			cfg.erase(k)
+		cfg.deck = Profile.data.deck.duplicate()
 	var deck: Array = []
 	for cid in cfg.get("deck", []):
 		if Profile.is_card_owned(str(cid)):
