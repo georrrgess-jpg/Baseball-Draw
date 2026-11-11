@@ -1188,7 +1188,7 @@ func _build_missions_panel(max_rows := 3) -> Control:
 		var claimed := bool(inst.claimed)
 		row.add_child(UITheme.icon_rect("check" if claimed else ("gift" if done else "target"), 22,
 			UITheme.GREEN if claimed else (UITheme.GOLD if done else UITheme.MUTED)))
-		var t := UITheme.label(("NEW MANAGER: " if inst.kind == "starter" else "") + Missions.text(inst), UITheme.FS_BODY,
+		var t := UITheme.label(("ROOKIE PATH: " if inst.kind == "starter" else "") + Missions.text(inst), UITheme.FS_BODY,
 			UITheme.MUTED if claimed else UITheme.OFFWHITE, UITheme.font_body_bold())
 		t.clip_text = true
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL

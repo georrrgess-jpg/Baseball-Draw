@@ -167,7 +167,7 @@ func _row(inst: Dictionary, kind: String, index: int, show_reroll := true) -> Pa
 	return p
 
 
-## "Learn the ropes": the starter chain as five dots plus the current step.
+## The Rookie Path: one node per step (a tick when done, the number otherwise) plus the current step.
 func _starter_block(inst: Dictionary) -> Control:
 	var steps := Missions.starter_steps()
 	var step := int(inst.get("step", 0))
@@ -179,7 +179,7 @@ func _starter_block(inst: Dictionary) -> Control:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
 	vb.add_child(head)
-	var sh := UITheme.section_header("LEARN THE ROPES", "info", UITheme.GREEN, UITheme.FS_H2)
+	var sh := UITheme.section_header("ROOKIE PATH", "info", UITheme.GREEN, UITheme.FS_H2)
 	sh.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(sh)
 	head.add_child(UITheme.label("STEP %d OF %d" % [step + 1, steps.size()], UITheme.FS_SMALL, UITheme.GREEN, UITheme.font_body_bold()))
@@ -194,7 +194,8 @@ func _starter_block(inst: Dictionary) -> Control:
 			UITheme.GOLD if cur else Color(1, 1, 1, 0.15), 2, 8, 6))
 		dot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		dot.tooltip_text = "%s — %s" % [str(steps[i].text), Missions.reward_text(steps[i].get("reward", {}))]
-		var dl := UITheme.label(("✓ " if done else "%d. " % (i + 1)) + str(steps[i].text), UITheme.FS_MIN, Color.WHITE if (done or cur) else UITheme.MUTED, UITheme.font_body_bold())
+		# Ten steps do not fit as text: the node shows a tick or the step number, the tooltip the text.
+		var dl := UITheme.label("✓" if done else str(i + 1), UITheme.FS_SMALL, Color.WHITE if (done or cur) else UITheme.MUTED, UITheme.font_body_bold())
 		dl.clip_text = true
 		dl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		dot.add_child(dl)
@@ -331,7 +332,7 @@ static func compact_widget() -> PanelContainer:
 		var done := Missions.is_done(inst)
 		row.add_child(UITheme.icon_rect("check" if bool(inst.claimed) else ("gift" if done else "target"), 18,
 			UITheme.GREEN if bool(inst.claimed) else (UITheme.GOLD if done else UITheme.MUTED)))
-		var t := UITheme.label(("NEW MANAGER: " if inst.kind == "starter" else "") + Missions.text(inst), UITheme.FS_MIN, UITheme.MUTED if bool(inst.claimed) else UITheme.OFFWHITE, UITheme.font_body_bold())
+		var t := UITheme.label(("ROOKIE PATH: " if inst.kind == "starter" else "") + Missions.text(inst), UITheme.FS_MIN, UITheme.MUTED if bool(inst.claimed) else UITheme.OFFWHITE, UITheme.font_body_bold())
 		t.clip_text = true
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(t)
