@@ -37,8 +37,8 @@
       {"packs": ["rookie", "rookie"]},
       {"coins": 300, "packs": ["pro"]},
       {"stars": 25, "packs": ["rookie"]},
-      {"packs": ["pro", "pro"]},
-      {"coins": 600, "packs": ["pro"]},
+      {"packs": ["rookie", "rookie", "rookie"]},
+      {"coins": 600, "packs": ["rookie", "rookie"]},
       {"packs": ["champion"], "choice": "legendary"}
     ]
   },

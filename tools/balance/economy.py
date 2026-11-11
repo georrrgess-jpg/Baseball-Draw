@@ -43,6 +43,15 @@ PRESTIGE_COINS in db.gd), and extra copies become coins only when the card can't
 it already holds every copy it needs to get there). The player prestiges as soon as copies and coins allow (the
 Upgrade All opt-in), and while a card's copies for its next level are there but the coins are not, keeps those
 coins aside instead of buying packs. --u10 = the Update 10 rules (max level 5, copies of level-5 cards to coins).
+
+Update 13 "Rookie Camp" (off with --u12, which models the Update 12 economy with the old 5-step starter chain
+and XP curve): data/onboarding.json and the Rookie Path in data/missions.json. A new manager plays only the modes
+open to them (Quick Defense first; Standard Siege, the Daily from level 3 or Rookie Path step 5; Boss Rush, Endless
+and the Promotion Challenge from level 5 or step 9; everything after 5 games); the faster levels 1-5
+(account_levels.json xp_to_next); a bonus pack for each of the first three games; a consolation reward for a loss
+in the first five; the Epic pick after game 3 (an unowned Epic); Rookie Week (one claim a day for the first seven
+days, a Legendary pick on day 7); the ten-step Rookie Path (its events approximated from the player's stats) and its
+finale, a free agent signed for free. Welcome back is not modelled (the model plays every day).
 """
 import argparse
 import json
@@ -60,6 +69,10 @@ U9_CARDS = {"scouting_report": "common", "sprinkler_system": "common", "sweet_sp
 	"worm_burner": "epic", "fireworks_night": "legendary", "ground_rule_double": "legendary"}
 U9_SIGNATURES = {"moose": "scoop_and_tag", "rosa": "signal_caller", "sid": "worm_burner"}
 U8_LEGENDARY = {"rookie": 0.1, "pro": 0.4, "champion": 1.2}
+# The Update 12 "Learn the ropes" chain (replaced by the Rookie Path in Update 13), for --u12.
+U12_STARTER = [{"event": "cards_played", "goal": 3, "reward": {"coins": 225}}, {"event": "win", "goal": 1, "reward": {"pack": "rookie", "coins": 150}},
+	{"event": "packs_opened", "goal": 1, "reward": {"pack": "rookie"}}, {"event": "cards_upgraded", "goal": 1, "reward": {"pack": "rookie", "coins": 225}},
+	{"event": "daily_played", "goal": 1, "reward": {"pack": "pro"}}]
 
 
 def jload(name):
@@ -169,6 +182,13 @@ class Data:
 		self.xp_base, self.xp_step = int(m.group(1)), int(m.group(2))
 		self.road = jload("account_levels.json")
 		self.missions = jload("missions.json")
+		# Update 13 (Rookie Camp); --u12 = before it.
+		self.u13 = not (args.u12 or args.u8 or args.u5)
+		self.onboarding = jload_opt("onboarding.json", {}) if self.u13 else {}
+		self.xp_early = self.road.get("xp_to_next", {}) if self.u13 else {}
+		if not self.u13:
+			self.missions = dict(self.missions)
+			self.missions["starter"] = U12_STARTER
 		self.daily = jload("daily.json").get("rewards", {})
 		rw_path = "src/core/rewards.gd"
 		rw = open(os.path.join(ROOT, rw_path)).read()
@@ -193,7 +213,15 @@ class Data:
 		return int(r.get("coins", 0)), list(r.get("packs", []))
 
 	def xp_to_next(self, level):
+		if str(level) in self.xp_early:   # Update 13: levels 1-5 come faster
+			return int(self.xp_early[str(level)])
 		return self.xp_base + self.xp_step * (level - 1)
+
+	def feature(self, fid):
+		for f in self.onboarding.get("features", []):
+			if f["id"] == fid:
+				return f
+		return {}
 
 	def bundle_price(self, pack):
 		return round_price(self.packs[pack]["price_coins"] * self.bundle_size * self.bundle_discount)
@@ -261,6 +289,37 @@ class Player:
 		self.login_day = 0
 		self.shop_today = []
 		self.shop_pack = self.shop_stars = False
+		# Update 13
+		self.u13 = data.u13
+		self.week_claims = 0
+		self.epic_picked = False
+		self.losses_row = 0
+		for k in ("innings_standard", "gifts", "season_claims", "rookie_week", "picks"):
+			self.stats[k] = 0
+
+	# ---- Update 13: onboarding.gd mirror
+	def is_open(self, fid):
+		"""Onboarding.is_unlocked: level, a claimed Rookie Path step, or established (level 5 / 5 games)."""
+		if not self.u13:
+			return True
+		f = self.d.feature(fid)
+		if not f:
+			return True
+		est = self.d.onboarding.get("established", {})
+		if self.level >= int(est.get("level", 5)) or self.stats["games"] >= int(est.get("games", 5)):
+			return True
+		return self.level >= int(f.get("level", 1)) or ("path" in f and self.starter_step >= int(f["path"]))
+
+	def pick_card(self, rarity):
+		"""Onboarding.choose for a card pick: an unowned card of the rarity (the model ignores deck fit)."""
+		pool = [c for c, r in self.d.card_rarity.items() if r == rarity and not self.cards[c]["owned"]]
+		if pool:
+			self.grant(self.rng.choice(pool))
+		else:
+			self.grant(self.rng.choice([c for c, r in self.d.card_rarity.items() if r == rarity]))
+		self.stats["picks"] += 1
+		if rarity in self.pity:   # the free card counts as that rarity's pity guarantee: the counter starts again
+			self.pity[rarity] = 0
 
 	def earn(self, n, src):
 		self.coins += n
@@ -349,6 +408,25 @@ class Player:
 		if self.u9:
 			sx = self.d.season.get("xp", {})
 			self.add_season_xp(int(sx.get("game", 100)) + (int(sx.get("win", 60)) if won else 0) + (int(sx.get("daily", 100)) if daily else 0))
+		if mode == "standard":
+			self.stats["innings_standard"] += cleared
+		if self.u13:
+			ob = self.d.onboarding
+			n = self.stats["games"] + 1   # this game's number
+			early = ob.get("early_games", {}).get("packs", [])
+			if n <= len(early):
+				self.add_pack(early[n - 1], "rookie camp bonus")
+			counts = mode != "endless"
+			if won:
+				self.losses_row = 0
+			elif counts:
+				self.losses_row += 1
+			cons = ob.get("consolation", {})
+			if not won and counts and n <= int(cons.get("games", 5)):
+				self.grant_bundle(cons.get("reward", {}), "rookie camp consolation")
+			if n >= 3 and not self.epic_picked:
+				self.epic_picked = True
+				self.pick_card("epic")
 		self.stats["outs"] += g["outs"]
 		self.stats["games"] += 1
 		if won and mode in ("quick", "standard"):
@@ -407,6 +485,7 @@ class Player:
 		reached = min(30, self.season_xp // per)
 		while self.season_claimed < reached:
 			self.season_claimed += 1
+			self.stats["season_claims"] += 1
 			r = dict(tiers.get(str(self.season_claimed), {}))
 			r.pop("uniform", None)
 			self.grant_bundle(r, "season pass")
@@ -609,6 +688,7 @@ class Player:
 	def new_shop_day(self):
 		"""Shop.generate: the gift (claimed at once) and two card deals weighted toward the deck."""
 		sh = self.d.shop
+		self.stats["gifts"] += 1
 		gifts = sh.get("gifts", [])
 		x = self.rng.random() * sum(float(g.get("weight", 1)) for g in gifts)
 		for g in gifts:
@@ -680,6 +760,16 @@ class Player:
 		self.stars += int(r.get("stars", 0))
 		if r.get("pack"):
 			self.add_pack(r["pack"], src)
+		for pk in r.get("packs", []):
+			self.add_pack(pk, src)
+		if r.get("choice") == "free_agent":   # the Rookie Path finale: the first free agent not signed yet
+			for x in self.d.defenders:
+				if int(x.get("unlock", {}).get("coins", 0)) > 0 and x["id"] not in self.unlocked:
+					self.unlock(x["id"])
+					self.stats["agents_free"] = self.stats.get("agents_free", 0) + 1
+					break
+			else:   # every free agent already on the team: 5,000 coins (Onboarding.queue_choice)
+				self.earn(5000, "missions")
 		self.stats["missions"] += 1
 		if self.u9:
 			self.add_season_xp(int(self.d.season.get("xp", {}).get("mission", 80)))
@@ -694,14 +784,18 @@ class Player:
 		if self.starter_step < len(steps):
 			s = self.stats
 			now = {"cards_played": s["games"], "win": s["wins"], "packs_opened": s["packs_opened"],
-				"cards_upgraded": s["upgrades"], "daily_played": s["dailies"]}
+				"cards_upgraded": s["upgrades"], "daily_played": s["dailies"],
+				# Update 13 Rookie Path events, approximated: the deck gets a new card once packs were opened, the
+				# team is changed in the first game the step asks for it.
+				"decks_customised": s["packs_opened"], "team_changes": s["games"], "innings_standard": s["innings_standard"],
+				"shop_gifts": s["gifts"], "season_tiers_claimed": s["season_claims"], "wins_boss_rush": s["wins_boss_rush"]}
 			if self.starter_mark is None:
 				self.starter_mark = dict(now)
 			while self.starter_step < len(steps):
 				st = steps[self.starter_step]
-				if now[st["event"]] - self.starter_mark[st["event"]] < (1 if st["event"] == "cards_played" else st["goal"]):
+				if now[st["event"]] - self.starter_mark[st["event"]] < (1 if st["event"] in ("cards_played", "team_changes") else st["goal"]):
 					break
-				self.grant_reward(st["reward"], "starter missions")
+				self.grant_reward(st["reward"], "rookie path" if self.u13 else "starter missions")
 				self.starter_step += 1
 				self.starter_mark = dict(now)
 
@@ -717,7 +811,16 @@ class Player:
 			if self.d.login:   # the login calendar: one claim a day
 				self.grant_bundle(self.d.login[self.login_day % len(self.d.login)], "login calendar")
 				self.login_day += 1
-			self.new_shop_day()
+			days = self.d.onboarding.get("rookie_week", {}).get("days", []) if self.u13 else []
+			if self.week_claims < len(days):   # Update 13: Rookie Week, one claim a day
+				r = days[self.week_claims]
+				self.grant_bundle(r, "rookie week")
+				self.week_claims += 1
+				self.stats["rookie_week"] += 1
+				if r.get("choice") in ("legendary", "epic"):
+					self.pick_card(r["choice"])
+			if self.is_open("shop"):   # Update 13: the Shop opens at level 4 for a new manager
+				self.new_shop_day()
 
 	def check_achievements(self, mode, won):
 		s = self.stats
@@ -753,7 +856,7 @@ class Player:
 		return {"hours": self.minutes / 60.0, "owned": owned, "maxed": maxed, "lvl5": lvl5, "prestiged": prestiged,
 			"level": self.level, "coins": self.coins,
 			"division": self.division, "def_avg": statistics.mean(self.def_level[d] for d in self.team), "def_max": max(self.def_level.values()),
-			"card_levels": sum(c["level"] - 1 for c in self.cards.values()), "defenders": len(self.unlocked),
+			"card_levels": sum(c["level"] - 1 for c in self.cards.values()), "defenders": len(self.unlocked), "path_step": self.starter_step,
 			"upgrade_coins_left": sum(sum(self.d.coin_cost(self.d.card_rarity[cid], l) for l in range(c["level"], self.d.max_level))
 				for cid, c in self.cards.items() if c["owned"]),
 			**{k: v for k, v in self.stats.items()}}
@@ -781,10 +884,14 @@ def run_player(data, args, seed):
 					mode = m
 					break
 			won = False if mode == "endless" else rng.random() < args.win
+		# Update 13: a new manager plays what is open (Quick Defense until the next modes unlock).
+		if mode != "quick" and not p.is_open(mode):
+			mode = "quick"
+			won = rng.random() < args.win
 		day = int(p.minutes // args.day_minutes)
 		while p.day < day:
 			p.new_day()
-		if not args.u5 and p.games_today == 2:
+		if not args.u5 and p.games_today == 2 and p.is_open("daily"):
 			mode, won = "daily", rng.random() < args.win
 		p.games_today += 1
 		p.play(mode, won)
@@ -839,6 +946,7 @@ def main():
 		"with the Update 9 cards (add --no-u9-cards and --quick 0.5 --standard 0.35 for the Update 8 projection itself)")
 	ap.add_argument("--no-u9-cards", action="store_true", help="leave the twelve Update 9 cards out")
 	ap.add_argument("--u10", action="store_true", help="the Update 10 card rules: max level 5, copies of level-5 cards become coins")
+	ap.add_argument("--u12", action="store_true", help="the Update 12 economy: no Rookie Camp (old starter chain and XP curve, every mode open)")
 	ap.add_argument("--json", default="")
 	args = ap.parse_args()
 	if args.u8:
@@ -912,6 +1020,10 @@ def main():
 		ms["first defender at level 20"] = first_hour(tls, lambda s: s["def_max"] >= 20)
 	all_defs = len(data.defenders)
 	ms["all %d defenders" % all_defs] = first_hour(tls, lambda s: s["defenders"] >= all_defs)
+	if data.u13:
+		n_path = len(data.missions.get("starter", []))
+		ms["Rookie Path half done (step %d)" % (n_path // 2)] = first_hour(tls, lambda s: s.get("path_step", 0) >= n_path // 2)
+		ms["Rookie Path finished"] = first_hour(tls, lambda s: s.get("path_step", 0) >= n_path)
 	for i, dv in enumerate(data.divisions[1:], 1):
 		ms["%s division" % dv["name"]] = first_hour(tls, lambda s, i=i: s["division"] >= i)
 	for k, v in ms.items():
@@ -960,6 +1072,13 @@ def main():
 		print("Free agents signed: %.1f per player (%.0f %% sign at least one); legendaries from pity per player: %.1f." % (
 			statistics.mean(p.stats["agents"] for p in players), 100.0 * sum(1 for p in players if p.stats["agents"] > 0) / len(players),
 			statistics.mean(p.stats["legendary_pity"] for p in players)))
+	if data.u13:
+		print("Rookie Camp: Rookie Path finished by %.0f %% of players (median step at 1 h: %g); Rookie Week claims %g; card picks %g; "
+			"free agents from the Rookie Path finale %.1f per player." % (
+			100.0 * sum(1 for p in players if p.starter_step >= len(data.missions.get("starter", []))) / len(players),
+			statistics.median(min(10, p.timeline[1]["path_step"]) if len(p.timeline) > 1 else 0 for p in players),
+			statistics.median(p.stats["rookie_week"] for p in players), statistics.median(p.stats["picks"] for p in players),
+			statistics.mean(p.stats.get("agents_free", 0) for p in players)))
 	if args.json:
 		json.dump({"milestones": ms, "rows": rows}, open(args.json, "w"), indent=1, default=str)
 

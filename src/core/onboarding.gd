@@ -293,6 +293,10 @@ static func choose(id: String) -> Dictionary:
 			Profile.grant_card(id)
 			nm = str(DB.card(id).get("name", id))
 			Profile.bump_stat("rookie_picks")
+			# The free card counts as that rarity's Pack Luck guarantee: its pity counter starts again
+			# (keeps the whole collection at about 30 h, tools/balance/economy.py).
+			if typeof(Profile.data.get("pity")) == TYPE_DICTIONARY:
+				Profile.data.pity[kind] = 0
 		"free_agent":
 			Profile.unlock_defender(id)
 			nm = str(DB.defender(id).get("name", id))

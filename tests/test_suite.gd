@@ -4671,7 +4671,9 @@ func test_u13_choices_and_pacing() -> void:
 		roles[str(DeckAI.analyze(str(id)).role)] = true
 	ok(roles.size() >= 2, "the options cover different roles (%s)" % [roles.keys()])
 	var pick := str(opts[1])
+	Profile.data.pity["epic"] = 7
 	ok(str(Onboarding.choose(pick).get("id", "")) == pick and Profile.is_card_owned(pick) and Onboarding.pending_choice().is_empty(), "picking an Epic adds it to the collection")
+	ok(int(Profile.data.pity.epic) == 0, "the free Epic counts as the Epic guarantee: its pity counter starts again")
 	_u13_game("quick", true)
 	ok(Onboarding.pending_choice().is_empty(), "the Epic pick is offered once")
 	ok(Onboarding.card_options("legendary").size() == 3, "three Legendary options for Rookie Week day 7")
