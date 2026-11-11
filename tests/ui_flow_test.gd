@@ -1856,9 +1856,6 @@ func _test_ftue() -> void:
 	battle.begin_wave()
 	for i in 600:
 		await _wait(0.1)
-		for e: Enemy in battle.enemies.duplicate():   # the rest of the wave goes out, the pack stays
-			if is_instance_valid(e) and e.alive and e.targetable() and not e in tut.pack and tut.pack_spawned:
-				battle.deal_damage(e, e.hp + 10.0, {"kind": "throw", "true": true, "pierce": 1.0})
 		if tut._waiting == "combo" and tut._active and tut._tip_until == 0:
 			break
 		if tut._waiting != "combo":
@@ -1875,7 +1872,7 @@ func _test_ftue() -> void:
 	var pp: Variant = tut._pack_point()
 	if pp is Vector2:
 		await _click(get_viewport().get_final_transform() * (pp as Vector2))
-	for i in 60:
+	for i in 200:
 		await _wait(0.1)
 		if tut.celebrated:
 			break
@@ -1884,7 +1881,10 @@ func _test_ftue() -> void:
 	var plays := int(battle.run.stats.get("triple_plays", 0)) + int(battle.run.stats.get("double_plays", 0))
 	_check(tut.celebrated and tut.staged_outs >= 2 and plays >= 1, "FTUE: Heat Wave into the pack is a staged %d-out play (triple %d, double %d)" % [
 		tut.staged_outs, int(battle.run.stats.get("triple_plays", 0)), int(battle.run.stats.get("double_plays", 0))])
-	await _wait(2.0)
+	for i in 150:   # the celebration holds 1.6 s of game time (slow frames make that longer in real time)
+		await _wait(0.1)
+		if tut._core_done:
+			break
 	_check(bool(Profile.data.flags.get("battle_tutorial_done", false)) and tut._core_done, "FTUE: the guided steps are done after the staged play")
 	# 5. On to the dugout, inning 2 and the boss tease.
 	Engine.time_scale = 3.0

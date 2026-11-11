@@ -171,7 +171,7 @@ void fragment() {
 	_build_bubble()
 	_define_steps()
 	battle.state_changed.connect(_on_state)
-	battle.defender_moved.connect(func(_d: Defender) -> void: _event("moved"))
+	battle.defender_moved.connect(_on_moved)
 	battle.card_cast.connect(_on_card_cast)
 	battle.targeting_changed.connect(func(_i: int) -> void: _refresh_aim_text())
 	battle.runner_out.connect(_on_runner_out)
@@ -383,7 +383,14 @@ func _on_state(s: String) -> void:
 ## A wave ended while the staged pack was still on its way (the defence got them first): move on.
 func _end_staged_if_stuck() -> void:
 	if _waiting == "combo" and pack_spawned and not celebrated:
-		print("[TUT] stuck"); _event("combo")
+		_event("combo")
+
+
+## The drag step is done: the moved fielder's info panel steps aside so the field stays clear.
+func _on_moved(_d: Defender) -> void:
+	if _waiting == "moved" and not _core_done:
+		battle.select_defender.call_deferred(null)
+	_event("moved")
 
 
 func _on_card_cast(id: String) -> void:
@@ -424,6 +431,7 @@ func _celebrate(at: Vector3) -> void:
 	battle.vfx.burst("confetti", at + Vector3(0, 3, 0))
 	battle.crowd_cheer(1.0)
 	battle.shake(0.35)
+	battle.slow_motion(0.9, 0.35)   # a beat of slow motion on the big play
 	Audio.play("crowd_roar", -4.0)
 	_stamp("WHAT A PLAY!", "%s — %d outs at once!" % ["TRIPLE PLAY" if n >= 3 else "DOUBLE PLAY", n], UITheme.GOLD)
 	var tw := create_tween()
@@ -591,7 +599,7 @@ func _pack_ready() -> bool:
 		return false
 	var alive := pack.filter(func(e: Variant) -> bool: return is_instance_valid(e) and (e as Enemy).alive)
 	if alive.size() < 2:
-		print("[TUT] pack thinned ", alive.size()); _event("combo")   # the defence got there first: no staged moment
+		_event("combo")   # the defence got there first: no staged moment
 		return false
 	var caster: Defender = battle.effects.caster_info("heat_wave").caster
 	var origin := caster.global_position if caster else Field.MOUND
@@ -684,7 +692,7 @@ func _stamp(text: String, sub: String, col: Color, hold := 1.4) -> void:
 		box.add_child(s)
 	box.scale = Vector2(2.2, 2.2)
 	box.modulate.a = 0.0
-	var tw := box.create_tween().set_ignore_time_scale(true)
+	var tw := box.create_tween()   # game time: it stays up as long as the moment does
 	tw.tween_property(box, "modulate:a", 1.0, 0.08)
 	tw.parallel().tween_property(box, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_interval(hold)
@@ -751,9 +759,9 @@ func _process(delta: float) -> void:
 		_set_slowmo(0.0)
 		if _waiting == "combo":
 			_hide()
-			print("[TUT] timeout"); _event("combo")
+			_event("combo")
 	if _waiting == "combo" and _pack_cast_ms > 0 and not celebrated and _now_ms() - _pack_cast_ms > 3000:
-		print("[TUT] missed"); _event("combo")   # the fire missed the pack
+		_event("combo")   # the fire missed the pack
 	if _active:
 		_update_layout()
 

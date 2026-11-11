@@ -4661,7 +4661,10 @@ func test_update13_first_session() -> void:
 			break
 	ok(tut.celebrated and tut.staged_outs == 3, "Heat Wave puts the whole pack out together (%d outs)" % tut.staged_outs)
 	ok(int(battle.run.stats.get("triple_plays", 0)) == triples0 + 1, "the staged moment is a TRIPLE PLAY")
-	await _wait(2.0)
+	for i in 60:
+		await _wait(0.1)
+		if tut._core_done:
+			break
 	ok(tut._core_done and bool(Profile.data.flags.get("battle_tutorial_done", false)), "the tutorial's core steps are done after it")
 	tut.finish()
 	Engine.time_scale = 1.0
