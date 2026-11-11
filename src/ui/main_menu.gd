@@ -2208,14 +2208,17 @@ func _popup_card(card_name: String, accent: Color, targets: Array, width := 760.
 	card.add_child(vb)
 	var vis := get_viewport().get_visible_rect().size
 	var f := minf(1.0, minf(vis.x / DESIGN_SIZE.x, vis.y / DESIGN_SIZE.y))
+	# Shrink to the content once it is laid out (wrapping labels measure tall before that), centred on
+	# `center`, and again whenever the content changes.
 	var place := func() -> void:
 		if not is_instance_valid(card):
 			return
-		var cs := card.get_combined_minimum_size()
-		card.size = cs
+		card.size = Vector2.ZERO
+		var cs := card.size
 		card.pivot_offset = cs * 0.5
 		var c := center if center.x >= 0.0 else vis * 0.5
-		card.position = (c - cs * 0.5).clamp(Vector2(16, 16), vis - cs * f - Vector2(16, 16))
+		card.position = (c - cs * 0.5).clamp(Vector2(16, 16) - cs * (1.0 - f) * 0.5, vis - cs * 0.5 - cs * f * 0.5 - Vector2(16, 16))
+	card.minimum_size_changed.connect(func() -> void: place.call_deferred())
 	place.call_deferred()
 	card.scale = Vector2(f, f) * 0.9
 	card.modulate.a = 0.0
@@ -2382,9 +2385,10 @@ func _show_choice(c: Dictionary) -> void:
 	var sub := {"epic": "Three Epic cards that suit your deck and team. Keep one: it is yours for good.",
 		"legendary": "Rookie Week day 7! Three Legendary cards for your deck. Keep one.",
 		"free_agent": "You finished the Rookie Path! Sign one free agent now, long before their level, for free."}.get(kind, "")
-	var sl := UITheme.label(str(sub) + ("  (%s)" % str(c.get("source", "")) if str(c.get("source", "")) != "" and kind == "epic" else ""), UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
+	var sl := UITheme.label(str(sub), UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sl.custom_minimum_size = Vector2(940, 0)
 	vb.add_child(sl)
 	var row := HBoxContainer.new()
 	row.name = "ChoiceOptions"
@@ -2402,7 +2406,7 @@ func _show_choice(c: Dictionary) -> void:
 			_agent_option(col, str(id))
 		else:
 			var cv := CardView.new(str(id), maxi(1, Profile.card_level(str(id))))
-			cv.custom_minimum_size = Vector2(214, 300)
+			cv.custom_minimum_size = Vector2(236, 330)
 			cv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			cv.tooltip_text = DB.card_text(str(id), 1)
 			col.add_child(cv)
@@ -2413,7 +2417,7 @@ func _show_choice(c: Dictionary) -> void:
 			why.name = "Reason"
 			why.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			why.custom_minimum_size = Vector2(270, 0)
+			why.custom_minimum_size = Vector2(270, 50)   # two lines, so the PICK buttons line up
 			col.add_child(why)
 		var pick := UITheme.button("SIGN" if kind == "free_agent" else "PICK", "primary", UITheme.FS_LEAD, "check", accent.darkened(0.35))
 		pick.name = "Pick_" + str(id)
@@ -2451,12 +2455,14 @@ func _agent_option(col: VBoxContainer, id: String) -> void:
 	var sub := UITheme.label("#%d  ·  %s  ·  %s" % [int(d.get("number", 0)), role, str(d.get("title", ""))], UITheme.FS_SMALL, UITheme.OFFWHITE, UITheme.font_body_bold())
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.custom_minimum_size = Vector2(270, 0)
 	col.add_child(sub)
 	var u: Dictionary = d.get("unlock", {})
 	var info := UITheme.label("Signature card: %s\nNormally level %d or %s coins" % [str(DB.card(str(d.get("signature", ""))).get("name", "")), int(u.get("value", 0)), UITheme.format_int(int(u.get("coins", 0)))],
 		UITheme.FS_SMALL, UITheme.MUTED, UITheme.font_body_bold())
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.custom_minimum_size = Vector2(270, 0)
 	col.add_child(info)
 
 
@@ -2516,6 +2522,7 @@ func _show_welcome_back(w: Dictionary) -> void:
 		var l := UITheme.label(str(line[1]), UITheme.FS_BODY, UITheme.OFFWHITE, UITheme.font_body_bold())
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.custom_minimum_size = Vector2(620, 0)
 		row.add_child(l)
 		list.add_child(row)
 	var btns := _popup_buttons(vb)
