@@ -703,6 +703,15 @@ func _start_guide() -> void:
 			break
 	_left.visible = false
 	_right.visible = false
+	# The big guide text sits where the header's subtitle and brush rule are: hide those (layout kept).
+	var hdr: Control = _screen._header
+	if hdr:
+		var tb := hdr.get_child(1)
+		if tb.get_child_count() > 1:
+			(tb.get_child(1) as CanvasItem).self_modulate.a = 0.0
+		var rule := hdr.get_parent().get_child(1)
+		if rule is TextureRect:
+			(rule as CanvasItem).self_modulate.a = 0.0
 	var layer: CanvasLayer = _screen.get_parent()
 	_guide_halo = GuideHalo.new()
 	_guide_halo.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

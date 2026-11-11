@@ -1313,6 +1313,9 @@ func _banner_finished() -> void:
 
 
 static func _banner_kind(t: String) -> String:
+	# A growing combo (DOUBLE PLAY -> TRIPLE PLAY -> GRAND SLAM COMBO) upgrades one banner in place.
+	if t in ["DOUBLE PLAY!", "TRIPLE PLAY!"] or t.begins_with("GRAND SLAM COMBO"):
+		return "combo"
 	var out := ""
 	for ch in t:
 		if not ch.is_valid_int():

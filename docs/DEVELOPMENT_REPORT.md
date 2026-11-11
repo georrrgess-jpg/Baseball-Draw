@@ -1212,3 +1212,78 @@ For all six arenas there are overview pairs (`<arena>_gates_before_after.jpg`), 
   * `test_routes` still passes.
 * Clearance report: 0 intrusions in all six arenas (`screenshots/u12/clearance_report_after.txt`).
 * Full UI flow test: 514 checks, 0 failed.
+
+## 22. Update 13: "Rookie Camp" (new-player onboarding and early retention)
+
+Plan: `docs/plans/UPDATE_13_PLAN.md`. The goal: a new player is playing within seconds, feels skilled and
+rewarded in the first ten minutes, always knows the next step, and has reasons to come back on days 2–7.
+
+### First session (stream A)
+* **Straight into play.** A brand-new profile goes title → story intro → guided first game, with no hub stop.
+  * The intro (`src/ui/story_intro.gd`) is three animated story cards over the live title stadium, 13 s in all:
+    the Wreckers, your six defenders (captain first) and three ability cards.
+  * A click, Space or → moves on; SKIP or Esc starts the game at once.
+  * "I've played before" (title and intro) goes straight to the hub, with nothing locked.
+* **First game: learn by doing** (`src/ui/battle_tutorial.gd`, `Session.first_game_config()`).
+  * Rookie Quick Defense cut to 2 innings, with a fixed seed and a first-game assist (runners 0.85× health,
+    a 0.85× wave budget, an Iron Slugger at 0.3× health closing inning 2 as the boss tease).
+  * Every step is an action with one line of text, a spotlight and a pointer; nothing pauses the game:
+    drag a fielder to the ring, PLAY BALL, the first throw, play a card on a runner (in slow motion), then a
+    staged pack of three runners and Heat Wave in bullet time for a guaranteed **TRIPLE PLAY** with a
+    "WHAT A PLAY!" celebration. Short tips follow for the break, the dugout and the boss.
+  * Generic hooks: a config `innings` override (`run_state.gd`), a config `tuning` override
+    (`wave_generator.gd`), and the boss intro plays once the tutorial's core steps are done (`battle.gd`).
+* **Guided rewards.** The first win gets a simple Results layout (`first_win_results.gd`): coins, XP and packs
+  as three big moments and one OPEN YOUR PACK! button. Then a guided pack opening ("TAP TO OPEN!", "TAP A
+  CARD TO FLIP IT!", "NEW CARD: X!") and a guided deck swap, saved through `Profile.set_deck` so Rookie Path
+  step 3 completes. The hub then spotlights PLAY: "READY FOR GAME 2?".
+* **Funnel.** `Profile.data.onboarding_funnel` holds the shared timestamps (first launch, first game, first
+  win, first pack, game 2, day-2 return) and a detailed `ftue` record (intro done or skipped, first throw,
+  first card, deck edited...). Each step prints `[FTUE] <step> <s>`.
+
+### Unlocks and retention (stream B)
+* **Progressive unlocks** (`src/core/onboarding.gd`, `data/onboarding.json`). A feature opens at an account
+  level or a Rookie Path step, whichever comes first:
+
+  | Opens at | Features |
+  |---|---|
+  | Start | Quick Defense, Cards & Deck, Card Packs |
+  | Level 2 or step 3 | Upgrade Cards, Team |
+  | Level 3 or step 5 | Standard Siege, Missions, Daily Challenge |
+  | Level 4 or step 7 | Shop, Season Pass |
+  | Level 5 or step 9 | Boss Rush, Endless, Scouting Book, Promotion |
+
+  Locked features stay visible with a lock and "LV n"; pressing one explains how to open it. Each group opens
+  with a NEW FEATURE UNLOCKED card and a spotlight on the hub. Established players (level 5, 5 games or
+  `flags.unlock_all`) see everything, with no celebrations; old saves are migrated.
+* **Rookie Path** (`data/missions.json` "starter"): ten steps on a hub strip, each teaching one feature, with
+  rising rewards. The finale is a Champion Pack, 1,000 coins and a free agent of your choice.
+* **Picks.** After game 3, pick 1 of 3 unowned Epics, scored by DeckAI for your team, each with a reason.
+  The same picker serves the Rookie Week Legendary and the free-agent finale (DECIDE LATER keeps it).
+* **Rookie Week:** a 7-day calendar beside the daily login, paying more each day; day 7 is a Champion Pack
+  and a Legendary pick. A missed day pauses it; it never resets.
+* **Early pacing:** levels 1–4 need 150/250/350/450 XP; games 1–3 pay an extra pack; a loss in the first 5
+  games pays 150 coins and a Rookie Pack, and a coach card offers an easier difficulty (after 2 losses in a row
+  also AUTO BUILD MY DECK).
+* **Welcome back:** after 3+ days away, 500 coins and a Pro Pack (7+ days: 800 coins and 2 Pro Packs) with a
+  "what's new" card.
+* **Badge budget:** a new player sees at most 2 attention badges on the hub at once.
+
+### Economy (`tools/balance/economy.py`, 200 players, 40 h)
+| | Update 12 | Update 13 |
+|---|---|---|
+| Packs after game 1 / game 3 / game 10 | 5 / 14 / 44 | 6 / 17 / 54 |
+| Packs earned in hour 1 | 35 | 46 |
+| Whole collection (target 30–40 h) | 35.0 h | 31.2 h |
+| First Prestige (target 8–12 h) | 9.1 h | 8.2 h |
+| Rookie Path finished | — | half by 1.1 h, all by 6.0 h |
+
+Free picks restart their rarity's pity counter, which keeps the collection time in its target.
+
+### Lead fixes
+* A growing combo now upgrades one banner in place (DOUBLE PLAY → TRIPLE PLAY) instead of queueing both.
+* The title's "I've played before" no longer shows through under the story intro.
+* The guided pack opening hides the header subtitle and rule under its big text.
+* The missions panel calls the chain "ROOKIE PATH" and shows its 10 steps as numbered nodes; the "what's
+  next" suggestions skip features that are still locked.
+* The FTUE UI test waits on game state with longer caps (slow software rendering).

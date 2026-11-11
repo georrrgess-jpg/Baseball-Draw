@@ -1678,6 +1678,15 @@ func _test_title() -> void:
 
 # ---------------------------------------------------------------- Update 13: Rookie Camp (first session)
 
+## Waits until the current story card has been up 2 s of game time (its pop-ins are done; slow
+## software-rendered frames make wall time run ahead of the card's own animation).
+func _intro_settle(intro: StoryIntro) -> void:
+	for i in 300:
+		if not is_instance_valid(intro) or intro._t >= 2.0:
+			return
+		await _wait(0.05)
+
+
 ## `--ftue-shots=<dir>`: saves the screen at each step of the FTUE section (docs screenshots).
 func _shot(name: String) -> void:
 	var dir := ""
@@ -1782,15 +1791,15 @@ func _test_ftue() -> void:
 	_check(intro != null and intro.index == 0 and intro.find_child("StoryCard1", true, false) != null, "FTUE: START opens the story intro on card 1 (not the hub)")
 	if intro == null:
 		return
-	await _wait(1.3)
+	await _intro_settle(intro)
 	await _shot("intro_1_wreckers")
 	await _click(get_viewport().get_final_transform() * Vector2(960, 540))
 	await _wait(0.3)
 	_check(intro.index == 1, "FTUE: a click moves the intro to card 2 (index %d)" % intro.index)
-	await _wait(1.2)
+	await _intro_settle(intro)
 	await _shot("intro_2_team")
 	await _click(get_viewport().get_final_transform() * Vector2(960, 540))
-	await _wait(1.5)
+	await _intro_settle(intro)
 	await _shot("intro_3_cards")
 	var skip_btn: Button = intro.find_child("IntroSkip", true, false)
 	_check(skip_btn != null and intro.find_child("PlayedBefore", true, false) != null, "FTUE: the intro has SKIP and \"I've played before\"")
@@ -1831,7 +1840,7 @@ func _test_ftue() -> void:
 	await _wait(0.3)
 	await _shot("tutorial_2_play_ball")
 	await _click(_ctl_center(battle.hud._start_btn))
-	for i in 150:
+	for i in 600:   # game time runs behind wall time on a busy software renderer
 		await _wait(0.1)
 		if f.has("first_throw"):
 			break
@@ -1842,7 +1851,7 @@ func _test_ftue() -> void:
 	if tut._title.text == "THEY'RE ON IT!":
 		await _shot("tutorial_3_throw_tip")
 	# 3. PLAY A CARD: slow motion, Power Throw in hand, card then runner.
-	for i in 250:
+	for i in 1000:
 		await _wait(0.1)
 		if tut._waiting == "card" and tut._active and tut._tip_until == 0:
 			break
@@ -1859,7 +1868,7 @@ func _test_ftue() -> void:
 	var lead := battle.lead_runners(1)
 	if not lead.is_empty():
 		await _click(_screen_of((lead[0] as Enemy).center()))
-	for i in 30:
+	for i in 120:
 		await _wait(0.1)
 		if tut._waiting != "card":
 			break
@@ -1869,7 +1878,7 @@ func _test_ftue() -> void:
 	var reached := await _ftue_play_until(["break"])
 	_check(reached, "FTUE: wave 1 cleared")
 	battle.begin_wave()
-	for i in 600:
+	for i in 2400:
 		await _wait(0.1)
 		if tut._waiting == "combo" and tut._active and tut._tip_until == 0:
 			break
@@ -1887,7 +1896,7 @@ func _test_ftue() -> void:
 	var pp: Variant = tut._pack_point()
 	if pp is Vector2:
 		await _click(get_viewport().get_final_transform() * (pp as Vector2))
-	for i in 200:
+	for i in 800:
 		await _wait(0.1)
 		if tut.celebrated:
 			break
@@ -1896,7 +1905,7 @@ func _test_ftue() -> void:
 	var plays := int(battle.run.stats.get("triple_plays", 0)) + int(battle.run.stats.get("double_plays", 0))
 	_check(tut.celebrated and tut.staged_outs >= 2 and plays >= 1, "FTUE: Heat Wave into the pack is a staged %d-out play (triple %d, double %d)" % [
 		tut.staged_outs, int(battle.run.stats.get("triple_plays", 0)), int(battle.run.stats.get("double_plays", 0))])
-	for i in 150:   # the celebration holds 1.6 s of game time (slow frames make that longer in real time)
+	for i in 600:   # the celebration holds 1.6 s of game time (slow frames make that longer in real time)
 		await _wait(0.1)
 		if tut._core_done:
 			break
@@ -1907,7 +1916,7 @@ func _test_ftue() -> void:
 	Engine.time_scale = 1.0
 	_check(reached, "FTUE: inning 1 ends in the dugout")
 	var dug: Node = null
-	for i in 60:
+	for i in 240:
 		await _wait(0.1)
 		dug = battle.hud.get("_dugout")
 		if dug and is_instance_valid(dug):
@@ -1916,7 +1925,7 @@ func _test_ftue() -> void:
 	if nxt:
 		await _wait(0.6)
 		await _click(_button_center(nxt))
-	for i in 100:
+	for i in 400:
 		await _wait(0.1)
 		if battle.run.inning == 2 and battle.state == "setup":
 			break
@@ -1938,7 +1947,7 @@ func _test_ftue() -> void:
 	Engine.time_scale = 1.0
 	_check(boss != null and boss.id == "iron_slugger", "FTUE: the Iron Slugger closes the first game")
 	_check(battle._boss_intro_node != null and is_instance_valid(battle._boss_intro_node), "FTUE: the first boss gets its intro (the boss tease)")
-	for i in 120:
+	for i in 480:
 		await _wait(0.1)
 		if tut._title.text.begins_with("BOSS") and tut._bubble.visible:
 			break
@@ -1949,7 +1958,7 @@ func _test_ftue() -> void:
 	Engine.time_scale = 3.0
 	reached = await _ftue_play_until(["results"])
 	Engine.time_scale = 1.0
-	for i in 80:   # the game ends 1.6 s after the last out
+	for i in 320:   # the game ends 1.6 s after the last out
 		if battle.run.finished:
 			break
 		await _wait(0.1)
@@ -1957,7 +1966,7 @@ func _test_ftue() -> void:
 	_check(f.has("first_win"), "FTUE: the funnel has first_win")
 	# 6. First-time Results: big moments and one button.
 	var res: Control = null
-	for i in 60:
+	for i in 240:
 		await _wait(0.1)
 		res = battle.hud.get("_results")
 		if res and is_instance_valid(res):
@@ -1971,7 +1980,7 @@ func _test_ftue() -> void:
 	var fw: Control = res.find_child("FirstWin", true, false)
 	var ts_min := 99.0
 	var c_res := _frame_clock
-	for i in 150:   # the build-up takes about 4.2 s (game time)
+	for i in 600:   # the build-up takes about 4.2 s (game time)
 		await _wait(0.1)
 		ts_min = minf(ts_min, Engine.time_scale)
 		var ttl: Control = fw.find_child("ResultTitle", true, false) if fw else null
@@ -1998,7 +2007,7 @@ func _test_ftue() -> void:
 	await _shot("pack_1_tap_to_open")
 	var prect: Rect2 = ps.call("_pack_screen_rect")
 	await _click(get_viewport().get_final_transform() * prect.get_center())
-	for i in 120:
+	for i in 480:
 		await _wait(0.1)
 		if ps.get("state") == "reveal":
 			break
@@ -2008,7 +2017,7 @@ func _test_ftue() -> void:
 	await _shot("pack_2_flip")
 	var act: Button = ps.get("_action")
 	await _click(_button_center(act))
-	for i in 100:
+	for i in 400:
 		await _wait(0.1)
 		if ps.get("state") == "done":
 			break
@@ -2083,7 +2092,7 @@ func _test_ftue() -> void:
 		var max_index := 0
 		var done := [false]
 		intro2.finished.connect(func(_s: bool) -> void: done[0] = true)
-		for i in 300:
+		for i in 1200:
 			await _wait(0.1)
 			max_index = maxi(max_index, intro2.index)
 			if done[0]:

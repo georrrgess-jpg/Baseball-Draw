@@ -1133,6 +1133,9 @@ func test_scouting() -> void:
 		if (hud_script.combo_pairs([c.cards[1], "", c.cards[0]]) as Array).size() != 1:
 			all_found = false
 	ok(all_found, "every combo in combos.json is detected in either order")
+	ok(hud_script._banner_kind("DOUBLE PLAY!") == hud_script._banner_kind("TRIPLE PLAY!") and hud_script._banner_kind("TRIPLE PLAY!") == hud_script._banner_kind("GRAND SLAM COMBO x4!"),
+		"a growing combo upgrades one banner in place (no DOUBLE PLAY queued after a TRIPLE PLAY)")
+	ok(hud_script._banner_kind("INNING 3") != hud_script._banner_kind("DOUBLE PLAY!"), "other call-outs still queue behind a combo")
 	# Wiring.
 	ok(Router.SCENES.has("scouting_book") and ResourceLoader.exists(Router.SCENES.scouting_book), "the Scouting Book scene is registered")
 	ok(Hints.HINTS.has("scouting_intro") and Hints.HINTS.has("battle_combo") and "scouting_intro" in Hints.ids_for("scouting_book"), "Scouting Book and combo hints exist")

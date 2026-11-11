@@ -63,8 +63,13 @@ What changed: [Update 6](docs/screenshots/update6_before_after.jpg), [Update 5](
   holo Prestige cards (★1–★5); defenders go to level 20, with All-Star and Hall of Famer honours.
 - **Smart Auto Build and card comparison**: Auto Build picks the best 8 cards for your team and card levels
   (Balanced, Aggressive, Control or Boss Killer) and explains why; compare any two cards side by side.
-- **Missions and level road**: three daily missions and a weekly one, a "Learn the ropes" chain for new
-  players, and a visible account level road with a reward at every level.
+- **Rookie Camp for new players**: a 13-second story intro (or "I've played before"), then a short guided first
+  game where you learn by doing: drag a fielder, play a card, set up a triple play, meet the first boss. A guided
+  first pack and deck change follow. The clubhouse opens up step by step ("NEW FEATURE UNLOCKED"), with a
+  10-step Rookie Path, an Epic card of your choice after game 3, a 7-day Rookie Week calendar, help after early
+  losses, and a welcome-back bonus.
+- **Missions and level road**: three daily missions and a weekly one, and a visible account level road with a
+  reward at every level.
 - **Always know what's next**: first-visit tips on every screen (replay them with "?"), an UP NEXT action on
   the main menu and a WHAT'S NEXT row after every game.
 - **Daily Challenge**: one seeded game per day with a fixed deck, stadium and modifier, a best score and a

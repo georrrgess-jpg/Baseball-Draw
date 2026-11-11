@@ -543,6 +543,9 @@ func _open_intro() -> void:
 		Session.start_first_game())
 	intro.played_before.connect(played_before)
 	add_child(intro)
+	# The intro has its own "I've played before"; the title's would show through under the pips.
+	if _before_btn and is_instance_valid(_before_btn):
+		_before_btn.visible = false   # its own fade-in tween may still be running
 	if stadium.crowd:
 		stadium.crowd.cheer(0.6, 1.2)
 
