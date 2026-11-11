@@ -5053,4 +5053,27 @@ func test_update13_first_session() -> void:
 	battle.queue_free()
 	battle = null
 	await get_tree().process_frame
+	# A guided game with a deck that has no Power Throw (or Heat Wave): the card step names another card.
+	Profile.reset_profile()
+	Profile.data.flags["tutorial_done"] = true
+	var other_cfg := Session.new_run_config("quick")
+	other_cfg.difficulty = "rookie"
+	other_cfg.deck = Profile.data.deck.filter(func(id: Variant) -> bool: return not str(id) in ["power_throw", "heat_wave"])
+	Session.run_config = other_cfg
+	battle = packed.instantiate()
+	add_child(battle)
+	for i in 60:
+		await _wait(0.1)
+		if battle.state == "setup":
+			break
+	await _wait(0.3)
+	var tut2: Node = battle.hud.get_node_or_null("Tutorial")
+	var c2 := str(tut2._steps[2].card) if tut2 else ""
+	ok(tut2 != null and tut2._steps.size() == 3 and c2 != "power_throw" and c2 in battle.cards.deck
+		and tut2._step_text(tut2._steps[2]).contains(str(DB.card(c2).name)), "without Power Throw the card step asks for %s" % c2)
+	if tut2:
+		tut2.finish()
+	battle.queue_free()
+	battle = null
+	await get_tree().process_frame
 	Profile.reset_profile()
