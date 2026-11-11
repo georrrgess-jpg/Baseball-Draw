@@ -1352,14 +1352,21 @@ func _test_tutorial() -> void:
 		if tut._active and tut._waiting == "card" and tut._tip_until == 0:
 			break
 	_check(tut._active and Engine.time_scale < 0.5 and not get_tree().paused, "the card step runs in slow motion (scale %.2f)" % Engine.time_scale)
-	var idx: int = battle.cards.hand.find("power_throw")
-	_check(idx >= 0 and battle.cards.check(idx) == "", "Power Throw is in the hand and playable")
+	var focus := str(tut._focus_card)   # Power Throw, or the deck's best runner-hitting card without it
+	var idx: int = battle.cards.hand.find(focus)
+	_check(idx >= 0 and battle.cards.check(idx) == "" and tut._body.text.contains(str(DB.card(focus).get("name", "?"))),
+		"the step's card (%s) is in the hand, playable and named" % focus)
 	if idx >= 0:
 		await _key("card_%d" % (idx + 1))
 		await _wait(0.2)
-		var lead := battle.lead_runners(1)
-		if not lead.is_empty():
-			await _click(_screen_of((lead[0] as Enemy).center()))
+		var tgt := str(DB.card(focus).get("target", "none"))
+		if tgt == "none":
+			await _key("card_%d" % (idx + 1))
+		else:
+			var lead := battle.lead_runners(1)
+			if not lead.is_empty():
+				var lp: Vector3 = (lead[0] as Enemy).center() if tgt == "enemy" else (lead[0] as Enemy).global_position
+				await _click(_screen_of(lp))
 	for i in 30:
 		await _wait(0.1)
 		if tut._core_done:

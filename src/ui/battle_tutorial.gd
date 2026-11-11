@@ -260,12 +260,25 @@ func _define_steps() -> void:
 			"text": "Send in the runners!",
 			"target": func() -> Variant: return _rect(hud._start_btn)},
 		{"id": "card", "title": "PLAY A CARD", "wait": "card", "spot": true, "card": "power_throw", "slowmo": SLOWMO_CARD,
-			"text": "Tap [b]Power Throw[/b]…", "aim": "…then tap a runner!", "cond": _card_ready,
+			"text": "Tap [b]{card}[/b]…", "aim": "…then tap a runner!", "cond": _card_ready,
 			"target": _card_target},
 	]
-	if first_game:
+	# A deck without Power Throw (a guided game outside the first one): the card step asks for the
+	# best runner-hitting card the deck has instead.
+	var deck: Array = battle.cards.deck if battle.cards else []
+	if not "power_throw" in deck and not deck.is_empty():
+		var pick := str(deck[0])
+		for want in ["enemy", "area", "path"]:
+			var found := deck.filter(func(id: Variant) -> bool: return str(DB.card(str(id)).get("target", "")) == want)
+			if not found.is_empty():
+				pick = str(found[0])
+				break
+		_steps[2]["card"] = pick
+		if str(DB.card(pick).get("target", "")) == "none":
+			_steps[2]["aim"] = "…then tap it again!"
+	if first_game and "heat_wave" in deck:
 		_steps.append({"id": "combo", "title": "A PACK OF RUNNERS!", "wait": "combo", "spot": true, "card": "heat_wave", "slowmo": SLOWMO_COMBO,
-			"text": "Tap [b]Heat Wave[/b]…", "aim": "…then tap the pack!", "cond": _pack_ready,
+			"text": "Tap [b]{card}[/b]…", "aim": "…then tap the pack!", "cond": _pack_ready,
 			"target": _card_target})
 
 
@@ -302,7 +315,7 @@ func _show_step(st: Dictionary) -> void:
 		_ensure_in_hand(_focus_card)
 	_tip_until = 0
 	_pointer.drag = st.id == "drag"
-	_present(str(st.title), str(st.text), st.get("target"), bool(st.get("spot", false)), "%d / %d" % [_step + 1, _steps.size()])
+	_present(str(st.title), _step_text(st), st.get("target"), bool(st.get("spot", false)), "%d / %d" % [_step + 1, _steps.size()])
 	_next.visible = false
 	_timer_bar.visible = false
 	if float(st.get("slowmo", 0.0)) > 0.0:
@@ -566,6 +579,12 @@ func _card_target() -> Variant:
 	return _lead_runner()
 
 
+## A step's text with the card it asks for named ("Tap [b]Power Throw[/b]…").
+func _step_text(st: Dictionary) -> String:
+	var card := str(st.get("card", ""))
+	return str(st.text).replace("{card}", str(DB.card(card).get("name", card)) if card != "" else "a card")
+
+
 func _refresh_aim_text() -> void:
 	if not _active or _step < 0 or _step >= _steps.size() or _tip_until != 0:
 		return
@@ -573,7 +592,7 @@ func _refresh_aim_text() -> void:
 	if not st.has("aim"):
 		return
 	var picked := battle.targeting_index >= 0 and battle.targeting_card() == _focus_card
-	_body.text = str(st.aim) if picked else str(st.text)
+	_body.text = str(st.aim) if picked else _step_text(st)
 
 
 ## The first card step waits for a runner out on the field.
