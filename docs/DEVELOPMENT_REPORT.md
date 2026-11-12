@@ -1229,7 +1229,7 @@ rewarded in the first ten minutes, always knows the next step, and has reasons t
     a 0.85× wave budget, an Iron Slugger at 0.3× health closing inning 2 as the boss tease).
   * Every step is an action with one line of text, a spotlight and a pointer; nothing pauses the game:
     drag a fielder to the ring, PLAY BALL, the first throw, play a card on a runner (in slow motion), then a
-    staged pack of three runners and Heat Wave in bullet time for a guaranteed **TRIPLE PLAY** with a
+    staged pack of three runners and Heat Wave in bullet time for a guaranteed **TRIPLE PLAY** (or better) with a
     "WHAT A PLAY!" celebration. Short tips follow for the break, the dugout and the boss.
   * Generic hooks: a config `innings` override (`run_state.gd`), a config `tuning` override
     (`wave_generator.gd`), and the boss intro plays once the tutorial's core steps are done (`battle.gd`).
@@ -1287,3 +1287,28 @@ Free picks restart their rarity's pity counter, which keeps the collection time 
 * The missions panel calls the chain "ROOKIE PATH" and shows its 10 steps as numbered nodes; the "what's
   next" suggestions skip features that are still locked.
 * The FTUE UI test waits on game state with longer caps (slow software rendering).
+
+### First-session timing (measured)
+* Story intro, played through: 13.1 s. Launch to first throw with the intro skipped: about 16 s (10.7 s of
+  game frames).
+* First game by autopilot: about 2 minutes of game time, 0 runs allowed, won every time; with breaks, the
+  dugout and the tutorial moments, a real first game is about 3.2–3.6 minutes.
+* The funnel order (launch → intro → first game → first throw → first card → first win → first pack →
+  deck edited → game 2) is checked by the `ftue` UI section.
+
+Screenshots (`docs/screenshots/u13/`):
+![Story intro](screenshots/u13/intro_1_wreckers.jpg)
+![Learn by doing: drag a fielder](screenshots/u13/tutorial_1_drag.jpg)
+![The staged triple play](screenshots/u13/tutorial_6_triple_play.jpg)
+![First win](screenshots/u13/results_first_win.jpg)
+![Guided first pack](screenshots/u13/pack_3_new_card.jpg)
+![New player's hub](screenshots/u13/hub_new_player.jpg)
+![NEW FEATURE UNLOCKED](screenshots/u13/unlock_celebration.jpg)
+![Epic pick](screenshots/u13/epic_picker.jpg)
+
+### Verification
+* Script check: 105 scripts, 0 failed.
+* System suite: 3,412 checks, 0 failed (including the update 13 first-session and Rookie Camp sections).
+* Full UI flow test: 622 checks, 0 failed, including the fresh-player `ftue` (59 checks) and `rookie`
+  (48 checks) sections.
+* Smoke test: passes.

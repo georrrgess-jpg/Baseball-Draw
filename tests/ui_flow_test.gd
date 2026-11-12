@@ -1699,6 +1699,9 @@ func _shot(name: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	get_viewport().get_texture().get_image().save_png("%s/%s.png" % [dir, name])
 	print("[UITEST] shot ", name)
+	# Reading the image back stalls the renderer: let a few frames pass before the next input.
+	for i in 3:
+		await get_tree().process_frame
 
 
 func _press_key(code: Key) -> void:
@@ -1839,12 +1842,20 @@ func _test_ftue() -> void:
 	_check(tut._waiting == "wave" and tut._title.text == "PLAY BALL!", "FTUE: the drag moves on to PLAY BALL (waiting %s)" % tut._waiting)
 	await _wait(0.3)
 	await _shot("tutorial_2_play_ball")
-	await _click(_ctl_center(battle.hud._start_btn))
+	var sb: Button = battle.hud._start_btn
+	var cp := _ctl_center(sb)
+	_mouse_move(cp)
+	await _wait(0.2)
+	print("[UITEST] PLAY BALL click at %s: rect %s disabled %s visible %s hovered %s state %s" % [cp, sb.get_global_rect(), sb.disabled,
+		sb.is_visible_in_tree(), get_viewport().gui_get_hovered_control(), battle.state])
+	await _click(cp)
+	await _wait(0.3)
+	print("[UITEST] after click: state %s hovered %s" % [battle.state, get_viewport().gui_get_hovered_control()])
 	for i in 600:   # game time runs behind wall time on a busy software renderer
 		await _wait(0.1)
 		if f.has("first_throw"):
 			break
-	_check(f.has("first_throw"), "FTUE: the defenders' first throw is recorded")
+	_check(f.has("first_throw"), "FTUE: the defenders' first throw is recorded (state %s)" % battle.state)
 	var throw_wall := float(Time.get_ticks_msec() - wall0) / 1000.0
 	var throw_clock := _frame_clock - clock0
 	await _wait(0.4)

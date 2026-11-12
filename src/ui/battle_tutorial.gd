@@ -446,7 +446,8 @@ func _celebrate(at: Vector3) -> void:
 	battle.shake(0.35)
 	battle.slow_motion(0.9, 0.35)   # a beat of slow motion on the big play
 	Audio.play("crowd_roar", -4.0)
-	_stamp("WHAT A PLAY!", "%s — %d outs at once!" % ["TRIPLE PLAY" if n >= 3 else "DOUBLE PLAY", n], UITheme.GOLD)
+	# No out count here: the HUD's combo banner counts every out of the moment (it can be more than the pack).
+	_stamp("WHAT A PLAY!", "The whole pack, out in one play!" if n >= 3 else "Two outs in one play!", UITheme.GOLD)
 	var tw := create_tween()
 	tw.tween_interval(1.6)
 	tw.tween_callback(func() -> void: _event("combo"))
